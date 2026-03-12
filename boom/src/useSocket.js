@@ -26,18 +26,33 @@ export function useSocket() {
 
 // Timer beep using Web Audio API
 let audioCtx = null;
-export function playBeep() {
+// Pulse sound (heartbeat) for last 5 seconds
+export function playPulse() {
     try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.connect(gain);
         gain.connect(audioCtx.destination);
-        osc.frequency.value = 880;
-        osc.type = "square";
-        gain.gain.value = 0.15;
+
+        // Low frequency thump
+        osc.frequency.setValueAtTime(60, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.1);
+        osc.type = "sine";
+
+        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+
         osc.start();
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
-        osc.stop(audioCtx.currentTime + 0.15);
-    } catch (e) { /* ignore audio errors */ }
+        osc.stop(audioCtx.currentTime + 0.2);
+    } catch (e) { }
 }
+
+export function playSaleSound() {
+    try {
+        const audio = new Audio('/src/assets/fahhh.mp3');
+        audio.volume = 0.5;
+        audio.play().catch(e => console.warn("Audio play failed:", e));
+    } catch (e) { }
+}
+

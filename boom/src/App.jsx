@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useReducer } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { MEGA_SETS, PLAYER_IMAGES } from "./megaPlayers";
-import { useSocket, playBeep } from "./useSocket";
+import { useSocket, playPulse, playSaleSound } from "./useSocket";
 import { PlayModeScreen, RoomScreen, LobbyScreen, TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from "./MultiScreens";
 import { StatsModal } from "./StatsModal";
 import { SquadModal } from "./SquadModal";
 import confetti from "canvas-confetti";
+import html2canvas from "html2canvas";
 
 if (typeof document !== "undefined" && !document.getElementById("ipl-gf")) {
   const l = document.createElement("link"); l.id = "ipl-gf"; l.rel = "stylesheet";
@@ -45,11 +46,11 @@ const fmt = c => c >= 1 ? `₹${c.toFixed(2)} Cr` : `₹${Math.round(c * 100)} L
 const nextBid = c => +(c + getIncrement(c)).toFixed(2);
 
 function buildQueue(mode) {
-  if (mode === "mini") return shuffle(MINI_PLAYERS).map((p, i) => ({ ...p, id: i, setName: "Mini Auction", rating: 70 + Math.random() * 25 | 0 }));
+  if (mode === "mini") return shuffle(MINI_PLAYERS).map((p, i) => ({ ...p, id: i, setName: "Mini Auction" }));
   const queue = [];
   for (const set of MEGA_SETS) {
     const s = shuffle(set.players);
-    s.forEach((p, i) => queue.push({ ...p, id: queue.length + i, setName: set.name, rating: 50 + Math.round(p.base * 18 + Math.random() * 12) }));
+    s.forEach((p, i) => queue.push({ ...p, id: queue.length + i, setName: set.name }));
   }
   return queue;
 }
@@ -84,8 +85,9 @@ export default function App() {
   const [myName, setMyName] = useState("");
   const [lobbyMode, setLobbyMode] = useState(null);
   const [myTeamId, setMyTeamId] = useState(null);
-  const [showStats, setShowStats] = useState(false);
   const [showSquad, setShowSquad] = useState(false);
+  const [viewingTeam, setViewingTeam] = useState(null);
+  const [showStats, setShowStats] = useState(false);
   const [multiGS, setMultiGS] = useState(null);
 
   const [playerId] = useState(() => {
@@ -166,12 +168,7 @@ export default function App() {
       localStorage.setItem("ipl_my_team_id", myTeamId);
     }
   }, [playMode, screen, auctionMode, myTeamId, multiGS]); // using multiGS as a proxy for 'tick' forceUpdates if needed, but actually g.current update is manual. 
-  // Let's add a sync effect that runs on every forceUpdate for single player.
-  useEffect(() => {
-    if (playMode === "single" && g.current && screen !== "home") {
-      localStorage.setItem("ipl_single_gs", JSON.stringify(g.current));
-    }
-  });
+
 
 
   // Socket listeners for multiplayer
@@ -195,11 +192,37 @@ export default function App() {
     return () => { off1(); off2(); off3(); off4(); };
   }, [playMode, on]);
 
-  // Timer sound for multiplayer
+  // Unified Audio & Animation side-effects
   useEffect(() => {
-    if (!multiGS) return;
-    if (multiGS.timer <= 5 && multiGS.timer > 0 && multiGS.phase === "bidding") playBeep();
-  }, [multiGS?.timer]);
+    const currentGS = isMulti ? multiGS : g.current;
+    if (!currentGS) return;
+
+    // Timer Pulse (Heartbeat) for last 5 seconds
+    if (currentGS.timer <= 5 && currentGS.timer > 0 && currentGS.phase === "bidding") {
+      playPulse();
+    }
+
+    // Phase Transitions (Sale Sound & Money Animation)
+    if (currentGS.phase === "sold" || currentGS.phase === "unsold") {
+      if (prevTimerRef.current !== currentGS.phase) {
+        playSaleSound();
+        if (currentGS.phase === "sold") {
+          setMoneyBurst(true);
+          setTimeout(() => setMoneyBurst(false), 3000);
+        }
+      }
+    }
+    prevTimerRef.current = currentGS.phase;
+  }, [multiGS?.timer, multiGS?.phase, g.current?.timer, g.current?.phase]);
+
+  function syncSingleGS() {
+    if (playMode === "single" && g.current) {
+      localStorage.setItem("ipl_single_gs", JSON.stringify(g.current));
+      localStorage.setItem("ipl_single_screen", screen);
+    }
+  }
+
+
 
   // ─── Single Player Logic ───
   function advanceToNext() {
@@ -211,6 +234,7 @@ export default function App() {
     gs.currentBid = np.base; gs.currentBidder = null;
     gs.timer = 10; gs.phase = "bidding"; gs.bidLog = [];
     gs.currentSetName = np.setName;
+    syncSingleGS();
     forceUpdate();
     clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => tickRef.current?.(), 1000);
@@ -228,6 +252,7 @@ export default function App() {
     } else {
       gs.auctionLog = [{ player, bidder: null, price: 0, sold: false }, ...gs.auctionLog];
     }
+    syncSingleGS();
     forceUpdate();
     setTimeout(advanceToNext, 2800);
   }
@@ -251,15 +276,47 @@ export default function App() {
     if (gs.purses[gs.myTeamId] < nb || gs.squads[gs.myTeamId].length >= 25) return;
     gs.currentBid = nb; gs.currentBidder = gs.myTeamId; gs.timer = 10;
     gs.bidLog = [{ teamId: gs.myTeamId, bid: nb, isMe: true }, ...gs.bidLog].slice(0, 7);
+    syncSingleGS();
     forceUpdate();
   }
 
-  function startSingleAuction(teamId) {
-    g.current = initGame(teamId, auctionMode);
-    setMyTeamId(teamId);
+  function startSingleAuction(tId) {
+    const queue = buildQueue(auctionMode);
+    setPlayMode("single");
+    setMyTeamId(tId);
+    g.current = {
+      ...createGameState(queue),
+      myTeamId: tId,
+      playingXI: Object.fromEntries(TEAMS.map(t => [t.id, []])),
+      selections: Object.fromEntries(TEAMS.map(t => [t.id, false]))
+    };
     setScreen("auction");
-    clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => tickRef.current?.(), 1000);
+  }
+
+  function submitXI(players) {
+    if (playMode === "multi") {
+      emit("submit-xi", { players }, (res) => {
+        if (!res?.ok) alert(res?.error || "Submission failed");
+      });
+    } else {
+      // Single player XI submission
+      g.current.playingXI[effectiveMyTeamId] = players;
+      g.current.selections[effectiveMyTeamId] = true;
+
+      // AI teams pick top 11 automatically
+      TEAMS.forEach(t => {
+        if (t.id !== effectiveMyTeamId) {
+          g.current.playingXI[t.id] = [...(g.current.squads[t.id] || [])]
+            .sort((a, b) => b.soldFor - a.soldFor)
+            .slice(0, 11);
+          g.current.selections[t.id] = true;
+        }
+      });
+
+      g.current.phase = "finished";
+      syncSingleGS();
+      setScreen("auction"); // Trigger re-render
+    }
   }
 
   const handleCreateRoom = (isPrivate, name) => {
@@ -306,13 +363,10 @@ export default function App() {
   const gs = playMode === "multi" ? multiGS : g.current;
   const isMulti = playMode === "multi";
 
+
   // Audio and Confetti for sold
   useEffect(() => {
-    if (gs && gs.phase === "sold") {
-      const audio = new Audio('/src/assets/fahhh.mp3');
-      audio.volume = 0.5;
-      audio.play().catch(e => console.error("Audio play failed:", e));
-
+    if (gs?.phase === "sold") {
       // Fire confetti from bottom left and bottom right
       const duration = 2000;
       const end = Date.now() + duration;
@@ -339,26 +393,56 @@ export default function App() {
   if (screen === "roomScreen") return <RoomScreen emit={emit} playerId={playerId} onJoined={({ code, players, isHost: h, myName: n }) => { setRoomCode(code); setLobbyPlayers(players); setIsHost(h); setMyName(n); setScreen("lobby"); }} />;
   if (screen === "lobby") return <LobbyScreen roomCode={roomCode} players={lobbyPlayers} isHost={isHost} auctionMode={lobbyMode} emit={emit} onModeSelect={m => { setLobbyMode(m); emit("set-auction-mode", { mode: m }); }} onStart={startMultiAuction} />;
   if (screen === "teamSelect") return <TeamSelect onSelect={startSingleAuction} mode={auctionMode} />;
-  if (screen === "results" && gs) return <Results gs={gs} myTeamId={isMulti ? myTeamId : gs.myTeamId} onRestart={() => {
-    ["ipl_room_code", "ipl_play_mode", "ipl_single_gs", "ipl_single_screen", "ipl_auction_mode", "ipl_my_team_id"].forEach(k => localStorage.removeItem(k));
-    clearInterval(intervalRef.current);
-    g.current = null;
-    setMultiGS(null);
-    setPlayMode(null);
-    setAuctionMode(null);
-    setLobbyMode(null);
-    setScreen("home");
-  }} />;
+
   if (!gs) return null;
 
+  const effectiveMyTeamId = isMulti ? (lobbyPlayers.find(p => p.name === myName)?.teamId || myTeamId) : (g.current?.myTeamId || myTeamId);
+
+  // New Selection Phase
+  if (gs.phase === "selection") {
+    const mySquad = gs.squads[effectiveMyTeamId] || [];
+    const submitted = isMulti ? gs.selections[effectiveMyTeamId] : false;
+    return <SelectionScreen mySquad={mySquad} onSubmit={submitXI} submitted={submitted} playersNeeded={11} />;
+  }
+
+  if (gs.phase === "finished") {
+    return <Results gs={gs} myTeamId={effectiveMyTeamId} onRestart={() => {
+      ["ipl_room_code", "ipl_play_mode", "ipl_single_gs", "ipl_single_screen", "ipl_auction_mode", "ipl_my_team_id"].forEach(k => localStorage.removeItem(k));
+      clearInterval(intervalRef.current);
+      g.current = null;
+      setMultiGS(null);
+      setPlayMode(null);
+      setAuctionMode(null);
+      setLobbyMode(null);
+      setScreen("home");
+      window.location.reload();
+    }} />;
+  }
+
   const player = gs.playerQueue[gs.currentIdx];
-  const effectiveMyTeamId = isMulti ? (lobbyPlayers.find(p => p.name === myName)?.teamId || myTeamId) : gs.myTeamId;
   const myTeam = TEAMS.find(t => t.id === effectiveMyTeamId);
   const bidderTeam = gs.currentBidder ? TEAMS.find(t => t.id === gs.currentBidder) : null;
   const canBid = gs.phase === "bidding" && gs.currentBidder !== effectiveMyTeamId
     && (gs.purses[effectiveMyTeamId] || 0) >= nextBid(gs.currentBid) && (gs.squads[effectiveMyTeamId]?.length || 0) < 25;
   const iLeading = gs.currentBidder === effectiveMyTeamId;
   const upcoming = gs.playerQueue.slice(gs.currentIdx + 1, gs.currentIdx + 9);
+
+  const [moneyBurst, setMoneyBurst] = useState(false);
+  useEffect(() => {
+    if (gs.phase === "sold") {
+      setMoneyBurst(true);
+      setTimeout(() => setMoneyBurst(false), 3000);
+    }
+  }, [gs.phase]);
+
+  const progresses = useMemo(() => {
+    const maxPurse = 120; // Assuming initial purse is 120 Cr
+    const p = {};
+    TEAMS.forEach(team => {
+      p[team.id] = (gs.purses[team.id] || 0) / maxPurse;
+    });
+    return p;
+  }, [gs.purses]);
 
   return (
     <div style={{ fontFamily: "'Rajdhani',sans-serif", background: BG, color: "#fff", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -367,6 +451,16 @@ export default function App() {
         @keyframes timerPulse{0%,100%{opacity:1}50%{opacity:.35}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
         @keyframes rowIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+        @keyframes moneyRain {
+          0% { transform: translateY(0) rotate(0); opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        .money-coin {
+          position: fixed; top: -50px; font-size: 24px; z-index: 10000;
+          animation: moneyRain 2.5s linear forwards;
+        }
         *{box-sizing:border-box}
         ::-webkit-scrollbar{width:3px;background:transparent}
         ::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:2px}
@@ -385,13 +479,26 @@ export default function App() {
         @media(max-width:900px){.ipl-left,.ipl-right{display:none!important}.ipl-center{padding:10px 8px!important}.ipl-topbar{flex-wrap:wrap;gap:4px}}
       `}</style>
 
+      {moneyBurst && Array.from({ length: 25 }).map((_, i) => (
+        <div key={i} className="money-coin" style={{
+          left: `${Math.random() * 100}vw`,
+          animationDelay: `${Math.random() * 2}s`,
+          filter: `drop-shadow(0 0 10px ${GOLD})`
+        }}>
+          {["💰", "💸", "💵", "✨", "🪙"][i % 5]}
+        </div>
+      ))}
+
+      <SquadModal isOpen={showSquad} onClose={() => { setShowSquad(false); setViewingTeam(null); }} squads={gs.squads} myTeamId={viewingTeam || effectiveMyTeamId} TEAMS={TEAMS} />
+      <StatsModal isOpen={showStats} gs={gs} onClose={() => setShowStats(false)} />
+
       {/* TOP BAR */}
       <div className="ipl-topbar" style={{ background: "linear-gradient(90deg,#0B0D16 0%,#141008 50%,#0B0D16 100%)", borderBottom: `1px solid ${BORDER}`, padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div className="ipl-topbar-title" style={{ fontFamily: "'Bebas Neue'", fontSize: 22, color: GOLD, letterSpacing: 3 }}>TATA IPL AUCTION</div>
-          <div style={{ background: `${GOLD}18`, border: `1px solid ${GOLD}30`, borderRadius: 4, padding: "2px 10px", fontSize: 10, color: GOLD, fontWeight: 600, letterSpacing: 1 }}>{player.setName}</div>
+          <div className="ipl-topbar-title" style={{ fontFamily: "'Bebas Neue'", fontSize: 22, color: GOLD, letterSpacing: 3 }}>BITWICKET IPL AUCTION</div>
+          <div style={{ background: `${GOLD}18`, border: `1px solid ${GOLD}30`, borderRadius: 4, padding: "2px 10px", fontSize: 10, color: GOLD, fontWeight: 600, letterSpacing: 1 }}>{gs.currentSetName}</div>
           {isMulti && <div style={{ background: "#22D3EE18", border: "1px solid #22D3EE30", borderRadius: 4, padding: "2px 8px", fontSize: 9, color: "#22D3EE", letterSpacing: 1 }}>LIVE</div>}
-          <button onClick={() => setShowStats(true)} style={{ background: `${GOLD}11`, border: `1px solid ${GOLD}40`, color: GOLD, padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer", marginLeft: 8 }}>📊 STATS</button>
+          <button onClick={() => setShowStats(true)} style={{ background: `${GOLD}11`, border: `1px solid ${GOLD}40`, color: GOLD, padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer", marginLeft: 8 }}>STATS</button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ color: "#444", fontSize: 11, letterSpacing: 3 }}>PLAYER</span>
@@ -419,7 +526,7 @@ export default function App() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={() => setShowSquad(true)} style={{ background: "#22D3EE22", color: "#22D3EE", border: "1px solid #22D3EE55", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontWeight: "bold", fontFamily: "'Bebas Neue'", fontSize: 16, letterSpacing: 1 }}>
+          <button onClick={() => { setViewingTeam(effectiveMyTeamId); setShowSquad(true); }} style={{ background: "#22D3EE22", color: "#22D3EE", border: "1px solid #22D3EE55", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontWeight: "bold", fontFamily: "'Bebas Neue'", fontSize: 16, letterSpacing: 1 }}>
             MY SQUAD
           </button>
           <button onClick={() => setShowStats(true)} style={{ background: `${GOLD}11`, border: `1px solid ${GOLD}40`, color: GOLD, padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>📊 STATS</button>
@@ -451,17 +558,56 @@ export default function App() {
           )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: myTeam?.color, boxShadow: `0 0 8px ${myTeam?.color}` }} />
-          <span style={{ color: myTeam?.color, fontWeight: 700, letterSpacing: 1, fontSize: 14 }}>{myTeam?.short} ★</span>
-          <span style={{ color: "#555", fontSize: 12 }}>₹{(gs.purses[effectiveMyTeamId] || 0).toFixed(1)} Cr · {gs.squads[effectiveMyTeamId]?.length || 0} pl</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: myTeam?.color, boxShadow: `0 0 12px ${myTeam?.color}` }} />
+          <span style={{ color: "#fff", fontWeight: 900, letterSpacing: 1, fontSize: 16 }}>{myTeam?.short} ★</span>
+          <span style={{ color: GOLD, fontSize: 14, fontWeight: 800, textShadow: `0 0 10px ${GOLD}33` }}>₹{(gs.purses[effectiveMyTeamId] || 0).toFixed(1)} Cr <span style={{ color: "#555", fontSize: 11, fontWeight: 400 }}>· {gs.squads[effectiveMyTeamId]?.length || 0} pl</span></span>
         </div>
       </div>
 
       {/* MAIN BODY */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        <div className="ipl-left" style={{ width: 264, padding: 14, borderRight: `1px solid ${BORDER}`, overflowY: "auto", flexShrink: 0 }}>
-          <PlayerCard player={player} />
+        <div className="ipl-left" style={{ width: 300, padding: "20px 14px", borderRight: `1px solid ${BORDER}`, overflowY: "auto", flexShrink: 0, background: `linear-gradient(180deg, ${CARD}, transparent)` }}>
+          <div style={{ textAlign: "center", animation: "fadeUp .4s ease-out" }}>
+            <div style={{ background: `${ROLE_C[player.role]}15`, width: 140, height: 140, borderRadius: "50%", margin: "0 auto 24px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 72, border: `2px solid ${ROLE_C[player.role]}40`, boxShadow: `0 0 40px ${ROLE_C[player.role]}22` }}>
+              {ROLE_EMOJI[player.role]}
+            </div>
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 32, color: "#fff", letterSpacing: 2, marginBottom: 8, lineHeight: 1.1 }}>{player.name.toUpperCase()}</div>
+            <div style={{ color: ROLE_C[player.role], fontSize: 13, fontWeight: 700, letterSpacing: 3, marginBottom: 24 }}>{ROLE_L[player.role]} · {player.overseas ? "OVERSEAS" : "INDIAN"}</div>
+
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ background: `rgba(255,255,255,0.03)`, border: `1px solid ${BORDER}`, borderRadius: 12, padding: "16px 10px" }}>
+                <div style={{ color: "#555", fontSize: 10, letterSpacing: 2, marginBottom: 6 }}>BASE PRICE</div>
+                <div style={{ color: GOLD, fontFamily: "'Bebas Neue'", fontSize: 28 }}>{fmt(player.base)}</div>
+              </div>
+              <div style={{ background: `rgba(255,255,255,0.03)`, border: `1px solid ${BORDER}`, borderRadius: 12, padding: "16px 10px" }}>
+                <div style={{ color: "#555", fontSize: 10, letterSpacing: 2, marginBottom: 6 }}>CATEGORY</div>
+                <div style={{ color: "#fff", fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 1 }}>{player.setName.toUpperCase()}</div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 30, padding: 16, background: `${GOLD}08`, borderRadius: 12, border: `1px dashed ${GOLD}30` }}>
+              <div style={{ fontSize: 11, color: GOLD, opacity: 0.7, fontStyle: "italic" }}>"A key player to watch in this set. Expected to command a high premium."</div>
+            </div>
+
+            {/* LIVE BID HISTORY ON LEFT */}
+            {gs.bidLog.length > 0 && (
+              <div style={{ marginTop: 30, textAlign: "left" }}>
+                <div style={{ fontFamily: "'Bebas Neue'", fontSize: 16, color: "#555", letterSpacing: 3, marginBottom: 12 }}>BID HISTORY</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {gs.bidLog.map((b, i) => {
+                    const t = TEAMS.find(team => team.id === b.teamId);
+                    return (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: i === 0 ? `${t?.color}15` : "transparent", padding: i === 0 ? "6px 10px" : "2px 0", borderRadius: 6, border: i === 0 ? `1px solid ${t?.color}30` : "none" }}>
+                        <span style={{ color: t?.color, fontWeight: 800, fontSize: 13 }}>{t?.short}</span>
+                        <span style={{ color: i === 0 ? "#fff" : "#999", fontWeight: 700, fontSize: i === 0 ? 14 : 12 }}>{fmt(b.bid)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="ipl-center" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, position: "relative" }}>
@@ -530,17 +676,25 @@ export default function App() {
             {[...TEAMS].sort((a, b) => (gs.purses[b.id] || 0) - (gs.purses[a.id] || 0)).map(team => {
               const isLead = team.id === gs.currentBidder, isMe = team.id === effectiveMyTeamId;
               return (
-                <div key={team.id} style={{ padding: "6px 14px", borderLeft: `3px solid ${isLead ? team.color : "transparent"}`, background: isLead ? `${team.color}0d` : isMe ? `${team.color}06` : "transparent" }}>
+                <div key={team.id} onClick={() => { setViewingTeam(team.id); setShowSquad(true); }} style={{
+                  cursor: "pointer", padding: "10px 14px", borderLeft: `4px solid ${isLead ? team.color : "transparent"}`,
+                  background: isLead ? `${team.color}20` : isMe ? `${team.color}10` : "transparent",
+                  borderBottom: `1px solid ${BORDER}`, transition: "all .2s"
+                }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: team.color, opacity: isLead || isMe ? 1 : 0.4 }} />
-                      <span style={{ color: isMe || isLead ? team.color : "#999", fontWeight: isMe || isLead ? 700 : 500, fontSize: 12 }}>{team.short}{isMe && " ★"}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: team.color, boxShadow: `0 0 10px ${team.color}` }} />
+                      <span style={{ fontWeight: 800, color: progresses[team.id] < 0.2 ? "#ef4444" : "#fff", fontSize: 15, letterSpacing: 1 }}>{team.short}</span>
+                      {isMe && <span style={{ fontSize: 10, color: team.color }}>YOU</span>}
                     </div>
-                    {isLead && <span style={{ fontSize: 8, background: team.color, color: "#000", padding: "1px 5px", borderRadius: 3, fontWeight: 900 }}>LEAD</span>}
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ color: team.color, fontWeight: 900, fontSize: 16, fontFamily: "'Bebas Neue'", letterSpacing: 1 }}>{fmt(gs.purses[team.id])}</div>
+                      <div style={{ fontSize: 9, color: "#666", letterSpacing: 1, fontWeight: 600 }}>{gs.squads[team.id]?.length} PLAYS</div>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
-                    <span style={{ fontSize: 10, color: "#888" }}>₹{(gs.purses[team.id] || 0).toFixed(1)} Cr</span>
-                    <span style={{ fontSize: 10, color: "#888" }}>{gs.squads[team.id]?.length || 0} pl</span>
+                  {/* Progress bar for purse */}
+                  <div style={{ height: 2, background: "#111", marginTop: 6, borderRadius: 2, overflow: "hidden" }}>
+                    <div style={{ height: "100%", background: team.color, width: `${progresses[team.id] * 100}%`, transition: "width .3s" }} />
                   </div>
                 </div>
               );
@@ -551,14 +705,17 @@ export default function App() {
       </div>
 
       {/* BOTTOM TICKER */}
-      <div className="ipl-ticker" style={{ borderTop: `1px solid ${BORDER}`, padding: "7px 20px", display: "flex", gap: 22, overflowX: "auto", flexShrink: 0, background: "#07090E", alignItems: "center" }}>
-        <span style={{ fontSize: 10, color: "#666", letterSpacing: 3, flexShrink: 0 }}>RECENT</span>
-        {(gs.auctionLog || []).slice(0, 10).map((item, i) => (
-          <div key={i} style={{ flexShrink: 0, fontSize: 12, color: "#999", display: "flex", gap: 5, alignItems: "center" }}>
-            <span style={{ color: "#bbb" }}>{item.player.name}</span>
-            {item.sold ? (<><span style={{ color: "#666" }}>→</span><span style={{ color: TEAMS.find(t => t.id === item.bidder)?.color, fontWeight: 700 }}>{item.bidder}</span><span style={{ color: GOLD, fontSize: 11 }}>{fmt(item.price)}</span></>) : <span style={{ color: "#ef4444", fontSize: 11 }}>UNSOLD</span>}
-          </div>
-        ))}
+      <div className="ipl-ticker" style={{ borderTop: `1px solid ${BORDER}`, padding: "10px 20px", display: "flex", gap: 28, overflowX: "auto", flexShrink: 0, background: "#05070A", alignItems: "center" }}>
+        <span style={{ fontSize: 11, color: GOLD, letterSpacing: 4, fontWeight: 900, flexShrink: 0 }}>RECENT HISTORY</span>
+        {(gs.auctionLog || []).slice(0, 15).map((item, i) => {
+          const t = TEAMS.find(t => t.id === item.bidder);
+          return (
+            <div key={i} style={{ flexShrink: 0, fontSize: 14, color: "#ddd", display: "flex", gap: 8, alignItems: "center", background: "#ffffff05", padding: "4px 12px", borderRadius: 6, border: `1px solid ${BORDER}` }}>
+              <span style={{ fontWeight: 600 }}>{item.player.name}</span>
+              {item.sold ? (<><span style={{ color: GOLD }}>→</span><span style={{ color: t?.color, fontWeight: 900 }}>{item.bidder}</span><span style={{ color: "#fff", fontWeight: 800 }}>{fmt(item.price)}</span></>) : <span style={{ color: "#ef4444", fontWeight: 800 }}>UNSOLD</span>}
+            </div>
+          );
+        })}
         {(!gs.auctionLog || gs.auctionLog.length === 0) && <span style={{ color: "#555", fontSize: 12 }}>Auction in progress...</span>}
       </div>
 
@@ -572,13 +729,13 @@ export default function App() {
 
       <SquadModal
         isOpen={showSquad}
-        onClose={() => setShowSquad(false)}
+        onClose={() => { setShowSquad(false); setViewingTeam(null); }}
         squads={(multiGS || g.current)?.squads || {}}
-        myTeamId={effectiveMyTeamId}
+        myTeamId={viewingTeam || effectiveMyTeamId}
         TEAMS={TEAMS}
       />
 
-    </div>
+    </div >
   );
 }
 
@@ -626,8 +783,8 @@ function Home({ onPlay }) {
       {[300, 500, 700, 900].map(s => <div key={s} style={{ position: "absolute", width: s, height: s, border: "1px solid rgba(212,175,55,0.035)", borderRadius: "50%", pointerEvents: "none" }} />)}
       <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(212,175,55,0.015) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(212,175,55,0.015) 40px)", pointerEvents: "none" }} />
       <div style={{ textAlign: "center", zIndex: 1, animation: "fadeUp .6s ease-out" }}>
-        <div style={{ color: `${GOLD}77`, fontSize: 11, letterSpacing: 8, marginBottom: 22, fontWeight: 600 }}>TATA INDIAN PREMIER LEAGUE</div>
-        <div className="home-title" style={{ fontFamily: "'Bebas Neue'", fontSize: 110, lineHeight: 0.85, letterSpacing: 12, color: "#f0f0f0", textShadow: `0 0 100px ${GOLD}18` }}>TATA IPL<br /><span style={{ color: GOLD, textShadow: `0 0 80px ${GOLD}88, 0 0 160px ${GOLD}33` }}>AUCTION</span></div>
+        <div style={{ color: `${GOLD}77`, fontSize: 11, letterSpacing: 8, marginBottom: 22, fontWeight: 600 }}>BITWICKET INDIAN PREMIER LEAGUE</div>
+        <div className="home-title" style={{ fontFamily: "'Bebas Neue'", fontSize: 110, lineHeight: 0.85, letterSpacing: 12, color: "#f0f0f0", textShadow: `0 0 100px ${GOLD}18` }}>BITWICKET IPL<br /><span style={{ color: GOLD, textShadow: `0 0 80px ${GOLD}88, 0 0 160px ${GOLD}33` }}>AUCTION</span></div>
         <div className="home-year" style={{ fontFamily: "'Bebas Neue'", fontSize: 58, color: "#1e1e1e", letterSpacing: 22, marginTop: 6 }}>2025</div>
         <div style={{ color: "#444", fontSize: 12, marginTop: 22, letterSpacing: 5 }}>THE ULTIMATE BIDDING SIMULATION</div>
         <button className="home-btn" onClick={onPlay} style={{ marginTop: 52, background: `linear-gradient(135deg, ${GOLD}, #9a7610)`, border: "none", borderRadius: 3, padding: "17px 60px", color: "#000", fontSize: 17, fontWeight: 900, cursor: "pointer", letterSpacing: 5, fontFamily: "'Barlow Condensed'", boxShadow: `0 4px 60px ${GOLD}55, 0 0 0 1px ${GOLD}22` }}>START AUCTION</button>
@@ -647,14 +804,14 @@ function Home({ onPlay }) {
 function ModeSelect({ onSelect }) {
   const [hov, setHov] = useState(null);
   const modes = [
-    { id: "mega", title: "TATA IPL MEGA AUCTION", subtitle: "500+ Official Players · 40+ Sets", desc: "Full mega auction with all official sets.", icon: "🏟️", players: "500+", color: GOLD },
-    { id: "mini", title: "TATA IPL MINI AUCTION", subtitle: "40 Players · Quick Mode", desc: "Quick game with top players shuffled randomly.", icon: "⚡", players: "40", color: "#22D3EE" },
+    { id: "mega", title: "BITWICKET IPL MEGA AUCTION", subtitle: "500+ Official Players · 40+ Sets", desc: "Full mega auction with all official sets.", icon: "🏟️", players: "500+", color: GOLD },
+    { id: "mini", title: "BITWICKET IPL MINI AUCTION", subtitle: "40 Players · Quick Mode", desc: "Quick game with top players shuffled randomly.", icon: "⚡", players: "40", color: "#22D3EE" },
   ];
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Rajdhani',sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}`}</style>
       <div style={{ textAlign: "center", marginBottom: 50, animation: "fadeUp .4s ease-out" }}>
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(32px,5vw,52px)", letterSpacing: 8, color: GOLD }}>SELECT TATA IPL AUCTION MODE</div>
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(32px,5vw,52px)", letterSpacing: 8, color: GOLD }}>SELECT BITWICKET IPL AUCTION MODE</div>
       </div>
       <div style={{ display: "flex", gap: 24, animation: "fadeUp .5s ease-out", flexWrap: "wrap", justifyContent: "center", padding: "0 20px" }}>
         {modes.map(m => (
@@ -701,16 +858,34 @@ function TeamSelect({ onSelect, mode }) {
 function Results({ gs, myTeamId: mti, onRestart }) {
   const [activeId, setActiveId] = useState(mti || TEAMS[0].id);
   const team = TEAMS.find(t => t.id === activeId);
-  const squad = gs.squads[activeId] || [];
+  const playingXI = gs.playingXI[activeId] || [];
+  const fullSquad = gs.squads[activeId] || [];
+  const displayList = playingXI.length === 11 ? playingXI : fullSquad;
+
   const spent = +(120 - (gs.purses[activeId] || 0)).toFixed(2);
   const soldCount = (gs.auctionLog || []).filter(l => l.sold).length;
   const unsoldCount = (gs.auctionLog || []).filter(l => !l.sold).length;
-  const mySquad = gs.squads[mti] || []; // Assuming mti is the current user's team ID
+
+  const downloadSheet = async () => {
+    const el = document.getElementById("capture-results");
+    if (!el) return;
+    const canvas = await html2canvas(el, { backgroundColor: BG, scale: 2 });
+    const link = document.createElement("a");
+    link.download = `BitWicket-${team?.short}-XI.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  };
+
+  const shareWhatsApp = () => {
+    const text = `🏏 *BitWicket IPL Auction* \nCheck out my Playing XI for *${team?.name}*!\n\n${displayList.map((p, i) => `${i + 1}. ${ROLE_EMOJI[p.role]} ${p.name}`).join("\n")}\n\nBuild your own squad at BidWicket!`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Rajdhani',sans-serif", padding: "clamp(16px,3vh,28px)" }}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}.res-squad{grid-template-columns:repeat(2,1fr)!important}@media(max-width:700px){.res-squad{grid-template-columns:1fr!important}}`}</style>
       <div style={{ textAlign: "center", marginBottom: 28 }}>
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(30px,5vw,54px)", color: GOLD, letterSpacing: 8 }}>TATA IPL AUCTION COMPLETE</div>
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(30px,5vw,54px)", color: GOLD, letterSpacing: 8 }}>BITWICKET IPL AUCTION COMPLETE</div>
         <div style={{ color: "#555", fontSize: 12, letterSpacing: 3, marginTop: 4 }}>{soldCount} SOLD · {unsoldCount} UNSOLD</div>
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 24, flexWrap: "wrap", justifyContent: "center" }}>
@@ -720,38 +895,38 @@ function Results({ gs, myTeamId: mti, onRestart }) {
           </button>
         ))}
       </div>
-      <div style={{ maxWidth: 820, margin: "0 auto", animation: "fadeUp .3s ease-out" }}>
+      <div id="capture-results" style={{ maxWidth: 1000, margin: "0 auto", animation: "fadeUp .3s ease-out", background: BG, padding: 20, borderRadius: 16 }}>
         <div style={{ display: "flex", gap: 14, marginBottom: 18, flexWrap: "wrap" }}>
           {/* PURSE HIGHLIGHT */}
           <div style={{ background: `linear-gradient(135deg, ${CARD}, #0A0D15)`, border: `1px solid ${GOLD}40`, borderRadius: 12, padding: "20px", flex: 1, display: "flex", flexDirection: "column", gap: 10, boxShadow: `0 8px 30px ${GOLD}15` }}>
-            <div style={{ fontSize: 13, color: GOLD, letterSpacing: 3, fontWeight: 700 }}>REMAINING PURSE</div>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 48, color: "#fff", letterSpacing: 2 }}>{fmt(gs.purses[activeId])}</div>
+            <div style={{ fontSize: 13, color: GOLD, letterSpacing: 3, fontWeight: 700 }}>{team?.name}</div>
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 38, color: "#fff", letterSpacing: 2 }}>{playingXI.length === 11 ? "FINAL PLAYING XI" : "FULL SQUAD"}</div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px dashed ${BORDER}`, paddingTop: 10, marginTop: 4 }}>
-              <span style={{ fontSize: 12, color: "#aaa" }}>SQUAD LIMIT</span>
-              <strong style={{ color: (squad.length >= 25 ? "#ef4444" : "#22D3EE"), fontSize: 16 }}>{squad.length} <span style={{ color: "#555" }}>/</span> 25</strong>
+              <span style={{ fontSize: 12, color: "#aaa" }}>REMAINING PURSE</span>
+              <strong style={{ color: GOLD, fontSize: 16 }}>{fmt(gs.purses[activeId])}</strong>
             </div>
           </div>
-
-          {[["PLAYERS BOUGHT", squad.length, team?.color], ["TOTAL SPENT", `₹${spent} Cr`, GOLD]].map(([l, v, c]) => (
-            <div key={l} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: "12px 22px", flex: 1, minWidth: 140 }}>
-              <div style={{ fontSize: 10, color: "#444", letterSpacing: 2 }}>{l}</div>
-              <div style={{ fontSize: 28, color: c, fontFamily: "'Bebas Neue'" }}>{v}</div>
-            </div>
-          ))}
         </div>
-        {squad.length === 0 ? <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: "16px", flex: 1 }}>No players purchased by {team?.name}</div> : (
+
+        {displayList.length === 0 ? <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: "16px", flex: 1 }}>No players purchased by {team?.name}</div> : (
           <div className="res-squad" style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 8 }}>
-            {squad.map((p, i) => (
+            {displayList.map((p, i) => (
               <div key={i} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div><div style={{ fontWeight: 600, fontSize: 14, color: "#eee" }}>{p.name}</div><div style={{ fontSize: 12, color: ROLE_C[p.role], marginTop: 2 }}>{ROLE_L[p.role]}{p.overseas ? " · OS" : ""}</div></div>
-                <div style={{ textAlign: "right" }}><div style={{ color: GOLD, fontWeight: 700, fontSize: 16 }}>{fmt(p.soldFor)}</div><div style={{ fontSize: 11, color: "#3a3a3a" }}>Base {fmt(p.base)}</div></div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 18 }}>{ROLE_EMOJI[p.role]}</span>
+                  <div><div style={{ fontWeight: 600, fontSize: 14, color: "#eee" }}>{p.name}</div><div style={{ fontSize: 12, color: ROLE_C[p.role], marginTop: 2 }}>{ROLE_L[p.role]}{p.overseas ? " · OS" : ""}</div></div>
+                </div>
+                <div style={{ textAlign: "right" }}><div style={{ color: GOLD, fontWeight: 700, fontSize: 16 }}>{fmt(p.soldFor)}</div></div>
               </div>
             ))}
           </div>
         )}
       </div>
-      <div style={{ textAlign: "center", marginTop: 40 }}>
-        <button onClick={onRestart} style={{ background: `linear-gradient(135deg, ${GOLD}, #9a7610)`, border: "none", borderRadius: 3, padding: "14px 46px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 16, letterSpacing: 4, fontFamily: "'Barlow Condensed'" }}>PLAY AGAIN</button>
+
+      <div style={{ textAlign: "center", marginTop: 40, display: "flex", justifyContent: "center", gap: 16, flexWrap: "wrap" }}>
+        <button onClick={downloadSheet} style={{ background: "#22D3EE", border: "none", borderRadius: 3, padding: "14px 30px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>DOWNLOAD IMAGE ⬇</button>
+        <button onClick={shareWhatsApp} style={{ background: "#25D366", border: "none", borderRadius: 3, padding: "14px 30px", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>SHARE ON WHATSAPP 📱</button>
+        <button onClick={onRestart} style={{ background: `linear-gradient(135deg, ${GOLD}, #9a7610)`, border: "none", borderRadius: 3, padding: "14px 36px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>PLAY AGAIN 🔄</button>
       </div>
     </div>
   );

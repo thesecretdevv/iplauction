@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from "./MultiScreens";
-import { PLAYER_IMAGES } from "./megaPlayers";
+
 
 const fmt = c => c >= 1 ? `₹${c.toFixed(2)} Cr` : `₹${Math.round(c * 100)} L`;
 
@@ -59,14 +59,10 @@ export function StatsModal({ isOpen, gs, onClose }) {
                                         {newSet && <div style={{ color: GOLD, fontSize: 13, letterSpacing: 3, fontWeight: 700, padding: "16px 0 8px" }}>{p.setName.toUpperCase()}</div>}
                                         <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                                {PLAYER_IMAGES?.[p.name] ? (
-                                                    <img src={PLAYER_IMAGES[p.name]} alt={p.name} referrerPolicy="no-referrer" style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", objectPosition: "top" }} />
-                                                ) : (
-                                                    <span style={{ fontSize: 20, background: `${ROLE_C[p.role]}1a`, borderRadius: "50%", display: "flex", width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>{ROLE_EMOJI[p.role]}</span>
-                                                )}
+                                                <span style={{ fontSize: 20, background: `${ROLE_C[p.role]}1a`, borderRadius: "50%", display: "flex", width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>{ROLE_EMOJI[p.role]}</span>
                                                 <div>
                                                     <div style={{ fontSize: 16, fontWeight: 700, color: "#eee" }}>{p.name}</div>
-                                                    <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>{p.role} {p.overseas ? "· OVERSEAS" : ""}</div>
+                                                    <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>{ROLE_L[p.role]} {p.overseas ? "· OVERSEAS" : ""}</div>
                                                 </div>
                                             </div>
                                             <div style={{ textAlign: "right" }}>
@@ -89,14 +85,10 @@ export function StatsModal({ isOpen, gs, onClose }) {
                                 return (
                                     <div key={i} style={{ background: CARD, border: `1px solid ${team?.color}40`, borderLeft: `4px solid ${team?.color}`, borderRadius: 8, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                            {PLAYER_IMAGES?.[l.player.name] ? (
-                                                <img src={PLAYER_IMAGES[l.player.name]} alt={l.player.name} referrerPolicy="no-referrer" style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", objectPosition: "top" }} />
-                                            ) : (
-                                                <span style={{ fontSize: 20, background: `${ROLE_C[l.player.role]}1a`, borderRadius: "50%", display: "flex", width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>{ROLE_EMOJI[l.player.role]}</span>
-                                            )}
+                                            <span style={{ fontSize: 20, background: `${ROLE_C[l.player.role]}1a`, borderRadius: "50%", display: "flex", width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>{ROLE_EMOJI[l.player.role]}</span>
                                             <div>
                                                 <div style={{ fontSize: 16, fontWeight: 700, color: "#eee" }}>{l.player.name}</div>
-                                                <div style={{ fontSize: 12, color: team?.color, marginTop: 4, fontWeight: 600 }}>Bought by {team?.name}</div>
+                                                <div style={{ fontSize: 13, color: team?.color || GOLD, marginTop: 4, fontWeight: 800, textShadow: `0 0 10px ${team?.color}44` }}>BOUGHT BY {team?.name?.toUpperCase()}</div>
                                             </div>
                                         </div>
                                         <div style={{ textAlign: "right" }}>
@@ -116,11 +108,7 @@ export function StatsModal({ isOpen, gs, onClose }) {
                             {unsold.map((l, i) => (
                                 <div key={i} style={{ background: CARD, border: `1px solid #ef444440`, borderLeft: `4px solid #ef4444`, borderRadius: 8, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", opacity: 0.8 }}>
                                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                        {PLAYER_IMAGES?.[l.player.name] ? (
-                                            <img src={PLAYER_IMAGES[l.player.name]} alt={l.player.name} referrerPolicy="no-referrer" style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", objectPosition: "top" }} />
-                                        ) : (
-                                            <span style={{ fontSize: 20, background: `${ROLE_C[l.player.role]}1a`, borderRadius: "50%", display: "flex", width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>{ROLE_EMOJI[l.player.role]}</span>
-                                        )}
+                                        <span style={{ fontSize: 20, background: `${ROLE_C[l.player.role]}1a`, borderRadius: "50%", display: "flex", width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>{ROLE_EMOJI[l.player.role]}</span>
                                         <div>
                                             <div style={{ fontSize: 16, fontWeight: 700, color: "#eee" }}>{l.player.name}</div>
                                             <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>{l.player.setName}</div>
@@ -144,17 +132,13 @@ export function StatsModal({ isOpen, gs, onClose }) {
                                 return (
                                     <div key={i} style={{ background: i === 0 ? `linear-gradient(90deg, ${GOLD}22, ${CARD})` : CARD, border: `1px solid ${i === 0 ? GOLD : BORDER}`, borderRadius: 12, padding: "16px 20px", display: "flex", alignItems: "center", gap: 16 }}>
                                         <div style={{ fontFamily: "'Bebas Neue'", fontSize: 32, color: i === 0 ? GOLD : "#888", width: 30, textAlign: "center" }}>#{i + 1}</div>
-                                        {PLAYER_IMAGES?.[l.player.name] ? (
-                                            <img src={PLAYER_IMAGES[l.player.name]} alt={l.player.name} referrerPolicy="no-referrer" style={{ width: 50, height: 50, borderRadius: "50%", objectFit: "cover", objectPosition: "top", flexShrink: 0 }} />
-                                        ) : (
-                                            <span style={{ fontSize: 24, background: `${ROLE_C[l.player.role]}1a`, borderRadius: "50%", display: "flex", width: 50, height: 50, alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{ROLE_EMOJI[l.player.role]}</span>
-                                        )}
+                                        <span style={{ fontSize: 24, background: `${ROLE_C[l.player.role]}1a`, borderRadius: "50%", display: "flex", width: 50, height: 50, alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{ROLE_EMOJI[l.player.role]}</span>
                                         <div style={{ flex: 1 }}>
                                             <div style={{ fontSize: 18, fontWeight: 700, color: i === 0 ? GOLD : "#eee" }}>{l.player.name}</div>
                                             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                                                <span style={{ fontSize: 12, color: team?.color, fontWeight: 600 }}>{team?.name}</span>
+                                                <span style={{ fontSize: 13, color: team?.color || GOLD, fontWeight: 800 }}>{team?.name?.toUpperCase()}</span>
                                                 <span style={{ fontSize: 10, color: "#555" }}>•</span>
-                                                <span style={{ fontSize: 12, color: ROLE_C[l.player.role] }}>{ROLE_L[l.player.role]}</span>
+                                                <span style={{ fontSize: 13, color: ROLE_C[l.player.role], fontWeight: 700 }}>{ROLE_L[l.player.role]}</span>
                                             </div>
                                         </div>
                                         <div style={{ textAlign: "right" }}>

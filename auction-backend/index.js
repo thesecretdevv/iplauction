@@ -62,7 +62,8 @@ function createGameState(playerQueue) {
         currentSetName: playerQueue[0]?.setName || "",
         purses: Object.fromEntries(TEAMS.map(t => [t.id, 120])),
         squads: Object.fromEntries(TEAMS.map(t => [t.id, []])),
-        bidLog: [],
+        playingXI: Object.fromEntries(TEAMS.map(t => [t.id, []])),
+        selections: Object.fromEntries(TEAMS.map(t => [t.id, false])),
         bidLog: [],
         auctionLog: [],
     };
@@ -97,8 +98,8 @@ function advanceToNext(room) {
 
     const nextIdx = gs.currentIdx + 1;
     if (nextIdx >= gs.playerQueue.length) {
-        gs.phase = "finished";
-        room.status = "finished";
+        gs.phase = "selection";
+        room.status = "active"; // Still active during selection
 
         // Save to history if public
         if (!room.isPrivate) {
@@ -146,6 +147,8 @@ function getClientState(room) {
         currentSetName: gs.currentSetName,
         purses: gs.purses,
         squads: gs.squads,
+        playingXI: gs.playingXI,
+        selections: gs.selections,
         bidLog: gs.bidLog,
         auctionLog: gs.auctionLog.slice(0, 20),
         totalPlayers: gs.playerQueue.length,
@@ -377,6 +380,63 @@ io.on('connection', (socket) => {
 
         // Broadcast immediately for instant feel
         io.to(currentRoom).emit('game-state', getClientState(room));
+        cb?.({ ok: true });
+    });
+
+    socket.on('submit-xi', ({ players }, cb) => {
+        if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
+        const room = rooms.get(currentRoom);
+        if (!room || !room.gameState) return cb?.({ ok: false });
+
+        const gs = room.gameState;
+        if (gs.phase !== "selection") return cb?.({ ok: false, error: "Not in selection phase" });
+
+        const player = room.players[currentPlayerId];
+        if (!player || !player.teamId) return cb?.({ ok: false });
+
+        const teamId = player.teamId;
+        if (players.length !== 11) return cb?.({ ok: false, error: "Must select 11 players" });
+
+        gs.playingXI[teamId] = players;
+        gs.selections[teamId] = true;
+
+        // Check if all players have submitted
+        const allSubmitted = Object.values(room.players).every(p => gs.selections[p.teamId]);
+
+        if (allSubmitted) {
+            // For teams not owned by humans (AI teams in multi? unlikely but safe), pick top 11
+            TEAMS.forEach(t => {
+                if (!gs.selections[t.id]) {
+                    gs.playingXI[t.id] = [...gs.squads[t.id]]
+                        .sort((a, b) => b.soldFor - a.soldFor)
+                        .slice(0, 11);
+                    gs.selections[t.id] = true;
+                }
+            });
+
+            gs.phase = "finished";
+            room.status = "finished";
+
+            // Save to history if public
+            if (!room.isPrivate) {
+                finishedGames.unshift({
+                    id: room.code,
+                    name: room.name,
+                    mode: room.auctionMode,
+                    date: new Date().toISOString(),
+                    host: room.players[room.hostId]?.name || "Unknown",
+                    totalSold: gs.auctionLog.filter(l => l.sold).length,
+                    topBuy: gs.auctionLog.filter(l => l.sold).sort((a, b) => b.price - a.price)[0] || null
+                });
+                if (finishedGames.length > 20) finishedGames.pop();
+            }
+
+            io.to(currentRoom).emit('game-over', getClientState(room));
+            clearInterval(room.timerInterval);
+        } else {
+            io.to(currentRoom).emit('game-state', getClientState(room));
+        }
+
         cb?.({ ok: true });
     });
 
