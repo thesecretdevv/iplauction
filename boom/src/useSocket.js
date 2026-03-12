@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback } from "react";
 import { io } from "socket.io-client";
+import fahhhSrc from "./assets/fahhh.mp3";
 
 export function useSocket() {
     const sock = useRef(null);
@@ -24,35 +25,13 @@ export function useSocket() {
     return { emit, on, socket: sock };
 }
 
-// Timer beep using Web Audio API
-let audioCtx = null;
-// Pulse sound (heartbeat) for last 5 seconds
-export function playPulse() {
-    try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-
-        // Low frequency thump
-        osc.frequency.setValueAtTime(60, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.1);
-        osc.type = "sine";
-
-        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
-
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.2);
-    } catch (e) { }
-}
+// No-op: countdown pulse removed per user request
+export function playPulse() { }
 
 export function playSaleSound() {
     try {
-        const audio = new Audio('/src/assets/fahhh.mp3');
-        audio.volume = 0.5;
+        const audio = new Audio(fahhhSrc);
+        audio.volume = 0.6;
         audio.play().catch(e => console.warn("Audio play failed:", e));
     } catch (e) { }
 }
-

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useReducer } from "react";
+import { useState, useEffect, useRef, useReducer, useMemo } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { MEGA_SETS, PLAYER_IMAGES } from "./megaPlayers";
 import { useSocket, playPulse, playSaleSound } from "./useSocket";
@@ -7,6 +7,25 @@ import { StatsModal } from "./StatsModal";
 import { SquadModal } from "./SquadModal";
 import confetti from "canvas-confetti";
 import html2canvas from "html2canvas";
+import iplThemeSrc from "./assets/Ipl.mp3";
+
+// ─── Global IPL Audio ───────────────────────────────────────────────────────
+let _iplAudio = null;
+function playIplTheme() {
+  if (_iplAudio) { _iplAudio.pause(); _iplAudio.currentTime = 0; }
+  _iplAudio = new Audio(iplThemeSrc);
+  _iplAudio.volume = 0.7;
+  _iplAudio.play().catch(() => { });
+}
+function stopIplTheme(fadeDuration = 2000) {
+  if (!_iplAudio) return;
+  const a = _iplAudio;
+  const step = a.volume / (fadeDuration / 50);
+  const fade = setInterval(() => {
+    if (a.volume > step) { a.volume = Math.max(0, a.volume - step); }
+    else { a.pause(); a.currentTime = 0; clearInterval(fade); }
+  }, 50);
+}
 
 if (typeof document !== "undefined" && !document.getElementById("ipl-gf")) {
   const l = document.createElement("link"); l.id = "ipl-gf"; l.rel = "stylesheet";
@@ -202,14 +221,10 @@ export default function App() {
       playPulse();
     }
 
-    // Phase Transitions (Sale Sound & Money Animation)
+    // Phase Transitions (Sale Sound only)
     if (currentGS.phase === "sold" || currentGS.phase === "unsold") {
       if (prevTimerRef.current !== currentGS.phase) {
         playSaleSound();
-        if (currentGS.phase === "sold") {
-          setMoneyBurst(true);
-          setTimeout(() => setMoneyBurst(false), 3000);
-        }
       }
     }
     prevTimerRef.current = currentGS.phase;
@@ -290,7 +305,13 @@ export default function App() {
       playingXI: Object.fromEntries(TEAMS.map(t => [t.id, []])),
       selections: Object.fromEntries(TEAMS.map(t => [t.id, false]))
     };
-    setScreen("auction");
+    // Fade out IPL theme 2s before auction starts
+    stopIplTheme(2000);
+    setTimeout(() => {
+      setScreen("auction");
+      clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => tickRef.current?.(), 1000);
+    }, 2000);
   }
 
   function submitXI(players) {
@@ -352,6 +373,8 @@ export default function App() {
 
   function startMultiAuction() {
     const queue = buildQueue(lobbyMode || "mega");
+    // Fade out IPL theme before multiplayer auction starts
+    stopIplTheme(2000);
     emit("start-game", { playerQueue: queue }, (res) => {
       if (!res?.ok) alert(res?.error || "Cannot start");
     });
@@ -386,9 +409,20 @@ export default function App() {
     }
   }, [gs?.phase, gs?.currentIdx]);
 
+  const progresses = useMemo(() => {
+    const maxPurse = 120;
+    const p = {};
+    TEAMS.forEach(team => {
+      p[team.id] = (gs?.purses?.[team.id] || 0) / maxPurse;
+    });
+    return p;
+  }, [gs?.purses]);
+
   // ─── Screen Routing ───
-  if (screen === "home") return <Home onPlay={() => setScreen("modeSelect")} />;
+  if (screen === "home") return <Home onPlay={() => { playIplTheme(); setScreen("modeSelect"); }} onCreateRoom={() => { setPlayMode("multi"); setScreen("roomScreen"); }} onJoinRoom={() => { setPlayMode("multi"); setScreen("roomScreen"); }} />;
+
   if (screen === "modeSelect") return <ModeSelect onSelect={m => { setAuctionMode(m); setScreen("playMode"); }} />;
+
   if (screen === "playMode") return <PlayModeScreen onSingle={() => { setPlayMode("single"); setScreen("teamSelect"); }} onMulti={() => { setPlayMode("multi"); setScreen("roomScreen"); }} />;
   if (screen === "roomScreen") return <RoomScreen emit={emit} playerId={playerId} onJoined={({ code, players, isHost: h, myName: n }) => { setRoomCode(code); setLobbyPlayers(players); setIsHost(h); setMyName(n); setScreen("lobby"); }} />;
   if (screen === "lobby") return <LobbyScreen roomCode={roomCode} players={lobbyPlayers} isHost={isHost} auctionMode={lobbyMode} emit={emit} onModeSelect={m => { setLobbyMode(m); emit("set-auction-mode", { mode: m }); }} onStart={startMultiAuction} />;
@@ -427,23 +461,6 @@ export default function App() {
   const iLeading = gs.currentBidder === effectiveMyTeamId;
   const upcoming = gs.playerQueue.slice(gs.currentIdx + 1, gs.currentIdx + 9);
 
-  const [moneyBurst, setMoneyBurst] = useState(false);
-  useEffect(() => {
-    if (gs.phase === "sold") {
-      setMoneyBurst(true);
-      setTimeout(() => setMoneyBurst(false), 3000);
-    }
-  }, [gs.phase]);
-
-  const progresses = useMemo(() => {
-    const maxPurse = 120; // Assuming initial purse is 120 Cr
-    const p = {};
-    TEAMS.forEach(team => {
-      p[team.id] = (gs.purses[team.id] || 0) / maxPurse;
-    });
-    return p;
-  }, [gs.purses]);
-
   return (
     <div style={{ fontFamily: "'Rajdhani',sans-serif", background: BG, color: "#fff", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <style>{`
@@ -451,16 +468,6 @@ export default function App() {
         @keyframes timerPulse{0%,100%{opacity:1}50%{opacity:.35}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
         @keyframes rowIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
-        @keyframes moneyRain {
-          0% { transform: translateY(0) rotate(0); opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
-          100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
-        }
-        .money-coin {
-          position: fixed; top: -50px; font-size: 24px; z-index: 10000;
-          animation: moneyRain 2.5s linear forwards;
-        }
         *{box-sizing:border-box}
         ::-webkit-scrollbar{width:3px;background:transparent}
         ::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:2px}
@@ -479,23 +486,14 @@ export default function App() {
         @media(max-width:900px){.ipl-left,.ipl-right{display:none!important}.ipl-center{padding:10px 8px!important}.ipl-topbar{flex-wrap:wrap;gap:4px}}
       `}</style>
 
-      {moneyBurst && Array.from({ length: 25 }).map((_, i) => (
-        <div key={i} className="money-coin" style={{
-          left: `${Math.random() * 100}vw`,
-          animationDelay: `${Math.random() * 2}s`,
-          filter: `drop-shadow(0 0 10px ${GOLD})`
-        }}>
-          {["💰", "💸", "💵", "✨", "🪙"][i % 5]}
-        </div>
-      ))}
-
       <SquadModal isOpen={showSquad} onClose={() => { setShowSquad(false); setViewingTeam(null); }} squads={gs.squads} myTeamId={viewingTeam || effectiveMyTeamId} TEAMS={TEAMS} />
       <StatsModal isOpen={showStats} gs={gs} onClose={() => setShowStats(false)} />
 
       {/* TOP BAR */}
       <div className="ipl-topbar" style={{ background: "linear-gradient(90deg,#0B0D16 0%,#141008 50%,#0B0D16 100%)", borderBottom: `1px solid ${BORDER}`, padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div className="ipl-topbar-title" style={{ fontFamily: "'Bebas Neue'", fontSize: 22, color: GOLD, letterSpacing: 3 }}>BITWICKET IPL AUCTION</div>
+          <div className="ipl-topbar-title" style={{ fontFamily: "'Bebas Neue'", fontSize: 22, color: GOLD, letterSpacing: 3 }}>BIDWICKET IPL AUCTION</div>
+
           <div style={{ background: `${GOLD}18`, border: `1px solid ${GOLD}30`, borderRadius: 4, padding: "2px 10px", fontSize: 10, color: GOLD, fontWeight: 600, letterSpacing: 1 }}>{gs.currentSetName}</div>
           {isMulti && <div style={{ background: "#22D3EE18", border: "1px solid #22D3EE30", borderRadius: 4, padding: "2px 8px", fontSize: 9, color: "#22D3EE", letterSpacing: 1 }}>LIVE</div>}
           <button onClick={() => setShowStats(true)} style={{ background: `${GOLD}11`, border: `1px solid ${GOLD}40`, color: GOLD, padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer", marginLeft: 8 }}>STATS</button>
@@ -776,15 +774,23 @@ function PlayerCard({ player }) {
   );
 }
 
-function Home({ onPlay }) {
+function Home({ onPlay, onCreateRoom, onJoinRoom }) {
   return (
     <div style={{ minHeight: "100vh", background: `radial-gradient(ellipse at 50% 90%, #1c150a 0%, ${BG} 62%)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Rajdhani',sans-serif", position: "relative", overflow: "hidden" }}>
       <style>{`.home-title{font-size:clamp(52px,9vw,110px)!important}.home-year{font-size:clamp(28px,4.5vw,58px)!important}.home-stats{gap:clamp(20px,4vw,54px)!important;flex-wrap:wrap!important}.home-btn{padding:14px clamp(28px,5vw,60px)!important;font-size:clamp(13px,1.4vw,17px)!important;margin-top:clamp(28px,4vh,52px)!important}.home-stat-val{font-size:clamp(18px,2.5vw,28px)!important}@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}`}</style>
       {[300, 500, 700, 900].map(s => <div key={s} style={{ position: "absolute", width: s, height: s, border: "1px solid rgba(212,175,55,0.035)", borderRadius: "50%", pointerEvents: "none" }} />)}
       <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(212,175,55,0.015) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(212,175,55,0.015) 40px)", pointerEvents: "none" }} />
+
+      {/* TOP SHORTCUTS */}
+      <div style={{ position: "absolute", top: 20, right: 20, display: "flex", gap: 12, zIndex: 10 }}>
+        <button onClick={onJoinRoom} style={{ background: "transparent", border: `1px solid ${GOLD}40`, borderRadius: 6, padding: "8px 16px", color: GOLD, fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 2, fontFamily: "'Rajdhani'" }}>JOIN ROOM</button>
+        <button onClick={onCreateRoom} style={{ background: `${GOLD}15`, border: `1px solid ${GOLD}`, borderRadius: 6, padding: "8px 16px", color: GOLD, fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 2, fontFamily: "'Rajdhani'" }}>CREATE ROOM</button>
+      </div>
+
       <div style={{ textAlign: "center", zIndex: 1, animation: "fadeUp .6s ease-out" }}>
-        <div style={{ color: `${GOLD}77`, fontSize: 11, letterSpacing: 8, marginBottom: 22, fontWeight: 600 }}>BITWICKET INDIAN PREMIER LEAGUE</div>
-        <div className="home-title" style={{ fontFamily: "'Bebas Neue'", fontSize: 110, lineHeight: 0.85, letterSpacing: 12, color: "#f0f0f0", textShadow: `0 0 100px ${GOLD}18` }}>BITWICKET IPL<br /><span style={{ color: GOLD, textShadow: `0 0 80px ${GOLD}88, 0 0 160px ${GOLD}33` }}>AUCTION</span></div>
+        <div style={{ color: `${GOLD}77`, fontSize: 11, letterSpacing: 8, marginBottom: 22, fontWeight: 600 }}>TATA INDIAN PREMIER LEAGUE</div>
+
+        <div className="home-title" style={{ fontFamily: "'Bebas Neue'", fontSize: 110, lineHeight: 0.85, letterSpacing: 12, color: "#f0f0f0", textShadow: `0 0 100px ${GOLD}18` }}>BIDWICKET IPL<br /><span style={{ color: GOLD, textShadow: `0 0 80px ${GOLD}88, 0 0 160px ${GOLD}33` }}>AUCTION</span></div>
         <div className="home-year" style={{ fontFamily: "'Bebas Neue'", fontSize: 58, color: "#1e1e1e", letterSpacing: 22, marginTop: 6 }}>2025</div>
         <div style={{ color: "#444", fontSize: 12, marginTop: 22, letterSpacing: 5 }}>THE ULTIMATE BIDDING SIMULATION</div>
         <button className="home-btn" onClick={onPlay} style={{ marginTop: 52, background: `linear-gradient(135deg, ${GOLD}, #9a7610)`, border: "none", borderRadius: 3, padding: "17px 60px", color: "#000", fontSize: 17, fontWeight: 900, cursor: "pointer", letterSpacing: 5, fontFamily: "'Barlow Condensed'", boxShadow: `0 4px 60px ${GOLD}55, 0 0 0 1px ${GOLD}22` }}>START AUCTION</button>
@@ -804,14 +810,14 @@ function Home({ onPlay }) {
 function ModeSelect({ onSelect }) {
   const [hov, setHov] = useState(null);
   const modes = [
-    { id: "mega", title: "BITWICKET IPL MEGA AUCTION", subtitle: "500+ Official Players · 40+ Sets", desc: "Full mega auction with all official sets.", icon: "🏟️", players: "500+", color: GOLD },
-    { id: "mini", title: "BITWICKET IPL MINI AUCTION", subtitle: "40 Players · Quick Mode", desc: "Quick game with top players shuffled randomly.", icon: "⚡", players: "40", color: "#22D3EE" },
+    { id: "mega", title: "BIDWICKET IPL MEGA AUCTION", subtitle: "500+ Official Players · 40+ Sets", desc: "Full mega auction with all official sets.", icon: "🏟️", players: "500+", color: GOLD },
+    { id: "mini", title: "BIDWICKET IPL MINI AUCTION", subtitle: "40 Players · Quick Mode", desc: "Quick game with top players shuffled randomly.", icon: "⚡", players: "40", color: "#22D3EE" },
   ];
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Rajdhani',sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}`}</style>
       <div style={{ textAlign: "center", marginBottom: 50, animation: "fadeUp .4s ease-out" }}>
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(32px,5vw,52px)", letterSpacing: 8, color: GOLD }}>SELECT BITWICKET IPL AUCTION MODE</div>
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(32px,5vw,52px)", letterSpacing: 8, color: GOLD }}>SELECT BIDWICKET IPL AUCTION MODE</div>
       </div>
       <div style={{ display: "flex", gap: 24, animation: "fadeUp .5s ease-out", flexWrap: "wrap", justifyContent: "center", padding: "0 20px" }}>
         {modes.map(m => (
@@ -871,13 +877,13 @@ function Results({ gs, myTeamId: mti, onRestart }) {
     if (!el) return;
     const canvas = await html2canvas(el, { backgroundColor: BG, scale: 2 });
     const link = document.createElement("a");
-    link.download = `BitWicket-${team?.short}-XI.png`;
+    link.download = `BidWicket-${team?.short}-XI.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
 
   const shareWhatsApp = () => {
-    const text = `🏏 *BitWicket IPL Auction* \nCheck out my Playing XI for *${team?.name}*!\n\n${displayList.map((p, i) => `${i + 1}. ${ROLE_EMOJI[p.role]} ${p.name}`).join("\n")}\n\nBuild your own squad at BidWicket!`;
+    const text = `🏏 *BidWicket IPL Auction* \nCheck out my Playing XI for *${team?.name}*!\n\n${displayList.map((p, i) => `${i + 1}. ${ROLE_EMOJI[p.role]} ${p.name}`).join("\n")}\n\nBuild your own squad at BidWicket!`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   };
 
@@ -885,7 +891,8 @@ function Results({ gs, myTeamId: mti, onRestart }) {
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Rajdhani',sans-serif", padding: "clamp(16px,3vh,28px)" }}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}.res-squad{grid-template-columns:repeat(2,1fr)!important}@media(max-width:700px){.res-squad{grid-template-columns:1fr!important}}`}</style>
       <div style={{ textAlign: "center", marginBottom: 28 }}>
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(30px,5vw,54px)", color: GOLD, letterSpacing: 8 }}>BITWICKET IPL AUCTION COMPLETE</div>
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(30px,5vw,54px)", color: GOLD, letterSpacing: 8 }}>BIDWICKET IPL AUCTION COMPLETE</div>
+
         <div style={{ color: "#555", fontSize: 12, letterSpacing: 3, marginTop: 4 }}>{soldCount} SOLD · {unsoldCount} UNSOLD</div>
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 24, flexWrap: "wrap", justifyContent: "center" }}>
