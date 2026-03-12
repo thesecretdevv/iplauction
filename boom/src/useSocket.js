@@ -25,8 +25,24 @@ export function useSocket() {
     return { emit, on, socket: sock };
 }
 
-// No-op: countdown pulse removed per user request
-export function playPulse() { }
+// Countdown pulse for last 5 seconds
+let audioCtx = null;
+export function playPulse() {
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.08);
+        osc.type = "sine";
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
+    } catch (e) { }
+}
 
 export function playSaleSound() {
     try {

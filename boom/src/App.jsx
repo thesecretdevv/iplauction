@@ -781,6 +781,57 @@ function PlayerCard({ player }) {
   );
 }
 
+function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11 }) {
+  const [selected, setSelected] = useState([]);
+  const toggle = (p) => {
+    setSelected(prev =>
+      prev.find(x => x.name === p.name)
+        ? prev.filter(x => x.name !== p.name)
+        : prev.length < playersNeeded ? [...prev, p] : prev
+    );
+  };
+  if (submitted) return (
+    <div style={{ minHeight: "100vh", background: BG, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Rajdhani',sans-serif" }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 48, color: GOLD, letterSpacing: 6 }}>XI SUBMITTED!</div>
+        <div style={{ color: "#555", fontSize: 14, marginTop: 12, letterSpacing: 3 }}>WAITING FOR OTHER TEAMS...</div>
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Rajdhani',sans-serif", padding: "24px 20px" }}>
+      <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(28px,4vw,48px)", color: GOLD, letterSpacing: 6 }}>SELECT YOUR PLAYING XI</div>
+        <div style={{ color: "#555", fontSize: 12, letterSpacing: 3, marginTop: 6 }}>
+          {selected.length}/{playersNeeded} selected — {playersNeeded - selected.length} more needed
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, maxWidth: 1000, margin: "0 auto 28px" }}>
+        {mySquad.map((p, i) => {
+          const sel = !!selected.find(x => x.name === p.name);
+          const rc = ROLE_C[p.role];
+          return (
+            <div key={i} onClick={() => toggle(p)}
+              style={{ background: sel ? `${rc}18` : CARD, border: `1px solid ${sel ? rc : BORDER}`, borderRadius: 10, padding: "12px", cursor: "pointer", transition: "all .2s", transform: sel ? "translateY(-3px)" : "none", boxShadow: sel ? `0 0 20px ${rc}33` : "none" }}>
+              <div style={{ fontFamily: "'Bebas Neue'", fontSize: 16, color: sel ? rc : "#ddd", letterSpacing: 1 }}>{p.name}</div>
+              <div style={{ fontSize: 11, color: rc, marginTop: 4, fontWeight: 600 }}>{ROLE_L[p.role]}</div>
+              <div style={{ fontSize: 11, color: GOLD, marginTop: 4 }}>₹{p.soldFor?.toFixed(2) || p.base?.toFixed(2)} Cr</div>
+              {sel && <div style={{ fontSize: 9, color: rc, marginTop: 6, letterSpacing: 2, fontWeight: 700 }}>✓ SELECTED</div>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ textAlign: "center" }}>
+        <button onClick={() => selected.length === playersNeeded && onSubmit(selected)}
+          disabled={selected.length !== playersNeeded}
+          style={{ background: selected.length === playersNeeded ? `linear-gradient(135deg, ${GOLD}, #9a7610)` : "#1a1a1a", border: `1px solid ${selected.length === playersNeeded ? GOLD : "#333"}`, borderRadius: 6, padding: "14px 50px", color: selected.length === playersNeeded ? "#000" : "#555", fontWeight: 900, fontSize: 16, letterSpacing: 4, cursor: selected.length === playersNeeded ? "pointer" : "not-allowed", fontFamily: "'Barlow Condensed'" }}>
+          SUBMIT PLAYING XI
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Home({ onPlay, onCreateRoom, onJoinRoom }) {
   return (
     <div style={{ minHeight: "100vh", background: `radial-gradient(ellipse at 50% 90%, #1c150a 0%, ${BG} 62%)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Rajdhani',sans-serif", position: "relative", overflow: "hidden" }}>
