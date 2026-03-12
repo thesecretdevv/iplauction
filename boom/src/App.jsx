@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useReducer } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { MEGA_SETS, PLAYER_IMAGES } from "./megaPlayers";
 import { useSocket, playBeep } from "./useSocket";
-import { PlayModeScreen, RoomScreen, LobbyScreen, TEAMS } from "./MultiScreens";
+import { PlayModeScreen, RoomScreen, LobbyScreen, TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI } from "./MultiScreens";
 import { StatsModal } from "./StatsModal";
 import { SquadModal } from "./SquadModal";
 import confetti from "canvas-confetti";
@@ -14,9 +14,7 @@ if (typeof document !== "undefined" && !document.getElementById("ipl-gf")) {
 }
 
 const GOLD = "#D4AF37", BG = "#05070D", CARD = "#0C0F18", BORDER = "rgba(212,175,55,0.12)";
-const ROLE_C = { BAT: "#22D3EE", WK: "#FBBF24", AR: "#C084FC", BOWL: "#4ADE80" };
-const ROLE_L = { BAT: "Batter", WK: "WK-Batter", AR: "All-rounder", BOWL: "Bowler" };
-const ROLE_EMOJI = { BAT: "🏏", WK: "🧤", AR: "⚡", BOWL: "🎯" };
+
 
 const MINI_PLAYERS = [
   { name: "Rishabh Pant", role: "WK", overseas: false, base: 2 }, { name: "Shreyas Iyer", role: "BAT", overseas: false, base: 2 },

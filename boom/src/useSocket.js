@@ -6,6 +6,7 @@ export function useSocket() {
 
     useEffect(() => {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || "https://bidwicket.onrender.com";
+        console.log("Connecting to Auction Server:", backendUrl || "Same Origin");
         sock.current = io(backendUrl, { transports: ["websocket", "polling"], reconnection: true });
 
         return () => { sock.current?.disconnect(); };

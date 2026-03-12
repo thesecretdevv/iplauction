@@ -1,10 +1,6 @@
 import { useState, useMemo } from "react";
-import { TEAMS } from "./MultiScreens";
+import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI } from "./MultiScreens";
 import { PLAYER_IMAGES } from "./megaPlayers";
-
-const GOLD = "#D4AF37", BG = "#05070D", CARD = "#0C0F18", BORDER = "rgba(212,175,55,0.12)";
-const ROLE_C = { BAT: "#22D3EE", WK: "#FBBF24", AR: "#C084FC", BOWL: "#4ADE80" };
-const ROLE_EMOJI = { BAT: "🏏", WK: "🧤", AR: "⚡", BOWL: "🎯" };
 
 const fmt = c => c >= 1 ? `₹${c.toFixed(2)} Cr` : `₹${Math.round(c * 100)} L`;
 

@@ -15,7 +15,11 @@ const TEAMS = [
     { id: "LSG", name: "Lucknow Super Giants", short: "LSG", color: "#81D4FA" },
 ];
 
-export { TEAMS };
+const ROLE_C = { BAT: "#22D3EE", WK: "#FBBF24", AR: "#C084FC", BOWL: "#4ADE80" };
+const ROLE_L = { BAT: "Batter", WK: "WK-Batter", AR: "All-rounder", BOWL: "Bowler" };
+const ROLE_EMOJI = { BAT: "🏏", WK: "🧤", AR: "⚡", BOWL: "🎯" };
+
+export { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI };
 
 export function PlayModeScreen({ onSingle, onMulti }) {
     const [hov, setHov] = useState(null);
