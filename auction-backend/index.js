@@ -6,7 +6,7 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
-        origin: ["https://bidwicket.vercel.app", "http://localhost:5173"],
+        origin: "*",
         methods: ["GET", "POST"]
     }
 });

@@ -5,7 +5,7 @@ export function useSocket() {
     const sock = useRef(null);
 
     useEffect(() => {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || "https://bidwicket.onrender.com";
         sock.current = io(backendUrl, { transports: ["websocket", "polling"], reconnection: true });
 
         return () => { sock.current?.disconnect(); };
