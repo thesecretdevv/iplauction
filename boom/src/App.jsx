@@ -336,7 +336,7 @@ export default function App() {
   if (screen === "home") return <Home onPlay={() => setScreen("modeSelect")} />;
   if (screen === "modeSelect") return <ModeSelect onSelect={m => { setAuctionMode(m); setScreen("playMode"); }} />;
   if (screen === "playMode") return <PlayModeScreen onSingle={() => { setPlayMode("single"); setScreen("teamSelect"); }} onMulti={() => { setPlayMode("multi"); setScreen("roomScreen"); }} />;
-  if (screen === "roomScreen") return <RoomScreen emit={emit} onJoined={({ code, players, isHost: h, myName: n }) => { setRoomCode(code); setLobbyPlayers(players); setIsHost(h); setMyName(n); setScreen("lobby"); }} />;
+  if (screen === "roomScreen") return <RoomScreen emit={emit} playerId={playerId} onJoined={({ code, players, isHost: h, myName: n }) => { setRoomCode(code); setLobbyPlayers(players); setIsHost(h); setMyName(n); setScreen("lobby"); }} />;
   if (screen === "lobby") return <LobbyScreen roomCode={roomCode} players={lobbyPlayers} isHost={isHost} auctionMode={lobbyMode} emit={emit} onModeSelect={m => { setLobbyMode(m); emit("set-auction-mode", { mode: m }); }} onStart={startMultiAuction} />;
   if (screen === "teamSelect") return <TeamSelect onSelect={startSingleAuction} mode={auctionMode} />;
   if (screen === "results" && gs) return <Results gs={gs} myTeamId={isMulti ? myTeamId : gs.myTeamId} onRestart={() => {

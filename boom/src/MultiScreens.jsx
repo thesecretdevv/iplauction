@@ -51,7 +51,7 @@ export function PlayModeScreen({ onSingle, onMulti }) {
     );
 }
 
-export function RoomScreen({ emit, onJoined }) {
+export function RoomScreen({ emit, onJoined, playerId }) {
     const [mode, setMode] = useState(null); // "create" or "join"
     const [name, setName] = useState("");
     const [code, setCode] = useState("");
@@ -74,7 +74,7 @@ export function RoomScreen({ emit, onJoined }) {
     const handleCreate = () => {
         if (!name.trim()) return setError("Enter your name");
         setLoading(true); setError("");
-        emit("create-room", { playerName: name.trim(), isPrivate, roomName: `${name.trim()}'s Room` }, (res) => {
+        emit("create-room", { playerName: name.trim(), isPrivate, roomName: `${name.trim()}'s Room`, playerId }, (res) => {
             setLoading(false);
             if (res.ok) onJoined({ code: res.code, players: res.players, isHost: true, myName: name.trim() });
             else setError(res.error || "Failed");
@@ -90,7 +90,7 @@ export function RoomScreen({ emit, onJoined }) {
     const handleJoin = (targetCode) => {
         if (!name.trim()) return setError("Enter your name first at the top!");
         setLoading(true); setError("");
-        emit("join-room", { code: targetCode, playerName: name.trim() }, (res) => {
+        emit("join-room", { code: targetCode, playerName: name.trim(), playerId }, (res) => {
             setLoading(false);
             if (res.ok) onJoined({ code: res.code, players: res.players, isHost: false, myName: name.trim() });
             else setError(res.error || "Failed");
