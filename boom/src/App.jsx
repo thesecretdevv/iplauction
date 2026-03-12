@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useReducer } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { MEGA_SETS, PLAYER_IMAGES } from "./megaPlayers";
 import { useSocket, playBeep } from "./useSocket";
-import { PlayModeScreen, RoomScreen, LobbyScreen, TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI } from "./MultiScreens";
+import { PlayModeScreen, RoomScreen, LobbyScreen, TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from "./MultiScreens";
 import { StatsModal } from "./StatsModal";
 import { SquadModal } from "./SquadModal";
 import confetti from "canvas-confetti";
@@ -13,7 +13,7 @@ if (typeof document !== "undefined" && !document.getElementById("ipl-gf")) {
   document.head.appendChild(l);
 }
 
-const GOLD = "#D4AF37", BG = "#05070D", CARD = "#0C0F18", BORDER = "rgba(212,175,55,0.12)";
+
 
 
 const MINI_PLAYERS = [

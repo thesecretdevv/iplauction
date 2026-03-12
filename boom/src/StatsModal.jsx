@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI } from "./MultiScreens";
+import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from "./MultiScreens";
 import { PLAYER_IMAGES } from "./megaPlayers";
 
 const fmt = c => c >= 1 ? `₹${c.toFixed(2)} Cr` : `₹${Math.round(c * 100)} L`;

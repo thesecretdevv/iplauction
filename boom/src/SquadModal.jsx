@@ -1,9 +1,7 @@
 import { useState } from "react";
+import { GOLD, BG, CARD, BORDER } from "./MultiScreens";
 
-const GOLD = "#D4AF37";
-const BG = "#05070D";
-const CARD = "#0C0F18";
-const BORDER = "rgba(212,175,55,0.12)";
+
 
 export function SquadModal({ isOpen, onClose, squads, myTeamId, TEAMS }) {
     if (!isOpen) return null;
