@@ -98,29 +98,83 @@ export default function App() {
     return n;
   });
 
-  // Auto-Rejoin Logic
+  // Auto-Rejoin Logic (Multi & Single)
   useEffect(() => {
-    const savedRoom = localStorage.getItem("ipl_room_code");
-    const savedName = localStorage.getItem("ipl_player_name");
-    const savedMode = localStorage.getItem("ipl_play_mode");
+    const savedPlayMode = localStorage.getItem("ipl_play_mode");
 
-    if (savedRoom && savedName && savedMode === "multi") {
-      setRoomCode(savedRoom);
-      setMyName(savedName);
-      setPlayMode("multi");
+    if (savedPlayMode === "multi") {
+      const savedRoom = localStorage.getItem("ipl_room_code");
+      const savedName = localStorage.getItem("ipl_player_name");
 
-      emit("join-room", { code: savedRoom, playerName: savedName, playerId }, (res) => {
-        if (res.ok) {
-          setLobbyPlayers(res.players);
-          setScreen("lobby");
-        } else {
-          // Room closed or expired
-          localStorage.removeItem("ipl_room_code");
-          localStorage.removeItem("ipl_play_mode");
+      if (savedRoom && savedName) {
+        setRoomCode(savedRoom);
+        setMyName(savedName);
+        setPlayMode("multi");
+
+        emit("join-room", { code: savedRoom, playerName: savedName, playerId }, (res) => {
+          if (res.ok) {
+            setLobbyPlayers(res.players);
+            setIsHost(res.hostId === playerId);
+            if (res.auctionMode) setLobbyMode(res.auctionMode);
+
+            if (res.roomStatus === "active") {
+              setMultiGS(res.gameState);
+              setScreen("auction");
+            } else if (res.roomStatus === "finished") {
+              setMultiGS(res.gameState);
+              setScreen("results");
+            } else {
+              setScreen("lobby");
+            }
+          } else {
+            localStorage.removeItem("ipl_room_code");
+            localStorage.removeItem("ipl_play_mode");
+          }
+        });
+      }
+    } else if (savedPlayMode === "single") {
+      const savedGS = localStorage.getItem("ipl_single_gs");
+      const savedScreen = localStorage.getItem("ipl_single_screen");
+      const savedMode = localStorage.getItem("ipl_auction_mode");
+      const savedTeamId = localStorage.getItem("ipl_my_team_id");
+
+      if (savedGS && savedScreen) {
+        try {
+          const parsedGS = JSON.parse(savedGS);
+          g.current = parsedGS;
+          setPlayMode("single");
+          setAuctionMode(savedMode);
+          setMyTeamId(savedTeamId);
+          setScreen(savedScreen);
+
+          if (savedScreen === "auction") {
+            clearInterval(intervalRef.current);
+            intervalRef.current = setInterval(() => tickRef.current?.(), 1000);
+          }
+        } catch (e) {
+          console.error("Failed to restore single player session", e);
         }
-      });
+      }
     }
-  }, [emit]);
+  }, [emit, playerId]);
+
+  // Persist Single Player State
+  useEffect(() => {
+    if (playMode === "single" && g.current) {
+      localStorage.setItem("ipl_play_mode", "single");
+      localStorage.setItem("ipl_single_gs", JSON.stringify(g.current));
+      localStorage.setItem("ipl_single_screen", screen);
+      localStorage.setItem("ipl_auction_mode", auctionMode);
+      localStorage.setItem("ipl_my_team_id", myTeamId);
+    }
+  }, [playMode, screen, auctionMode, myTeamId, multiGS]); // using multiGS as a proxy for 'tick' forceUpdates if needed, but actually g.current update is manual. 
+  // Let's add a sync effect that runs on every forceUpdate for single player.
+  useEffect(() => {
+    if (playMode === "single" && g.current && screen !== "home") {
+      localStorage.setItem("ipl_single_gs", JSON.stringify(g.current));
+    }
+  });
+
 
   // Socket listeners for multiplayer
   useEffect(() => {
@@ -287,7 +341,16 @@ export default function App() {
   if (screen === "roomScreen") return <RoomScreen emit={emit} onJoined={({ code, players, isHost: h, myName: n }) => { setRoomCode(code); setLobbyPlayers(players); setIsHost(h); setMyName(n); setScreen("lobby"); }} />;
   if (screen === "lobby") return <LobbyScreen roomCode={roomCode} players={lobbyPlayers} isHost={isHost} auctionMode={lobbyMode} emit={emit} onModeSelect={m => { setLobbyMode(m); emit("set-auction-mode", { mode: m }); }} onStart={startMultiAuction} />;
   if (screen === "teamSelect") return <TeamSelect onSelect={startSingleAuction} mode={auctionMode} />;
-  if (screen === "results" && gs) return <Results gs={gs} myTeamId={isMulti ? myTeamId : gs.myTeamId} onRestart={() => { clearInterval(intervalRef.current); g.current = null; setMultiGS(null); setPlayMode(null); setAuctionMode(null); setLobbyMode(null); setScreen("home"); }} />;
+  if (screen === "results" && gs) return <Results gs={gs} myTeamId={isMulti ? myTeamId : gs.myTeamId} onRestart={() => {
+    ["ipl_room_code", "ipl_play_mode", "ipl_single_gs", "ipl_single_screen", "ipl_auction_mode", "ipl_my_team_id"].forEach(k => localStorage.removeItem(k));
+    clearInterval(intervalRef.current);
+    g.current = null;
+    setMultiGS(null);
+    setPlayMode(null);
+    setAuctionMode(null);
+    setLobbyMode(null);
+    setScreen("home");
+  }} />;
   if (!gs) return null;
 
   const player = gs.playerQueue[gs.currentIdx];

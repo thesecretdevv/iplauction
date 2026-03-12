@@ -225,7 +225,15 @@ io.on('connection', (socket) => {
 
             const safePlayers = Object.values(room.players).map(p => ({ ...p, socketId: undefined }));
             io.to(code).emit('lobby-update', { players: safePlayers });
-            return cb({ ok: true, code, players: safePlayers });
+            return cb({
+                ok: true,
+                code,
+                players: safePlayers,
+                roomStatus: room.status,
+                hostId: room.hostId,
+                auctionMode: room.auctionMode,
+                gameState: room.status !== 'lobby' ? getClientState(room) : null
+            });
         }
 
         if (room.started && room.status !== 'finished') return cb({ ok: false, error: 'Game already active' });
