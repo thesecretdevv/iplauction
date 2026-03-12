@@ -8,6 +8,9 @@ import { SquadModal } from "./SquadModal";
 import confetti from "canvas-confetti";
 import html2canvas from "html2canvas";
 import iplThemeSrc from "./assets/Ipl.mp3";
+import tataIplLogo from "./assets/TataIPL.png";
+import boultImg from "./assets/Boult.avif";
+import kohliImg from "./assets/Kohli.avif";
 
 // ─── Global IPL Audio ───────────────────────────────────────────────────────
 let _iplAudio = null;
@@ -567,8 +570,12 @@ export default function App() {
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <div className="ipl-left" style={{ width: 300, padding: "20px 14px", borderRight: `1px solid ${BORDER}`, overflowY: "auto", flexShrink: 0, background: `linear-gradient(180deg, ${CARD}, transparent)` }}>
           <div style={{ textAlign: "center", animation: "fadeUp .4s ease-out" }}>
-            <div style={{ background: `${ROLE_C[player.role]}15`, width: 140, height: 140, borderRadius: "50%", margin: "0 auto 24px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 72, border: `2px solid ${ROLE_C[player.role]}40`, boxShadow: `0 0 40px ${ROLE_C[player.role]}22` }}>
-              {ROLE_EMOJI[player.role]}
+            <div style={{ background: `${ROLE_C[player.role]}15`, width: 140, height: 140, borderRadius: "50%", margin: "0 auto 24px", overflow: "hidden", border: `2px solid ${ROLE_C[player.role]}40`, boxShadow: `0 0 40px ${ROLE_C[player.role]}22`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <img
+                src={PLAYER_IMAGES?.[player.name] || kohliImg}
+                alt={player.name}
+                style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" }}
+              />
             </div>
             <div style={{ fontFamily: "'Bebas Neue'", fontSize: 32, color: "#fff", letterSpacing: 2, marginBottom: 8, lineHeight: 1.1 }}>{player.name.toUpperCase()}</div>
             <div style={{ color: ROLE_C[player.role], fontSize: 13, fontWeight: 700, letterSpacing: 3, marginBottom: 24 }}>{ROLE_L[player.role]} · {player.overseas ? "OVERSEAS" : "INDIAN"}</div>
@@ -739,7 +746,7 @@ export default function App() {
 
 function PlayerCard({ player }) {
   const rc = ROLE_C[player.role];
-  const photo = PLAYER_IMAGES?.[player.name];
+  const photo = PLAYER_IMAGES?.[player.name] || kohliImg;
 
   return (
     <div style={{ background: `linear-gradient(160deg, #0E1220, ${rc}08)`, border: `1px solid ${rc}20`, borderRadius: 14, overflow: "hidden" }}>
@@ -780,6 +787,11 @@ function Home({ onPlay, onCreateRoom, onJoinRoom }) {
       <style>{`.home-title{font-size:clamp(52px,9vw,110px)!important}.home-year{font-size:clamp(28px,4.5vw,58px)!important}.home-stats{gap:clamp(20px,4vw,54px)!important;flex-wrap:wrap!important}.home-btn{padding:14px clamp(28px,5vw,60px)!important;font-size:clamp(13px,1.4vw,17px)!important;margin-top:clamp(28px,4vh,52px)!important}.home-stat-val{font-size:clamp(18px,2.5vw,28px)!important}@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}`}</style>
       {[300, 500, 700, 900].map(s => <div key={s} style={{ position: "absolute", width: s, height: s, border: "1px solid rgba(212,175,55,0.035)", borderRadius: "50%", pointerEvents: "none" }} />)}
       <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(212,175,55,0.015) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(212,175,55,0.015) 40px)", pointerEvents: "none" }} />
+
+      {/* TATA IPL LOGO - top left */}
+      <div style={{ position: "absolute", top: 16, left: 20, zIndex: 10 }}>
+        <img src={tataIplLogo} alt="TATA IPL" style={{ height: 52, objectFit: "contain", filter: "drop-shadow(0 2px 12px rgba(0,0,0,0.6))" }} />
+      </div>
 
       {/* TOP SHORTCUTS */}
       <div style={{ position: "absolute", top: 20, right: 20, display: "flex", gap: 12, zIndex: 10 }}>
