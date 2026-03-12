@@ -572,7 +572,7 @@ export default function App() {
           <div style={{ textAlign: "center", animation: "fadeUp .4s ease-out" }}>
             <div style={{ background: `${ROLE_C[player.role]}15`, width: 140, height: 140, borderRadius: "50%", margin: "0 auto 24px", overflow: "hidden", border: `2px solid ${ROLE_C[player.role]}40`, boxShadow: `0 0 40px ${ROLE_C[player.role]}22`, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <img
-                src={PLAYER_IMAGES?.[player.name] || kohliImg}
+                src={kohliImg}
                 alt={player.name}
                 style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" }}
               />
@@ -746,7 +746,7 @@ export default function App() {
 
 function PlayerCard({ player }) {
   const rc = ROLE_C[player.role];
-  const photo = PLAYER_IMAGES?.[player.name] || kohliImg;
+  const photo = kohliImg;
 
   return (
     <div style={{ background: `linear-gradient(160deg, #0E1220, ${rc}08)`, border: `1px solid ${rc}20`, borderRadius: 14, overflow: "hidden" }}>
