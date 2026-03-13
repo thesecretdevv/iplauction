@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useReducer, useMemo } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { MEGA_SETS, PLAYER_IMAGES } from "./megaPlayers";
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+import Anthropic from "@anthropic-ai/sdk";
+const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY || "";
 import { useSocket, playPulse, playSaleSound } from "./useSocket";
 import { PlayModeScreen, RoomScreen, LobbyScreen, TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from "./MultiScreens";
 import { StatsModal } from "./StatsModal";
@@ -969,8 +970,8 @@ function GeminiAnalysisScreen({ gs, onBack }) {
   const toggleExpand = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
   async function runAnalysis() {
-    if (!GEMINI_API_KEY) {
-      setErrorMsg("API key missing. Add VITE_GEMINI_API_KEY to your env variables.");
+    if (!CLAUDE_API_KEY) {
+      setErrorMsg("API key missing. Add VITE_CLAUDE_API_KEY to your env variables.");
       setStatus("error");
       return;
     }
@@ -1012,29 +1013,24 @@ RESPOND IN THIS EXACT JSON FORMAT (no markdown wrapper, pure JSON only, no text 
 Rank ALL 10 teams. Be brutally honest and specific about real IPL 2025 conditions.`;
 
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
-          })
-        }
-      );
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData?.error?.message || `API error ${res.status}`);
-      }
-      const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const anthropic = new Anthropic({
+        apiKey: CLAUDE_API_KEY,
+        dangerouslyAllowBrowser: true
+      });
+
+      const response = await anthropic.messages.create({
+        model: "claude-3-7-sonnet-20250219",
+        max_tokens: 4096,
+        messages: [{ role: "user", content: prompt }]
+      });
+
+      const text = response.content?.[0]?.text || "";
       const jsonStr = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       const parsed = JSON.parse(jsonStr);
       setAnalysis(parsed);
       setStatus("done");
     } catch (e) {
-      console.error("Gemini error:", e);
+      console.error("Claude error:", e);
       setErrorMsg(e.message || "Failed to get analysis.");
       setStatus("error");
     }
@@ -1089,9 +1085,9 @@ Rank ALL 10 teams. Be brutally honest and specific about real IPL 2025 condition
           <div style={{ fontFamily: "'Bebas Neue'", fontSize: 30, color: "#ef4444", letterSpacing: 4 }}>ANALYSIS FAILED</div>
           <div style={{ background: "#0d0d0d", border: "1px solid #ef444428", borderRadius: 12, padding: "18px 28px", maxWidth: 520, textAlign: "center" }}>
             <div style={{ color: "#ef4444", fontSize: 13, lineHeight: 1.7 }}>{errorMsg}</div>
-            {!GEMINI_API_KEY && (
+            {!CLAUDE_API_KEY && (
               <div style={{ marginTop: 14, padding: "10px 16px", background: "#1a1a1a", borderRadius: 8, fontFamily: "monospace", fontSize: 12, color: GOLD, letterSpacing: 1 }}>
-                VITE_GEMINI_API_KEY=your_key_here
+                VITE_CLAUDE_API_KEY=your_key_here
               </div>
             )}
           </div>
