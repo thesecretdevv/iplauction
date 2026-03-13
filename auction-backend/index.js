@@ -369,9 +369,15 @@ io.on('connection', (socket) => {
         const teamId = player.teamId;
         if (gs.currentBidder === teamId) return cb?.({ ok: false, error: 'Already leading' });
 
-        const nb = nextBid(gs.currentBid);
+        const nb = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
         if (gs.purses[teamId] < nb) return cb?.({ ok: false, error: 'Insufficient funds' });
-        if (gs.squads[teamId].length >= 25) return cb?.({ ok: false, error: 'Squad full' });
+
+        const maxSquadSize = (gs.playerQueue?.length || 0) <= 200 ? 15 : 25;
+        if (gs.squads[teamId].length >= maxSquadSize) return cb?.({ ok: false, error: 'Squad full' });
+
+        const playerOnAuction = gs.playerQueue[gs.currentIdx];
+        const osCount = gs.squads[teamId].filter(p => p.overseas).length;
+        if (playerOnAuction && playerOnAuction.overseas && osCount >= 8) return cb?.({ ok: false, error: 'Max 8 Overseas players allowed' });
 
         gs.currentBid = nb;
         gs.currentBidder = teamId;

@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from "react";
 import { io } from "socket.io-client";
 import fahhhSrc from "./assets/fahhh.mp3";
+import clockSrc from "./assets/clock-ticking.mp3";
 
 export function useSocket() {
     const sock = useRef(null);
@@ -25,22 +26,12 @@ export function useSocket() {
     return { emit, on, socket: sock };
 }
 
-// Countdown pulse for last 5 seconds
-let audioCtx = null;
+// Countdown pulse for last 5 seconds (Ticking clock)
 export function playPulse() {
     try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.08);
-        osc.type = "sine";
-        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.15);
+        const audio = new Audio(clockSrc);
+        audio.volume = 0.5;
+        audio.play().catch(e => console.warn("Clock audio play failed:", e));
     } catch (e) { }
 }
 

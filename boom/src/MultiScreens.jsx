@@ -92,8 +92,20 @@ export function RoomScreen({ emit, onJoined, playerId }) {
         setLoading(true); setError("");
         emit("join-room", { code: targetCode, playerName: name.trim(), playerId }, (res) => {
             setLoading(false);
-            if (res.ok) onJoined({ code: res.code, players: res.players, isHost: false, myName: name.trim() });
-            else setError(res.error || "Failed");
+            if (res.ok) {
+                const isActualHost = res.hostId === playerId;
+                onJoined({
+                    code: res.code,
+                    players: res.players,
+                    isHost: isActualHost,
+                    myName: name.trim(),
+                    roomStatus: res.roomStatus,
+                    gameState: res.gameState,
+                    auctionMode: res.auctionMode
+                });
+            } else {
+                setError(res.error || "Failed");
+            }
         });
     };
 

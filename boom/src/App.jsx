@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useReducer, useMemo } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { MEGA_SETS, PLAYER_IMAGES } from "./megaPlayers";
+
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 import { useSocket, playPulse, playSaleSound } from "./useSocket";
 import { PlayModeScreen, RoomScreen, LobbyScreen, TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from "./MultiScreens";
 import { StatsModal } from "./StatsModal";
@@ -39,28 +41,32 @@ if (typeof document !== "undefined" && !document.getElementById("ipl-gf")) {
 
 
 
-const MINI_PLAYERS = [
-  { name: "Rishabh Pant", role: "WK", overseas: false, base: 2 }, { name: "Shreyas Iyer", role: "BAT", overseas: false, base: 2 },
-  { name: "KL Rahul", role: "WK", overseas: false, base: 2 }, { name: "Venkatesh Iyer", role: "AR", overseas: false, base: 2 },
-  { name: "Ishan Kishan", role: "WK", overseas: false, base: 2 }, { name: "Arshdeep Singh", role: "BOWL", overseas: false, base: 2 },
-  { name: "Yuzvendra Chahal", role: "BOWL", overseas: false, base: 2 }, { name: "Mohammad Shami", role: "BOWL", overseas: false, base: 2 },
-  { name: "Jos Buttler", role: "WK", overseas: true, base: 2 }, { name: "Mitchell Starc", role: "BOWL", overseas: true, base: 2 },
-  { name: "Liam Livingstone", role: "AR", overseas: true, base: 2 }, { name: "Josh Hazlewood", role: "BOWL", overseas: true, base: 2 },
-  { name: "Heinrich Klaasen", role: "WK", overseas: true, base: 2 }, { name: "Trent Boult", role: "BOWL", overseas: true, base: 2 },
-  { name: "Phil Salt", role: "WK", overseas: true, base: 1.5 }, { name: "Tim David", role: "BAT", overseas: true, base: 1.5 },
-  { name: "Washington Sundar", role: "AR", overseas: false, base: 1.5 }, { name: "Avesh Khan", role: "BOWL", overseas: false, base: 1.5 },
-  { name: "Marcus Stoinis", role: "AR", overseas: true, base: 1.5 }, { name: "Lockie Ferguson", role: "BOWL", overseas: true, base: 1.5 },
-  { name: "Rachin Ravindra", role: "AR", overseas: true, base: 1.5 }, { name: "Riyan Parag", role: "AR", overseas: false, base: 1.5 },
-  { name: "Tilak Varma", role: "BAT", overseas: false, base: 1.5 }, { name: "Shivam Dube", role: "AR", overseas: false, base: 1.5 },
-  { name: "Deepak Chahar", role: "BOWL", overseas: false, base: 1.5 }, { name: "Prasidh Krishna", role: "BOWL", overseas: false, base: 1.5 },
-  { name: "Jake Fraser-McGurk", role: "BAT", overseas: true, base: 0.75 }, { name: "Shardul Thakur", role: "AR", overseas: false, base: 1 },
-  { name: "Deepak Hooda", role: "AR", overseas: false, base: 0.75 }, { name: "T Natarajan", role: "BOWL", overseas: false, base: 0.75 },
-  { name: "Khaleel Ahmed", role: "BOWL", overseas: false, base: 0.75 }, { name: "Akash Deep", role: "BOWL", overseas: false, base: 1 },
-  { name: "Harshit Rana", role: "BOWL", overseas: false, base: 0.75 }, { name: "Mayank Yadav", role: "BOWL", overseas: false, base: 0.75 },
-  { name: "Abhishek Sharma", role: "AR", overseas: false, base: 1 }, { name: "Nitish Kumar Reddy", role: "AR", overseas: false, base: 0.75 },
-  { name: "Rahul Tewatia", role: "AR", overseas: false, base: 1 }, { name: "Nathan Ellis", role: "BOWL", overseas: true, base: 0.75 },
-  { name: "Rovman Powell", role: "BAT", overseas: true, base: 1 }, { name: "Devdutt Padikkal", role: "BAT", overseas: false, base: 1.5 },
-];
+// ── Mini Auction: Build 200-player pool from ALL MEGA_SETS categories ─────────
+function buildMiniPlayers() {
+  // Collect all players from MEGA_SETS grouped by role
+  const byRole = { BAT: [], BOWL: [], AR: [], WK: [] };
+  for (const set of MEGA_SETS) {
+    for (const player of set.players) {
+      if (byRole[player.role]) byRole[player.role].push({ ...player, setName: "Mini Auction" });
+    }
+  }
+
+  // Sort each role pool: highest base first (priority players appear first)
+  for (const role in byRole) byRole[role].sort((a, b) => b.base - a.base);
+
+  // Target counts per role to reach ~200 players
+  // BAT:52, BOWL:68, AR:55, WK:25  → total 200
+  const targets = { BAT: 52, BOWL: 68, AR: 55, WK: 25 };
+
+  const pool = [];
+  for (const role in targets) {
+    const available = byRole[role];
+    const count = Math.min(targets[role], available.length);
+    pool.push(...available.slice(0, count));
+  }
+
+  return pool;
+}
 
 const shuffle = arr => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0;[a[i], a[j]] = [a[j], a[i]]; } return a; };
 const getIncrement = p => p < 2 ? 0.10 : p < 5 ? 0.20 : p < 10 ? 0.25 : 0.50;
@@ -68,7 +74,10 @@ const fmt = c => c >= 1 ? `₹${c.toFixed(2)} Cr` : `₹${Math.round(c * 100)} L
 const nextBid = c => +(c + getIncrement(c)).toFixed(2);
 
 function buildQueue(mode) {
-  if (mode === "mini") return shuffle(MINI_PLAYERS).map((p, i) => ({ ...p, id: i, setName: "Mini Auction" }));
+  if (mode === "mini") {
+    const miniPool = buildMiniPlayers();
+    return shuffle(miniPool).map((p, i) => ({ ...p, id: i, setName: p.setName || "Mini Auction" }));
+  }
   const queue = [];
   for (const set of MEGA_SETS) {
     const s = shuffle(set.players);
@@ -290,8 +299,11 @@ export default function App() {
     }
     const gs = g.current; if (!gs || gs.phase !== "bidding") return;
     if (gs.currentBidder === gs.myTeamId) return;
-    const nb = nextBid(gs.currentBid);
-    if (gs.purses[gs.myTeamId] < nb || gs.squads[gs.myTeamId].length >= 25) return;
+    const nb = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
+    const osCount = gs.squads[gs.myTeamId].filter(p => p.overseas).length;
+    const playerOnAuction = gs.playerQueue[gs.currentIdx];
+    const maxSquadSize = (gs.playerQueue?.length || 0) <= 200 ? 15 : 25;
+    if (gs.purses[gs.myTeamId] < nb || gs.squads[gs.myTeamId].length >= maxSquadSize || (playerOnAuction.overseas && osCount >= 8)) return;
     gs.currentBid = nb; gs.currentBidder = gs.myTeamId; gs.timer = 10;
     gs.bidLog = [{ teamId: gs.myTeamId, bid: nb, isMe: true }, ...gs.bidLog].slice(0, 7);
     syncSingleGS();
@@ -427,7 +439,24 @@ export default function App() {
   if (screen === "modeSelect") return <ModeSelect onSelect={m => { setAuctionMode(m); setScreen("playMode"); }} />;
 
   if (screen === "playMode") return <PlayModeScreen onSingle={() => { setPlayMode("single"); setScreen("teamSelect"); }} onMulti={() => { setPlayMode("multi"); setScreen("roomScreen"); }} />;
-  if (screen === "roomScreen") return <RoomScreen emit={emit} playerId={playerId} onJoined={({ code, players, isHost: h, myName: n }) => { setRoomCode(code); setLobbyPlayers(players); setIsHost(h); setMyName(n); setScreen("lobby"); }} />;
+  if (screen === "roomScreen") return <RoomScreen emit={emit} playerId={playerId} onJoined={({ code, players, isHost: h, myName: n, roomStatus, gameState, auctionMode: resMode }) => {
+    setRoomCode(code);
+    setLobbyPlayers(players);
+    setIsHost(h);
+    setMyName(n);
+
+    if (resMode) setLobbyMode(resMode);
+
+    if (roomStatus === "active") {
+      setMultiGS(gameState);
+      setScreen("auction");
+    } else if (roomStatus === "finished") {
+      setMultiGS(gameState);
+      setScreen("results");
+    } else {
+      setScreen("lobby");
+    }
+  }} />;
   if (screen === "lobby") return <LobbyScreen roomCode={roomCode} players={lobbyPlayers} isHost={isHost} auctionMode={lobbyMode} emit={emit} onModeSelect={m => { setLobbyMode(m); emit("set-auction-mode", { mode: m }); }} onStart={startMultiAuction} />;
   if (screen === "teamSelect") return <TeamSelect onSelect={startSingleAuction} mode={auctionMode} />;
 
@@ -459,8 +488,11 @@ export default function App() {
   const player = gs.playerQueue[gs.currentIdx];
   const myTeam = TEAMS.find(t => t.id === effectiveMyTeamId);
   const bidderTeam = gs.currentBidder ? TEAMS.find(t => t.id === gs.currentBidder) : null;
+  const osCount = (gs.squads[effectiveMyTeamId] || []).filter(p => p.overseas).length;
+  const maxSquadSize = (gs.playerQueue?.length || 0) <= 200 ? 15 : 25;
   const canBid = gs.phase === "bidding" && gs.currentBidder !== effectiveMyTeamId
-    && (gs.purses[effectiveMyTeamId] || 0) >= nextBid(gs.currentBid) && (gs.squads[effectiveMyTeamId]?.length || 0) < 25;
+    && (gs.purses[effectiveMyTeamId] || 0) >= (gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid))
+    && (gs.squads[effectiveMyTeamId]?.length || 0) < maxSquadSize && (!player.overseas || osCount < 8);
   const iLeading = gs.currentBidder === effectiveMyTeamId;
   const upcoming = gs.playerQueue.slice(gs.currentIdx + 1, gs.currentIdx + 9);
 
@@ -650,7 +682,10 @@ export default function App() {
               ) : (
                 <button className="ipl-bid-btn" onClick={humanBid} disabled={!canBid}
                   style={{ background: canBid ? `linear-gradient(135deg,${myTeam?.color}40,${myTeam?.color}20)` : "#0e0e0e", border: `2px solid ${canBid ? myTeam?.color : "#2a2a2a"}`, borderRadius: 8, padding: "15px 44px", color: canBid ? myTeam?.color : "#3a3a3a", fontSize: 19, fontWeight: 900, cursor: canBid ? "pointer" : "not-allowed", letterSpacing: 2, fontFamily: "'Barlow Condensed'", boxShadow: canBid ? `0 0 28px ${myTeam?.color}44` : "none" }}>
-                  {canBid ? `BID ${fmt(nextBid(gs.currentBid))}` : "INSUFFICIENT"}
+                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, letterSpacing: 2 }}>
+                    {canBid ? `BID ${fmt(gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid))}` :
+                      (player.overseas && osCount >= 8 ? "MAX 8 OS" : "INSUFFICIENT")}
+                  </div>
                 </button>
               )}
             </div>
@@ -874,7 +909,7 @@ function ModeSelect({ onSelect }) {
   const [hov, setHov] = useState(null);
   const modes = [
     { id: "mega", title: "BIDWICKET IPL MEGA AUCTION", subtitle: "500+ Official Players · 40+ Sets", desc: "Full mega auction with all official sets.", icon: "🏟️", players: "500+", color: GOLD },
-    { id: "mini", title: "BIDWICKET IPL MINI AUCTION", subtitle: "40 Players · Quick Mode", desc: "Quick game with top players shuffled randomly.", icon: "⚡", players: "40", color: "#22D3EE" },
+    { id: "mini", title: "BIDWICKET IPL MINI AUCTION", subtitle: "200 Players · Quick Mode", desc: "Quick game with top players from all categories shuffled randomly.", icon: "⚡", players: "200", color: "#22D3EE" },
   ];
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Rajdhani',sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
@@ -908,7 +943,7 @@ function TeamSelect({ onSelect, mode }) {
       <style>{`.ts-title{font-size:clamp(26px,4vw,46px)!important}.ts-grid{grid-template-columns:repeat(5,1fr)!important}@media(max-width:1000px){.ts-grid{grid-template-columns:repeat(3,1fr)!important}}@media(max-width:600px){.ts-grid{grid-template-columns:repeat(2,1fr)!important}}`}</style>
       <div style={{ textAlign: "center", marginBottom: 38 }}>
         <div className="ts-title" style={{ fontFamily: "'Bebas Neue'", fontSize: 46, letterSpacing: 8, color: GOLD }}>CHOOSE YOUR FRANCHISE</div>
-        <div style={{ color: "#444", fontSize: 13, letterSpacing: 3, marginTop: 6 }}>{mode === "mega" ? "MEGA AUCTION — 500+ PLAYERS" : "MINI AUCTION — 40 PLAYERS"}</div>
+        <div style={{ color: "#444", fontSize: 13, letterSpacing: 3, marginTop: 6 }}>{mode === "mega" ? "MEGA AUCTION — 500+ PLAYERS" : "MINI AUCTION — 200 PLAYERS"}</div>
       </div>
       <div className="ts-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 14, maxWidth: 880, margin: "0 auto" }}>
         {TEAMS.map(t => (
@@ -924,9 +959,269 @@ function TeamSelect({ onSelect, mode }) {
   );
 }
 
+// -- Gemini AI Analysis Screen --------------------------------------------------------
+function GeminiAnalysisScreen({ gs, onBack }) {
+  const [status, setStatus] = useState("idle");
+  const [analysis, setAnalysis] = useState(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [expanded, setExpanded] = useState({});
+
+  const toggleExpand = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+
+  async function runAnalysis() {
+    if (!GEMINI_API_KEY) {
+      setErrorMsg("API key missing. Add VITE_GEMINI_API_KEY to your env variables.");
+      setStatus("error");
+      return;
+    }
+    setStatus("loading");
+    setErrorMsg("");
+
+    const teamSummaries = TEAMS.map(t => {
+      const xi = gs.playingXI?.[t.id] || gs.squads?.[t.id]?.slice(0, 11) || [];
+      const lines = xi.map(p => `    - ${p.name} (${p.role === "WK" ? "Wicket-Keeper" : p.role === "BAT" ? "Batter" : p.role === "BOWL" ? "Bowler" : "All-Rounder"}${p.overseas ? ", Overseas" : ""}) -- Rs.${p.soldFor?.toFixed(2) || p.base}Cr`).join("\n");
+      const purseLeft = (gs.purses?.[t.id] || 0).toFixed(2);
+      return `**${t.name} (${t.id})**\nPlaying XI:\n${lines || "  No players"}\nRemaining Purse: Rs.${purseLeft}Cr`;
+    }).join("\n\n---\n\n");
+
+    const prompt = `You are a world-class IPL cricket analyst with deep knowledge of IPL 2025 conditions and current player form. Based on the BidWicket IPL Auction results below, critically analyze and rank ALL 10 teams from BEST (1st) to WORST (10th).
+
+Consider: team balance (batting depth, bowling attack, all-round options, wicket-keeping), IPL 2025 current player form and recent performances, overseas slot usage (max 4 allowed), death bowling and powerplay specialists, star power and match-winners, and overall squad synergy.
+
+Here are the 10 Final Playing XIs:
+
+${teamSummaries}
+
+RESPOND IN THIS EXACT JSON FORMAT (no markdown wrapper, pure JSON only, no text before or after):
+{
+  "rankings": [
+    {
+      "rank": 1,
+      "teamId": "TEAM_ID",
+      "teamName": "Full Team Name",
+      "score": 92,
+      "verdict": "One sentence championship-level verdict",
+      "strengths": ["Strength 1", "Strength 2", "Strength 3"],
+      "weaknesses": ["Weakness 1", "Weakness 2"],
+      "whyWins": "Detailed 3-4 sentence explanation of why this team is the strongest based on their XI and real IPL 2025 conditions"
+    }
+  ],
+  "overallSummary": "2-3 sentence expert summary of the overall auction and competitive landscape"
+}
+
+Rank ALL 10 teams. Be brutally honest and specific about real IPL 2025 conditions.`;
+
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+          })
+        }
+      );
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData?.error?.message || `API error ${res.status}`);
+      }
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const jsonStr = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const parsed = JSON.parse(jsonStr);
+      setAnalysis(parsed);
+      setStatus("done");
+    } catch (e) {
+      console.error("Gemini error:", e);
+      setErrorMsg(e.message || "Failed to get analysis.");
+      setStatus("error");
+    }
+  }
+
+  useEffect(() => { runAnalysis(); }, []);
+
+  const teamColor = (id) => TEAMS.find(t => t.id === id)?.color || "#888";
+
+  return (
+    <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Rajdhani',sans-serif", padding: "clamp(14px,3vh,28px)" }}>
+      <style>{`
+        @keyframes fadeUpG{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+        @keyframes pulseG{0%,100%{opacity:1}50%{opacity:.35}}
+        @keyframes spinG{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        @keyframes rankInG{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+        .gem-card{transition:transform .2s,box-shadow .2s;cursor:pointer}
+        .gem-card:hover{transform:translateY(-3px)!important}
+      `}</style>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28, flexWrap: "wrap", gap: 12, animation: "fadeUpG .4s ease-out" }}>
+        <div>
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(26px,4vw,48px)", color: GOLD, letterSpacing: 6, lineHeight: 1 }}>🤖 AI TEAM ANALYSIS</div>
+          <div style={{ color: "#444", fontSize: 11, letterSpacing: 4, marginTop: 4 }}>POWERED BY ADVANCED AI · IPL 2025 CONDITIONS</div>
+        </div>
+        <button onClick={onBack} style={{ background: "transparent", border: `1px solid ${GOLD}50`, borderRadius: 6, padding: "10px 22px", color: GOLD, fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>
+          ← BACK TO RESULTS
+        </button>
+      </div>
+
+      {/* LOADING */}
+      {status === "loading" && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: 28 }}>
+          <div style={{ width: 70, height: 70, border: `4px solid ${GOLD}22`, borderTop: `4px solid ${GOLD}`, borderRadius: "50%", animation: "spinG 1s linear infinite" }} />
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: 26, color: GOLD, letterSpacing: 4, animation: "pulseG 1.5s infinite" }}>AI IS ANALYZING YOUR TEAMS...</div>
+          <div style={{ color: "#444", fontSize: 13, letterSpacing: 2, maxWidth: 420, textAlign: "center" }}>
+            Evaluating squad balance, IPL 2025 form, overseas usage, death bowling and powerplay specialists across all 10 franchises...
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            {TEAMS.map((t, i) => (
+              <div key={t.id} style={{ width: 8, height: 8, borderRadius: "50%", background: t.color, animation: `pulseG ${0.8 + i * 0.1}s infinite` }} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ERROR */}
+      {status === "error" && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: 20, animation: "fadeUpG .4s ease-out" }}>
+          <div style={{ fontSize: 52 }}>⚠️</div>
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: 30, color: "#ef4444", letterSpacing: 4 }}>ANALYSIS FAILED</div>
+          <div style={{ background: "#0d0d0d", border: "1px solid #ef444428", borderRadius: 12, padding: "18px 28px", maxWidth: 520, textAlign: "center" }}>
+            <div style={{ color: "#ef4444", fontSize: 13, lineHeight: 1.7 }}>{errorMsg}</div>
+            {!GEMINI_API_KEY && (
+              <div style={{ marginTop: 14, padding: "10px 16px", background: "#1a1a1a", borderRadius: 8, fontFamily: "monospace", fontSize: 12, color: GOLD, letterSpacing: 1 }}>
+                VITE_GEMINI_API_KEY=your_key_here
+              </div>
+            )}
+          </div>
+          <button onClick={runAnalysis} style={{ background: `linear-gradient(135deg,${GOLD},#9a7610)`, border: "none", borderRadius: 6, padding: "12px 32px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 14, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>
+            RETRY ANALYSIS
+          </button>
+        </div>
+      )}
+
+      {/* DONE */}
+      {status === "done" && analysis && (
+        <div style={{ animation: "fadeUpG .5s ease-out" }}>
+
+          {/* Summary banner */}
+          {analysis.overallSummary && (
+            <div style={{ background: `${GOLD}09`, border: `1px solid ${GOLD}28`, borderRadius: 12, padding: "18px 24px", maxWidth: 900, margin: "0 auto 28px" }}>
+              <div style={{ fontSize: 10, color: GOLD, letterSpacing: 4, fontWeight: 700, marginBottom: 8 }}>🏏 EXPERT SUMMARY</div>
+              <div style={{ color: "#ccc", fontSize: 15, lineHeight: 1.75 }}>{analysis.overallSummary}</div>
+            </div>
+          )}
+
+          {/* Champion hero card */}
+          {analysis.rankings?.[0] && (() => {
+            const champ = analysis.rankings[0];
+            const tc = teamColor(champ.teamId);
+            return (
+              <div style={{ background: `linear-gradient(135deg,${tc}14,${GOLD}06,${CARD})`, border: `2px solid ${GOLD}`, borderRadius: 16, padding: "26px 30px", maxWidth: 900, margin: "0 auto 24px", boxShadow: `0 0 60px ${GOLD}1a`, animation: "fadeUpG .6s ease-out" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16, flexWrap: "wrap" }}>
+                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 16, background: `linear-gradient(135deg,${GOLD},#9a7610)`, color: "#000", borderRadius: 6, padding: "4px 16px", letterSpacing: 2 }}>🥇 #1 CHAMPION</div>
+                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 34, color: GOLD, letterSpacing: 4 }}>{champ.teamName}</div>
+                  <div style={{ marginLeft: "auto", background: `${GOLD}14`, border: `1px solid ${GOLD}40`, borderRadius: 10, padding: "10px 18px", textAlign: "center" }}>
+                    <div style={{ fontFamily: "'Bebas Neue'", fontSize: 36, color: GOLD }}>{champ.score}</div>
+                    <div style={{ fontSize: 9, color: "#888", letterSpacing: 2 }}>SCORE/100</div>
+                  </div>
+                </div>
+                <div style={{ color: "#e0c97b", fontSize: 15, fontStyle: "italic", marginBottom: 16, lineHeight: 1.65 }}>"{champ.verdict}"</div>
+                {champ.whyWins && (
+                  <div style={{ background: "#ffffff05", borderRadius: 10, padding: "14px 18px", borderLeft: `4px solid ${GOLD}`, marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, color: GOLD, letterSpacing: 3, fontWeight: 700, marginBottom: 8 }}>WHY THIS TEAM WINS IPL 2025</div>
+                    <div style={{ color: "#bbb", fontSize: 14, lineHeight: 1.8 }}>{champ.whyWins}</div>
+                  </div>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {champ.strengths?.length > 0 && (
+                    <div style={{ background: "#00cc6608", border: "1px solid #00cc6620", borderRadius: 10, padding: "14px 16px" }}>
+                      <div style={{ fontSize: 10, color: "#00cc88", letterSpacing: 3, marginBottom: 8, fontWeight: 700 }}>✅ STRENGTHS</div>
+                      {champ.strengths.map((s, i) => <div key={i} style={{ color: "#aaa", fontSize: 13, marginBottom: 5, paddingLeft: 10, borderLeft: "2px solid #00cc8840" }}>• {s}</div>)}
+                    </div>
+                  )}
+                  {champ.weaknesses?.length > 0 && (
+                    <div style={{ background: "#ff444408", border: "1px solid #ff444422", borderRadius: 10, padding: "14px 16px" }}>
+                      <div style={{ fontSize: 10, color: "#ff6b6b", letterSpacing: 3, marginBottom: 8, fontWeight: 700 }}>⚠️ VULNERABILITIES</div>
+                      {champ.weaknesses.map((w, i) => <div key={i} style={{ color: "#aaa", fontSize: 13, marginBottom: 5, paddingLeft: 10, borderLeft: "2px solid #ff444440" }}>• {w}</div>)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Remaining rankings - click to expand */}
+          <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 16, color: "#444", letterSpacing: 4, marginBottom: 6 }}>ALL TEAM RANKINGS — CLICK TO EXPAND</div>
+            {analysis.rankings?.map((r, idx) => {
+              const tc = teamColor(r.teamId);
+              const isOpen = expanded[r.teamId];
+              const borderC = idx === 0 ? GOLD : idx === 1 ? "#aaa" : idx === 2 ? "#CD7F32" : BORDER;
+              return (
+                <div key={r.teamId} className="gem-card" onClick={() => toggleExpand(r.teamId)}
+                  style={{ background: CARD, border: `1px solid ${borderC}`, borderRadius: 12, overflow: "hidden", animation: `rankInG ${0.15 + idx * 0.06}s ease-out both` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", background: idx === 0 ? `${GOLD}07` : "transparent" }}>
+                    <div style={{ fontFamily: "'Bebas Neue'", fontSize: 26, minWidth: 40, textAlign: "center", lineHeight: 1, color: idx === 0 ? GOLD : idx === 1 ? "#aaa" : idx === 2 ? "#CD7F32" : "#555" }}>
+                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${r.rank}`}
+                    </div>
+                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: tc, boxShadow: `0 0 8px ${tc}`, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: "'Bebas Neue'", fontSize: 20, color: tc, letterSpacing: 2, lineHeight: 1 }}>{r.teamName}</div>
+                      <div style={{ color: "#555", fontSize: 12, marginTop: 2, letterSpacing: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.verdict}</div>
+                    </div>
+                    <div style={{ textAlign: "center", minWidth: 52, flexShrink: 0 }}>
+                      <div style={{ fontFamily: "'Bebas Neue'", fontSize: 26, color: idx === 0 ? GOLD : idx === 1 ? "#aaa" : idx === 2 ? "#CD7F32" : "#555" }}>{r.score}</div>
+                      <div style={{ fontSize: 8, color: "#444", letterSpacing: 2 }}>/100</div>
+                    </div>
+                    <div style={{ color: "#444", fontSize: 16, marginLeft: 6, flexShrink: 0 }}>{isOpen ? "▲" : "▼"}</div>
+                  </div>
+
+                  {isOpen && (
+                    <div style={{ padding: "0 18px 16px", borderTop: `1px solid ${BORDER}`, animation: "fadeUpG .2s ease-out" }}>
+                      {r.whyWins && (
+                        <div style={{ margin: "14px 0 12px", background: "#ffffff05", borderRadius: 8, padding: "12px 16px", borderLeft: `3px solid ${tc}` }}>
+                          <div style={{ fontSize: 9, color: tc, letterSpacing: 3, fontWeight: 700, marginBottom: 6 }}>DETAILED ANALYSIS</div>
+                          <div style={{ color: "#bbb", fontSize: 13, lineHeight: 1.75 }}>{r.whyWins}</div>
+                        </div>
+                      )}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+                        {r.strengths?.length > 0 && (
+                          <div style={{ background: "#00cc6606", border: "1px solid #00cc6618", borderRadius: 8, padding: "10px 14px" }}>
+                            <div style={{ fontSize: 9, color: "#00cc88", letterSpacing: 3, marginBottom: 6, fontWeight: 700 }}>STRENGTHS</div>
+                            {r.strengths.map((s, i) => <div key={i} style={{ color: "#999", fontSize: 12, marginBottom: 4 }}>• {s}</div>)}
+                          </div>
+                        )}
+                        {r.weaknesses?.length > 0 && (
+                          <div style={{ background: "#ff444406", border: "1px solid #ff444418", borderRadius: 8, padding: "10px 14px" }}>
+                            <div style={{ fontSize: 9, color: "#ff6b6b", letterSpacing: 3, marginBottom: 6, fontWeight: 700 }}>WEAKNESSES</div>
+                            {r.weaknesses.map((w, i) => <div key={i} style={{ color: "#999", fontSize: 12, marginBottom: 4 }}>• {w}</div>)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ textAlign: "center", marginTop: 32, color: "#2a2a2a", fontSize: 11, letterSpacing: 2 }}>
+            Analysis by Advanced AI · Based on IPL 2025 player form & team balance
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Results({ gs, myTeamId: mti, onRestart }) {
   const [activeId, setActiveId] = useState(mti || TEAMS[0].id);
+  const [showAnalysis, setShowAnalysis] = useState(false);
   const team = TEAMS.find(t => t.id === activeId);
+
+  if (showAnalysis) return <GeminiAnalysisScreen gs={gs} onBack={() => setShowAnalysis(false)} />;
   const playingXI = gs.playingXI[activeId] || [];
   const fullSquad = gs.squads[activeId] || [];
   const displayList = playingXI.length === 11 ? playingXI : fullSquad;
@@ -994,6 +1289,7 @@ function Results({ gs, myTeamId: mti, onRestart }) {
       </div>
 
       <div style={{ textAlign: "center", marginTop: 40, display: "flex", justifyContent: "center", gap: 16, flexWrap: "wrap" }}>
+        <button onClick={() => setShowAnalysis(true)} style={{ background: `linear-gradient(135deg,#6366f1,#4338ca)`, border: "none", borderRadius: 3, padding: "14px 30px", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'", boxShadow: "0 0 30px #6366f140" }}>🤖 AI TEAM ANALYSIS</button>
         <button onClick={downloadSheet} style={{ background: "#22D3EE", border: "none", borderRadius: 3, padding: "14px 30px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>DOWNLOAD IMAGE ⬇</button>
         <button onClick={shareWhatsApp} style={{ background: "#25D366", border: "none", borderRadius: 3, padding: "14px 30px", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>SHARE ON WHATSAPP 📱</button>
         <button onClick={onRestart} style={{ background: `linear-gradient(135deg, ${GOLD}, #9a7610)`, border: "none", borderRadius: 3, padding: "14px 36px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>PLAY AGAIN 🔄</button>
