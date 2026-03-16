@@ -1,7 +1,6 @@
 import { useRef, useEffect, useCallback } from "react";
 import { io } from "socket.io-client";
 import fahhhSrc from "./assets/fahhh.mp3";
-import clockSrc from "./assets/clock-ticking.mp3";
 
 export function useSocket() {
     const sock = useRef(null);
@@ -26,13 +25,22 @@ export function useSocket() {
     return { emit, on, socket: sock };
 }
 
-// Countdown pulse for last 5 seconds (Ticking clock)
+// Timer beep using Web Audio API
+let audioCtx = null;
 export function playPulse() {
     try {
-        const audio = new Audio(clockSrc);
-        audio.volume = 0.5;
-        audio.play().catch(e => console.warn("Clock audio play failed:", e));
-    } catch (e) { }
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = 880;
+        osc.type = "square";
+        gain.gain.value = 0.15;
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+        osc.stop(audioCtx.currentTime + 0.15);
+    } catch (e) { /* ignore audio errors */ }
 }
 
 export function playSaleSound() {

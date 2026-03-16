@@ -288,7 +288,7 @@ export default function App() {
   function tick() {
     const gs = g.current; if (!gs || gs.phase !== "bidding") return;
     gs.timer--;
-    if (gs.timer <= 5 && gs.timer > 0) playBeep();
+    if (gs.timer <= 5 && gs.timer > 0) playPulse();
     if (gs.timer <= 0) finishCurrent(); else forceUpdate();
   }
   tickRef.current = tick;
