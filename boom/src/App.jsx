@@ -604,11 +604,15 @@ export default function App() {
         <div className="ipl-left" style={{ width: 300, padding: "20px 14px", borderRight: `1px solid ${BORDER}`, overflowY: "auto", flexShrink: 0, background: `linear-gradient(180deg, ${CARD}, transparent)` }}>
           <div style={{ textAlign: "center", animation: "fadeUp .4s ease-out" }}>
             <div style={{ background: `${ROLE_C[player.role]}15`, width: 140, height: 140, borderRadius: "50%", margin: "0 auto 24px", overflow: "hidden", border: `2px solid ${ROLE_C[player.role]}40`, boxShadow: `0 0 40px ${ROLE_C[player.role]}22`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <img
-                src={kohliImg}
-                alt={player.name}
-                style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" }}
-              />
+              {player.name.toLowerCase() === "virat kohli" ? (
+                <img
+                  src={kohliImg}
+                  alt={player.name}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" }}
+                />
+              ) : (
+                <span style={{ fontSize: 72 }}>{ROLE_EMOJI[player.role]}</span>
+              )}
             </div>
             <div style={{ fontFamily: "'Bebas Neue'", fontSize: 32, color: "#fff", letterSpacing: 2, marginBottom: 8, lineHeight: 1.1 }}>{player.name.toUpperCase()}</div>
             <div style={{ color: ROLE_C[player.role], fontSize: 13, fontWeight: 700, letterSpacing: 3, marginBottom: 24 }}>{ROLE_L[player.role]} · {player.overseas ? "OVERSEAS" : "INDIAN"}</div>
@@ -788,12 +792,12 @@ function PlayerCard({ player }) {
     <div style={{ background: `linear-gradient(160deg, #0E1220, ${rc}08)`, border: `1px solid ${rc}20`, borderRadius: 14, overflow: "hidden" }}>
       <div style={{ height: 3, background: `linear-gradient(90deg, ${rc}, transparent)` }} />
       <div style={{ height: 180, background: `linear-gradient(160deg, ${rc}18, #060810)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 52, position: "relative" }}>
-        {photo ? (
+        {player.name.toLowerCase() === "virat kohli" ? (
           <div style={{ width: "100%", height: "100%", overflow: "hidden", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-            <img src={photo} alt={player.name} referrerPolicy="no-referrer" style={{ height: "100%", width: "100%", objectFit: "cover", objectPosition: "top center", filter: "drop-shadow(0 0 20px rgba(0,0,0,0.8))" }} />
+            <img src={kohliImg} alt={player.name} referrerPolicy="no-referrer" style={{ height: "100%", width: "100%", objectFit: "cover", objectPosition: "top center", filter: "drop-shadow(0 0 20px rgba(0,0,0,0.8))" }} />
           </div>
         ) : (
-          <>{ROLE_EMOJI[player.role]}</>
+          <div style={{ fontSize: 80 }}>{ROLE_EMOJI[player.role]}</div>
         )}
         {player.overseas && <div style={{ position: "absolute", top: 8, right: 10, fontSize: 9, background: "#C084FC22", color: "#C084FC", padding: "2px 7px", borderRadius: 4, fontWeight: 700, letterSpacing: 1, zIndex: 10 }}>OS</div>}
       </div>
