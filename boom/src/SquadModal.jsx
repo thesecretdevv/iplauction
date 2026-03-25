@@ -1,3 +1,5 @@
+'use client';
+
 import { useState } from "react";
 import { GOLD, BG, CARD, BORDER, ROLE_C, ROLE_EMOJI, ROLE_L } from "./MultiScreens";
 

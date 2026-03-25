@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useMemo } from "react";
 import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from "./MultiScreens";
 

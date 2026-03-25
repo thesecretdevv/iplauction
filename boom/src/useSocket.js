@@ -1,12 +1,13 @@
+'use client';
+
 import { useRef, useEffect, useCallback } from "react";
 import { io } from "socket.io-client";
-import fahhhSrc from "./assets/fahhh.mp3";
 
 export function useSocket() {
     const sock = useRef(null);
 
     useEffect(() => {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || "https://bidwicket.onrender.com";
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://bidwicket.onrender.com";
         console.log("Connecting to Auction Server:", backendUrl || "Same Origin");
         sock.current = io(backendUrl, { transports: ["websocket", "polling"], reconnection: true });
 
@@ -45,7 +46,7 @@ export function playPulse() {
 
 export function playSaleSound() {
     try {
-        const audio = new Audio(fahhhSrc);
+        const audio = new Audio('/assets/fahhh.mp3');
         audio.volume = 0.6;
         audio.play().catch(e => console.warn("Audio play failed:", e));
     } catch (e) { }

@@ -1,0 +1,476 @@
+'use client';
+
+import { createContext, useContext, useState, useEffect, useRef, useReducer, useCallback } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { v4 as uuidv4 } from 'uuid';
+import { MEGA_SETS } from '../src/megaPlayers';
+import { useSocket, playPulse, playSaleSound } from '../src/useSocket';
+import { TEAMS } from '../src/MultiScreens';
+import confetti from 'canvas-confetti';
+
+const GameContext = createContext(null);
+
+export function useGame() {
+  const ctx = useContext(GameContext);
+  if (!ctx) throw new Error('useGame must be used within GameProvider');
+  return ctx;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+const shuffle = arr => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0;[a[i], a[j]] = [a[j], a[i]]; } return a; };
+const getIncrement = p => p < 2 ? 0.10 : p < 5 ? 0.20 : p < 10 ? 0.25 : 0.50;
+export const fmt = c => c >= 1 ? `₹${c.toFixed(2)} Cr` : `₹${Math.round(c * 100)} L`;
+export const nextBid = c => +(c + getIncrement(c)).toFixed(2);
+
+function buildMiniPlayers() {
+  const byRole = { BAT: [], BOWL: [], AR: [], WK: [] };
+  for (const set of MEGA_SETS) {
+    for (const player of set.players) {
+      if (byRole[player.role]) byRole[player.role].push({ ...player, setName: "Mini Auction" });
+    }
+  }
+  for (const role in byRole) byRole[role].sort((a, b) => b.base - a.base);
+  const targets = { BAT: 52, BOWL: 68, AR: 55, WK: 25 };
+  const pool = [];
+  for (const role in targets) {
+    const available = byRole[role];
+    const count = Math.min(targets[role], available.length);
+    pool.push(...available.slice(0, count));
+  }
+  return pool;
+}
+
+export function buildQueue(mode) {
+  if (mode === "mini") {
+    const miniPool = buildMiniPlayers();
+    return shuffle(miniPool).map((p, i) => ({ ...p, id: i, setName: p.setName || "Mini Auction" }));
+  }
+  const queue = [];
+  for (const set of MEGA_SETS) {
+    const s = shuffle(set.players);
+    s.forEach((p, i) => queue.push({ ...p, id: queue.length + i, setName: set.name }));
+  }
+  return queue;
+}
+
+function createGameState(queue) {
+  return {
+    playerQueue: queue, currentIdx: 0,
+    currentBid: queue[0].base, currentBidder: null,
+    timer: 10, phase: "bidding", currentSetName: queue[0].setName,
+    purses: Object.fromEntries(TEAMS.map(t => [t.id, 120])),
+    squads: Object.fromEntries(TEAMS.map(t => [t.id, []])),
+    bidLog: [], auctionLog: [],
+  };
+}
+
+// ── IPL Audio ──────────────────────────────────────────────────────────────────
+let _iplAudio = null;
+export function playIplTheme() {
+  if (typeof window === 'undefined') return;
+  if (_iplAudio) { _iplAudio.pause(); _iplAudio.currentTime = 0; }
+  _iplAudio = new Audio('/assets/Ipl.mp3');
+  _iplAudio.volume = 0.7;
+  _iplAudio.play().catch(() => { });
+}
+export function stopIplTheme(fadeDuration = 2000) {
+  if (!_iplAudio) return;
+  const a = _iplAudio;
+  const step = a.volume / (fadeDuration / 50);
+  const fade = setInterval(() => {
+    if (a.volume > step) { a.volume = Math.max(0, a.volume - step); }
+    else { a.pause(); a.currentTime = 0; clearInterval(fade); }
+  }, 50);
+}
+
+// ── Google Fonts loader ────────────────────────────────────────────────────────
+if (typeof document !== "undefined" && !document.getElementById("ipl-gf")) {
+  const l = document.createElement("link"); l.id = "ipl-gf"; l.rel = "stylesheet";
+  l.href = "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap";
+  document.head.appendChild(l);
+}
+
+// ── Provider ───────────────────────────────────────────────────────────────────
+export function GameProvider({ children }) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Helper to build URLs with query params
+  function buildUrl(path, params = {}) {
+    const filtered = Object.entries(params).filter(([, v]) => v != null && v !== '');
+    if (filtered.length === 0) return path;
+    return `${path}?${filtered.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')}`;
+  }
+
+  const [auctionMode, setAuctionMode] = useState(null);
+  const [isPrivateRoom, setIsPrivateRoom] = useState(false);
+  const [playMode, setPlayMode] = useState(null);
+  const g = useRef(null);
+  const intervalRef = useRef(null);
+  const tickRef = useRef(null);
+  const [, forceUpdate] = useReducer(x => x + 1, 0);
+  const prevTimerRef = useRef(10);
+
+  // Multiplayer state
+  const { emit, on } = useSocket();
+  const [roomCode, setRoomCode] = useState(null);
+  const [lobbyPlayers, setLobbyPlayers] = useState([]);
+  const [isHost, setIsHost] = useState(false);
+  const [myName, setMyName] = useState("");
+  const [lobbyMode, setLobbyMode] = useState(null);
+  const [myTeamId, setMyTeamId] = useState(null);
+  const [showSquad, setShowSquad] = useState(false);
+  const [viewingTeam, setViewingTeam] = useState(null);
+  const [showStats, setShowStats] = useState(false);
+  const [multiGS, setMultiGS] = useState(null);
+
+  const [playerId] = useState(() => {
+    if (typeof window === 'undefined') return uuidv4();
+    const saved = localStorage.getItem("ipl_player_id");
+    if (saved) return saved;
+    const n = uuidv4();
+    localStorage.setItem("ipl_player_id", n);
+    return n;
+  });
+
+  // Auto-Rejoin (runs once on mount)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const savedPlayMode = localStorage.getItem("ipl_play_mode");
+
+    if (savedPlayMode === "multi") {
+      const savedRoom = localStorage.getItem("ipl_room_code");
+      const savedName = localStorage.getItem("ipl_player_name");
+      if (savedRoom && savedName) {
+        setRoomCode(savedRoom);
+        setMyName(savedName);
+        setPlayMode("multi");
+        emit("join-room", { code: savedRoom, playerName: savedName, playerId }, (res) => {
+          if (res.ok) {
+            setLobbyPlayers(res.players);
+            setIsHost(res.hostId === playerId);
+            if (res.auctionMode) setLobbyMode(res.auctionMode);
+            if (res.roomStatus === "active") {
+              setMultiGS(res.gameState);
+              router.push(buildUrl('/auction', { room: savedRoom, mode: res.auctionMode }));
+            } else if (res.roomStatus === "finished") {
+              setMultiGS(res.gameState);
+              router.push(buildUrl('/results', { room: savedRoom, mode: res.auctionMode }));
+            } else {
+              router.push(buildUrl(`/lobby/${savedRoom}`, { mode: res.auctionMode }));
+            }
+          } else {
+            localStorage.removeItem("ipl_room_code");
+            localStorage.removeItem("ipl_play_mode");
+          }
+        });
+      }
+    } else if (savedPlayMode === "single") {
+      const savedGS = localStorage.getItem("ipl_single_gs");
+      const savedScreen = localStorage.getItem("ipl_single_screen");
+      const savedMode = localStorage.getItem("ipl_auction_mode");
+      const savedTeamId = localStorage.getItem("ipl_my_team_id");
+      if (savedGS && savedScreen) {
+        try {
+          const parsedGS = JSON.parse(savedGS);
+          g.current = parsedGS;
+          setPlayMode("single");
+          setAuctionMode(savedMode);
+          setMyTeamId(savedTeamId);
+          // Map old screen names to routes with query params
+          const modeParam = savedMode ? savedMode.toUpperCase() : '';
+          const teamParam = savedTeamId || '';
+          const routeMap = {
+            home: '/',
+            modeSelect: '/mode',
+            playMode: buildUrl('/play-mode', { mode: modeParam }),
+            teamSelect: buildUrl('/team-select', { mode: modeParam }),
+            auction: buildUrl('/auction', { mode: modeParam, team: teamParam }),
+            results: buildUrl('/results', { mode: modeParam, team: teamParam }),
+            lobby: '/lobby',
+            roomScreen: '/room'
+          };
+          router.push(routeMap[savedScreen] || '/');
+          if (savedScreen === "auction") {
+            clearInterval(intervalRef.current);
+            intervalRef.current = setInterval(() => tickRef.current?.(), 1000);
+          }
+        } catch (e) {
+          console.error("Failed to restore single player session", e);
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist Single Player State
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (playMode === "single" && g.current) {
+      // Map pathname back to old screen name for localStorage compat
+      const screenMap = { "/": "home", "/mode": "modeSelect", "/play-mode": "playMode", "/team-select": "teamSelect", "/auction": "auction", "/results": "results" };
+      localStorage.setItem("ipl_play_mode", "single");
+      localStorage.setItem("ipl_single_gs", JSON.stringify(g.current));
+      localStorage.setItem("ipl_single_screen", screenMap[pathname] || "home");
+      localStorage.setItem("ipl_auction_mode", auctionMode);
+      localStorage.setItem("ipl_my_team_id", myTeamId);
+    }
+  }, [playMode, pathname, auctionMode, myTeamId, multiGS]);
+
+  // Socket listeners for multiplayer
+  useEffect(() => {
+    if (playMode !== "multi") return;
+    const off1 = on("lobby-update", ({ players, auctionMode: m }) => {
+      setLobbyPlayers(players);
+      if (m) setLobbyMode(m);
+    });
+    const off2 = on("game-started", (gs) => {
+      setMultiGS(gs);
+      router.push(buildUrl('/auction', { room: roomCode, mode: (lobbyMode || 'MEGA').toUpperCase() }));
+    });
+    const off3 = on("game-state", (gs) => {
+      setMultiGS(gs);
+    });
+    const off4 = on("game-over", (gs) => {
+      setMultiGS(gs);
+      router.push(buildUrl('/results', { room: roomCode, mode: (lobbyMode || 'MEGA').toUpperCase() }));
+    });
+    return () => { off1(); off2(); off3(); off4(); };
+  }, [playMode, on, router]);
+
+  // Unified Audio & Animation side-effects
+  const gs = playMode === "multi" ? multiGS : g.current;
+  const isMulti = playMode === "multi";
+
+  useEffect(() => {
+    const currentGS = isMulti ? multiGS : g.current;
+    if (!currentGS) return;
+    if (currentGS.timer <= 5 && currentGS.timer > 0 && currentGS.phase === "bidding") {
+      playPulse();
+    }
+    if (currentGS.phase === "sold" || currentGS.phase === "unsold") {
+      if (prevTimerRef.current !== currentGS.phase) {
+        playSaleSound();
+      }
+    }
+    prevTimerRef.current = currentGS.phase;
+  }, [multiGS?.timer, multiGS?.phase, g.current?.timer, g.current?.phase, isMulti]);
+
+  // Confetti for sold
+  useEffect(() => {
+    if (gs?.phase === "sold") {
+      const duration = 2000;
+      const end = Date.now() + duration;
+      const frame = () => {
+        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0, y: 0.9 }, colors: ['#D4AF37', '#ffffff', '#22D3EE'] });
+        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1, y: 0.9 }, colors: ['#D4AF37', '#ffffff', '#22D3EE'] });
+        if (Date.now() < end) requestAnimationFrame(frame);
+      };
+      frame();
+    }
+  }, [gs?.phase, gs?.currentIdx]);
+
+  function syncSingleGS() {
+    if (typeof window === 'undefined') return;
+    if (playMode === "single" && g.current) {
+      const screenMap = { "/": "home", "/mode": "modeSelect", "/play-mode": "playMode", "/team-select": "teamSelect", "/auction": "auction", "/results": "results" };
+      localStorage.setItem("ipl_single_gs", JSON.stringify(g.current));
+      localStorage.setItem("ipl_single_screen", screenMap[pathname] || "auction");
+    }
+  }
+
+  // ─── Single Player Logic ───
+  function advanceToNext() {
+    const gs = g.current; if (!gs) return;
+    const next = gs.currentIdx + 1;
+    if (next >= gs.playerQueue.length) {
+      router.push(buildUrl('/results', { mode: (auctionMode || 'MEGA').toUpperCase(), team: myTeamId }));
+      return;
+    }
+    gs.currentIdx = next;
+    const np = gs.playerQueue[next];
+    gs.currentBid = np.base; gs.currentBidder = null;
+    gs.timer = 10; gs.phase = "bidding"; gs.bidLog = [];
+    gs.currentSetName = np.setName;
+    syncSingleGS();
+    forceUpdate();
+    clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => tickRef.current?.(), 1000);
+  }
+
+  function finishCurrent() {
+    const gs = g.current; if (!gs || gs.phase !== "bidding") return;
+    clearInterval(intervalRef.current);
+    gs.phase = gs.currentBidder ? "sold" : "unsold";
+    const player = gs.playerQueue[gs.currentIdx];
+    if (gs.currentBidder) {
+      gs.purses[gs.currentBidder] = +(gs.purses[gs.currentBidder] - gs.currentBid).toFixed(2);
+      gs.squads[gs.currentBidder] = [...gs.squads[gs.currentBidder], { ...player, soldFor: gs.currentBid }];
+      gs.auctionLog = [{ player, bidder: gs.currentBidder, price: gs.currentBid, sold: true }, ...gs.auctionLog];
+    } else {
+      gs.auctionLog = [{ player, bidder: null, price: 0, sold: false }, ...gs.auctionLog];
+    }
+    syncSingleGS();
+    forceUpdate();
+    setTimeout(advanceToNext, 2800);
+  }
+
+  function tick() {
+    const gs = g.current; if (!gs || gs.phase !== "bidding") return;
+    gs.timer--;
+    if (gs.timer <= 5 && gs.timer > 0) playPulse();
+    if (gs.timer <= 0) finishCurrent(); else forceUpdate();
+  }
+  tickRef.current = tick;
+
+  const effectiveMyTeamId = isMulti ? (lobbyPlayers.find(p => p.name === myName)?.teamId || myTeamId) : (g.current?.myTeamId || myTeamId);
+
+  function humanBid() {
+    if (playMode === "multi") {
+      emit("place-bid", {}, (res) => { });
+      return;
+    }
+    const gs = g.current; if (!gs || gs.phase !== "bidding") return;
+    if (gs.currentBidder === gs.myTeamId) return;
+    const nb = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
+    const osCount = gs.squads[gs.myTeamId].filter(p => p.overseas).length;
+    const playerOnAuction = gs.playerQueue[gs.currentIdx];
+    const maxSquadSize = (gs.playerQueue?.length || 0) <= 200 ? 15 : 25;
+    if (gs.purses[gs.myTeamId] < nb || gs.squads[gs.myTeamId].length >= maxSquadSize || (playerOnAuction.overseas && osCount >= 8)) return;
+    gs.currentBid = nb; gs.currentBidder = gs.myTeamId; gs.timer = 10;
+    gs.bidLog = [{ teamId: gs.myTeamId, bid: nb, isMe: true }, ...gs.bidLog].slice(0, 7);
+    syncSingleGS();
+    forceUpdate();
+  }
+
+  function startSingleAuction(tId) {
+    const queue = buildQueue(auctionMode);
+    setPlayMode("single");
+    setMyTeamId(tId);
+    g.current = {
+      ...createGameState(queue),
+      myTeamId: tId,
+      playingXI: Object.fromEntries(TEAMS.map(t => [t.id, []])),
+      selections: Object.fromEntries(TEAMS.map(t => [t.id, false]))
+    };
+    stopIplTheme(2000);
+    setTimeout(() => {
+      router.push(buildUrl('/auction', { mode: (auctionMode || 'MEGA').toUpperCase(), team: tId }));
+      clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => tickRef.current?.(), 1000);
+    }, 2000);
+  }
+
+  function submitXI(players) {
+    if (playMode === "multi") {
+      emit("submit-xi", { players }, (res) => {
+        if (!res?.ok) alert(res?.error || "Submission failed");
+      });
+    } else {
+      g.current.playingXI[effectiveMyTeamId] = players;
+      g.current.selections[effectiveMyTeamId] = true;
+      TEAMS.forEach(t => {
+        if (t.id !== effectiveMyTeamId) {
+          g.current.playingXI[t.id] = [...(g.current.squads[t.id] || [])]
+            .sort((a, b) => b.soldFor - a.soldFor)
+            .slice(0, 11);
+          g.current.selections[t.id] = true;
+        }
+      });
+      g.current.phase = "finished";
+      syncSingleGS();
+      forceUpdate();
+    }
+  }
+
+  function handleCreateRoom(isPrivate, name) {
+    emit("create-room", { playerName: name, isPrivate, playerId }, (res) => {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem("ipl_room_code", res.code);
+        localStorage.setItem("ipl_player_name", name);
+        localStorage.setItem("ipl_play_mode", "multi");
+      }
+      setRoomCode(res.code);
+      setIsHost(true);
+      setMyName(name);
+      setLobbyPlayers(res.players);
+      setPlayMode("multi");
+      setIsPrivateRoom(isPrivate);
+      router.push(buildUrl(`/lobby/${res.code}`, { public: !isPrivate }));
+    });
+  }
+
+  function handleJoinRoom(code, name) {
+    emit("join-room", { code, playerName: name, playerId }, (res) => {
+      if (res.ok) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem("ipl_room_code", code);
+          localStorage.setItem("ipl_player_name", name);
+          localStorage.setItem("ipl_play_mode", "multi");
+        }
+        setRoomCode(res.code || code);
+        setMyName(name);
+        setLobbyPlayers(res.players);
+        setPlayMode("multi");
+        if (res.auctionMode) setLobbyMode(res.auctionMode);
+
+        if (res.roomStatus === "active") {
+          setMultiGS(res.gameState);
+          router.push(buildUrl('/auction', { room: code, mode: res.auctionMode }));
+        } else if (res.roomStatus === "finished") {
+          setMultiGS(res.gameState);
+          router.push(buildUrl('/results', { room: code, mode: res.auctionMode }));
+        } else {
+          router.push(buildUrl(`/lobby/${code}`, { mode: res.auctionMode }));
+        }
+      } else {
+        alert(res.error || "Failed to join room");
+      }
+    });
+  }
+
+  function startMultiAuction() {
+    const queue = buildQueue(lobbyMode || "mega");
+    stopIplTheme(2000);
+    emit("start-game", { playerQueue: queue }, (res) => {
+      if (!res?.ok) alert(res?.error || "Cannot start");
+    });
+  }
+
+  function handleRestart() {
+    if (typeof window !== 'undefined') {
+      ["ipl_room_code", "ipl_play_mode", "ipl_single_gs", "ipl_single_screen", "ipl_auction_mode", "ipl_my_team_id"].forEach(k => localStorage.removeItem(k));
+    }
+    clearInterval(intervalRef.current);
+    g.current = null;
+    setMultiGS(null);
+    setPlayMode(null);
+    setAuctionMode(null);
+    setLobbyMode(null);
+    setRoomCode(null);
+    setMyTeamId(null);
+    router.push("/");
+  }
+
+  useEffect(() => () => clearInterval(intervalRef.current), []);
+
+  const value = {
+    // State
+    gs, isMulti, playMode, setPlayMode, auctionMode, setAuctionMode,
+    roomCode, setRoomCode, lobbyPlayers, setLobbyPlayers,
+    isHost, setIsHost, myName, setMyName, lobbyMode, setLobbyMode,
+    myTeamId, setMyTeamId, showSquad, setShowSquad,
+    viewingTeam, setViewingTeam, showStats, setShowStats,
+    multiGS, setMultiGS, playerId, g, effectiveMyTeamId,
+    // Socket
+    emit, on,
+    // Actions
+    humanBid, startSingleAuction, submitXI,
+    handleCreateRoom, handleJoinRoom, startMultiAuction, handleRestart,
+    forceUpdate, syncSingleGS,
+    // Helpers
+    fmt, nextBid, buildQueue,
+  };
+
+  return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
+}
