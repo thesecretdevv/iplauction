@@ -1,11 +1,21 @@
 'use client';
 
+import { Suspense } from 'react';
+
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { TEAMS, GOLD, BG, CARD, BORDER } from '../../src/MultiScreens';
 import { useGame } from '../GameContext';
 
 export default function TeamSelectPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#05070D" }} />}>
+      <TeamSelectContent />
+    </Suspense>
+  );
+}
+
+function TeamSelectContent() {
   const { startSingleAuction, auctionMode } = useGame();
   const searchParams = useSearchParams();
   const mode = searchParams.get('mode') || (auctionMode || 'MEGA').toUpperCase();

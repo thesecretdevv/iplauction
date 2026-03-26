@@ -1,5 +1,7 @@
 'use client';
 
+import { Suspense } from 'react';
+
 import { useState } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { LobbyScreen } from '../../../src/MultiScreens';
@@ -7,6 +9,14 @@ import { useGame, stopIplTheme } from '../../GameContext';
 import { GOLD, BG, CARD, BORDER } from '../../../src/MultiScreens';
 
 export default function LobbyPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#05070D" }} />}>
+      <LobbyContent />
+    </Suspense>
+  );
+}
+
+function LobbyContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
