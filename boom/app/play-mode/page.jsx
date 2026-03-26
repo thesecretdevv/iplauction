@@ -1,19 +1,24 @@
+// COMMENTED OUT — flow now goes directly from landing → /room
+// Single player / Multiplayer selection screen is hidden for now.
+// Uncomment below to restore it.
+
+/*
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
-import { PlayModeScreen } from '../../src/MultiScreens';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useGame } from '../GameContext';
+
+// ... full play-mode screen
+// Restore this if we want the single vs multi selection step back.
+*/
+
+'use client';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function PlayModePage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const { setPlayMode, auctionMode } = useGame();
-  const mode = searchParams.get('mode') || (auctionMode || 'MEGA').toUpperCase();
-
-  return (
-    <PlayModeScreen
-      onSingle={() => { setPlayMode("single"); router.push(`/team-select?mode=${mode}`); }}
-      onMulti={() => { setPlayMode("multi"); router.push("/room"); }}
-    />
-  );
+  useEffect(() => { router.replace('/room'); }, []);
+  return null;
 }

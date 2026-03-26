@@ -323,7 +323,22 @@ export function GameProvider({ children }) {
   }
   tickRef.current = tick;
 
-  const effectiveMyTeamId = isMulti ? (lobbyPlayers.find(p => p.name === myName)?.teamId || myTeamId) : (g.current?.myTeamId || myTeamId);
+  // If multi-player, derive team ID from lobbyPlayers or assign an available team if joining late
+  const effectiveMyTeamId = (() => {
+    if (!isMulti) return g.current?.myTeamId || myTeamId;
+    // 1. Try lobby players
+    const fromLobby = lobbyPlayers.find(p => p.name === myName)?.teamId;
+    if (fromLobby) return fromLobby;
+    // 2. Fallback to existing manual myTeamId
+    if (myTeamId) return myTeamId;
+    // 3. Late joiner mid-game: assign first available team not taken by existing lobbyPlayers
+    if (multiGS) {
+      const takenTeams = new Set(lobbyPlayers.map(p => p.teamId).filter(Boolean));
+      const availableTeam = TEAMS.find(t => !takenTeams.has(t.id));
+      if (availableTeam) return availableTeam.id;
+    }
+    return TEAMS[0].id; // Ultimate fallback
+  })();
 
   function humanBid() {
     if (playMode === "multi") {

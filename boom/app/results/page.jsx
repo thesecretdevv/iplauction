@@ -4,10 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGame, fmt } from '../GameContext';
 import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from '../../src/MultiScreens';
-import Anthropic from '@anthropic-ai/sdk';
-import html2canvas from 'html2canvas';
+import Groq from 'groq-sdk';
 
-const CLAUDE_API_KEY = process.env.NEXT_PUBLIC_CLAUDE_API_KEY || "";
+const GROQ_API_KEY = process.env.NEXT_PUBLIC_GROQ_API_KEY || "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";
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -40,13 +39,13 @@ function Results({ gs, myTeamId: mti, onRestart }) {
     if (!el) return;
     const canvas = await html2canvas(el, { backgroundColor: BG, scale: 2 });
     const link = document.createElement("a");
-    link.download = `BidWicket-${team?.short}-XI.png`;
+    link.download = `IPL-Auction-${team?.short}-XI.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
 
   const shareWhatsApp = () => {
-    const text = `🏏 *BidWicket IPL Auction* \nCheck out my Playing XI for *${team?.name}*!\n\n${displayList.map((p, i) => `${i + 1}. ${ROLE_EMOJI[p.role]} ${p.name}`).join("\n")}\n\nBuild your own squad at BidWicket!`;
+    const text = `🏏 *IPL Auction* \nCheck out my Playing XI for *${team?.name}*!\n\n${displayList.map((p, i) => `${i + 1}. ${ROLE_EMOJI[p.role]} ${p.name}`).join("\n")}\n\nBuild your own squad at IPL Auction!`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   };
 
@@ -54,7 +53,7 @@ function Results({ gs, myTeamId: mti, onRestart }) {
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Rajdhani',sans-serif", padding: "clamp(16px,3vh,28px)" }}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}.res-squad{grid-template-columns:repeat(2,1fr)!important}@media(max-width:700px){.res-squad{grid-template-columns:1fr!important}}`}</style>
       <div style={{ textAlign: "center", marginBottom: 28 }}>
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(30px,5vw,54px)", color: GOLD, letterSpacing: 8 }}>BIDWICKET IPL AUCTION COMPLETE</div>
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(30px,5vw,54px)", color: GOLD, letterSpacing: 8 }}>IPL AUCTION COMPLETE</div>
         <div style={{ color: "#555", fontSize: 12, letterSpacing: 3, marginTop: 4 }}>{soldCount} SOLD · {unsoldCount} UNSOLD</div>
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 24, flexWrap: "wrap", justifyContent: "center" }}>
@@ -90,10 +89,10 @@ function Results({ gs, myTeamId: mti, onRestart }) {
         )}
       </div>
       <div style={{ textAlign: "center", marginTop: 40, display: "flex", justifyContent: "center", gap: 16, flexWrap: "wrap" }}>
-        <button onClick={() => setShowAnalysis(true)} style={{ background: `linear-gradient(135deg,#6366f1,#4338ca)`, border: "none", borderRadius: 3, padding: "14px 30px", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'", boxShadow: "0 0 30px #6366f140" }}>🤖 AI TEAM ANALYSIS</button>
-        <button onClick={downloadSheet} style={{ background: "#22D3EE", border: "none", borderRadius: 3, padding: "14px 30px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>DOWNLOAD IMAGE ⬇</button>
-        <button onClick={shareWhatsApp} style={{ background: "#25D366", border: "none", borderRadius: 3, padding: "14px 30px", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>SHARE ON WHATSAPP 📱</button>
-        <button onClick={onRestart} style={{ background: `linear-gradient(135deg, ${GOLD}, #9a7610)`, border: "none", borderRadius: 3, padding: "14px 36px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>PLAY AGAIN 🔄</button>
+        <button onClick={() => setShowAnalysis(true)} style={{ background: `linear-gradient(135deg,#6366f1,#4338ca)`, border: "none", borderRadius: 3, padding: "14px 30px", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'", boxShadow: "0 0 30px #6366f140" }}>AI TEAM ANALYSIS</button>
+        <button onClick={downloadSheet} style={{ background: "#22D3EE", border: "none", borderRadius: 3, padding: "14px 30px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>DOWNLOAD IMAGE</button>
+        <button onClick={shareWhatsApp} style={{ background: "#25D366", border: "none", borderRadius: 3, padding: "14px 30px", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>SHARE ON WHATSAPP</button>
+        <button onClick={onRestart} style={{ background: `linear-gradient(135deg, ${GOLD}, #9a7610)`, border: "none", borderRadius: 3, padding: "14px 36px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>PLAY AGAIN</button>
       </div>
     </div>
   );
@@ -109,8 +108,8 @@ function GeminiAnalysisScreen({ gs, onBack }) {
   const toggleExpand = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
   async function runAnalysis() {
-    if (!CLAUDE_API_KEY) {
-      setErrorMsg("API key missing. Add NEXT_PUBLIC_CLAUDE_API_KEY to your env variables.");
+    if (!GROQ_API_KEY) {
+      setErrorMsg("API key missing. Add NEXT_PUBLIC_GROQ_API_KEY OR use the fallback.");
       setStatus("error");
       return;
     }
@@ -124,15 +123,18 @@ function GeminiAnalysisScreen({ gs, onBack }) {
       return `**${t.name} (${t.id})**\nPlaying XI:\n${lines || "  No players"}\nRemaining Purse: Rs.${purseLeft}Cr`;
     }).join("\n\n---\n\n");
 
-    const prompt = `You are a world-class IPL cricket analyst with deep knowledge of IPL 2025 conditions and current player form. Based on the BidWicket IPL Auction results below, critically analyze and rank ALL 10 teams from BEST (1st) to WORST (10th).
+    const prompt = `You are a world-class IPL cricket analyst with deep knowledge of IPL 2025 conditions. Based on the IPL Auction results below, critically analyze and rank ALL 10 teams from BEST (1st) to WORST (10th).
 
-Consider: team balance (batting depth, bowling attack, all-round options, wicket-keeping), IPL 2025 current player form and recent performances, overseas slot usage (max 4 allowed), death bowling and powerplay specialists, star power and match-winners, and overall squad synergy.
+Consider the Playing XI composition, assigning specific batting positions and bowling roles. Evaluate their balance, overseas slot usage (max 4), and overall squad synergy.
 
 Here are the 10 Final Playing XIs:
 
 ${teamSummaries}
 
-RESPOND IN THIS EXACT JSON FORMAT (no markdown wrapper, pure JSON only, no text before or after):
+CRITICAL RULES:
+1. ABSOLUTELY NO EMOJIS anywhere in the response.
+2. RESPOND IN EXACT JSON FORMAT (no markdown wrapper, pure JSON only).
+
 {
   "rankings": [
     {
@@ -141,35 +143,36 @@ RESPOND IN THIS EXACT JSON FORMAT (no markdown wrapper, pure JSON only, no text 
       "teamName": "Full Team Name",
       "score": 92,
       "verdict": "One sentence championship-level verdict",
-      "strengths": ["Strength 1", "Strength 2", "Strength 3"],
+      "strengths": ["Strength 1 (NO EMOJIS)", "Strength 2"],
       "weaknesses": ["Weakness 1", "Weakness 2"],
-      "whyWins": "Detailed 3-4 sentence explanation of why this team is the strongest based on their XI and real IPL 2025 conditions"
+      "whyWins": "Detailed explanation of why this team is the strongest based on their assigned roles in the XI."
     }
   ],
-  "overallSummary": "2-3 sentence expert summary of the overall auction and competitive landscape"
+  "overallSummary": "Summary of the auction landscape. NO EMOJIS."
 }
 
-Rank ALL 10 teams. Be brutally honest and specific about real IPL 2025 conditions.`;
+Rank ALL 10 teams. DO NOT USE A SINGLE EMOJI IN YOUR OUTPUT. Pure JSON only.`;
 
     try {
-      const anthropic = new Anthropic({
-        apiKey: CLAUDE_API_KEY,
+      const groq = new Groq({
+        apiKey: GROQ_API_KEY,
         dangerouslyAllowBrowser: true
       });
 
-      const response = await anthropic.messages.create({
-        model: "claude-3-7-sonnet-20250219",
-        max_tokens: 4096,
-        messages: [{ role: "user", content: prompt }]
+      const response = await groq.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.2,
+        response_format: { type: "json_object" }
       });
 
-      const text = response.content?.[0]?.text || "";
+      const text = response.choices[0]?.message?.content || "";
       const jsonStr = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       const parsed = JSON.parse(jsonStr);
       setAnalysis(parsed);
       setStatus("done");
     } catch (e) {
-      console.error("Claude error:", e);
+      console.error("Groq AI error:", e);
       setErrorMsg(e.message || "Failed to get analysis.");
       setStatus("error");
     }
@@ -192,7 +195,7 @@ Rank ALL 10 teams. Be brutally honest and specific about real IPL 2025 condition
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28, flexWrap: "wrap", gap: 12, animation: "fadeUpG .4s ease-out" }}>
         <div>
-          <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(26px,4vw,48px)", color: GOLD, letterSpacing: 6, lineHeight: 1 }}>🤖 AI TEAM ANALYSIS</div>
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(26px,4vw,48px)", color: GOLD, letterSpacing: 6, lineHeight: 1 }}>AI TEAM ANALYSIS</div>
           <div style={{ color: "#444", fontSize: 11, letterSpacing: 4, marginTop: 4 }}>POWERED BY ADVANCED AI · IPL 2025 CONDITIONS</div>
         </div>
         <button onClick={onBack} style={{ background: "transparent", border: `1px solid ${GOLD}50`, borderRadius: 6, padding: "10px 22px", color: GOLD, fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>

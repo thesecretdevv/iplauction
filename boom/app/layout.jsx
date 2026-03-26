@@ -3,8 +3,8 @@ import './globals.css';
 import { GameProvider } from './GameContext';
 
 export const metadata = {
-  title: 'BidWicket - IPL Auction',
-  description: 'The Ultimate IPL Bidding Simulation',
+  title: 'Gavel — IPL Auction Platform',
+  description: 'Strike your bid. 10 franchises. 204 players. One night.',
   icons: {
     icon: '/assets/favicon.png',
   },
@@ -14,9 +14,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <Suspense fallback={null}>
-          <GameProvider>{children}</GameProvider>
-        </Suspense>
+        <GameProvider>{children}</GameProvider>
       </body>
     </html>
   );

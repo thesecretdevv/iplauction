@@ -234,7 +234,7 @@ export function LobbyScreen({ roomCode, players, isHost, auctionMode, emit, onMo
         <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Rajdhani',sans-serif", padding: "30px", display: "flex", flexDirection: "column", alignItems: "center" }}>
             <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}`}</style>
             <div style={{ animation: "fadeUp .4s ease-out", textAlign: "center", marginBottom: 20 }}>
-                <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(24px,3.5vw,42px)", color: GOLD, letterSpacing: 6 }}>BIDWICKET IPL AUCTION LOBBY</div>
+                <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(24px,3.5vw,42px)", color: GOLD, letterSpacing: 6 }}>IPL AUCTION LOBBY</div>
                 <div style={{ display: "flex", gap: 14, justifyContent: "center", alignItems: "center", marginTop: 12 }}>
                     <span style={{ color: "#AAA", fontSize: 12, letterSpacing: 2 }}>ROOM CODE</span>
                     <span
@@ -274,7 +274,7 @@ export function LobbyScreen({ roomCode, players, isHost, auctionMode, emit, onMo
             {/* Auction Mode (Host only) */}
             {isHost && (
                 <div style={{ marginBottom: 20, textAlign: "center" }}>
-                    <div style={{ fontSize: 10, color: "#888", letterSpacing: 3, marginBottom: 10 }}>BIDWICKET IPL AUCTION MODE</div>
+                    <div style={{ fontSize: 10, color: "#888", letterSpacing: 3, marginBottom: 10 }}>IPL AUCTION MODE</div>
                     <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
                         {[["mega", "MEGA (500+)", GOLD], ["mini", "MINI (40)", "#22D3EE"]].map(([m, label, c]) => (
                             <button key={m} onClick={() => onModeSelect(m)}
@@ -285,7 +285,7 @@ export function LobbyScreen({ roomCode, players, isHost, auctionMode, emit, onMo
                     </div>
                 </div>
             )}
-            {!isHost && auctionMode && <div style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>Mode: {auctionMode === "mega" ? "BIDWICKET IPL MEGA AUCTION" : "BIDWICKET IPL MINI AUCTION"}</div>}
+            {!isHost && auctionMode && <div style={{ color: "#999", fontSize: 12, marginBottom: 16 }}>Mode: {auctionMode === "mega" ? "IPL MEGA AUCTION" : "IPL MINI AUCTION"}</div>}
 
             {/* Team Selection Grid */}
             <div style={{ fontSize: 10, color: "#888", letterSpacing: 3, marginBottom: 10 }}>SELECT YOUR FRANCHISE</div>

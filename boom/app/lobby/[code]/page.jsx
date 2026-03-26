@@ -73,7 +73,7 @@ export default function LobbyPage() {
           {copied ? "✓ COPIED!" : "COPY"}
         </button>
         <a
-          href={`https://wa.me/?text=${encodeURIComponent(`Join my BidWicket IPL Auction! 🏏\n\nClick to join: ${shareUrl}\n\nOr use room code: ${code}`)}`}
+          href={`https://wa.me/?text=${encodeURIComponent(`Join my IPL Auction game! 🏏\n\nClick to join: ${shareUrl}\n\nOr use room code: ${code}`)}`}
           target="_blank" rel="noreferrer"
           style={{
             display: "flex", alignItems: "center", gap: 6,
