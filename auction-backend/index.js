@@ -3,15 +3,22 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 
 const app = express();
+app.use(express.json());
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
-    }
+    },
+    // Optimize for low latency
+    pingTimeout: 20000,
+    pingInterval: 25000,
+    transports: ['websocket', 'polling'],
+    upgradeTimeout: 10000,
 });
 
-// ─── Helpers ───
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 const genCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let c = ''; for (let i = 0; i < 6; i++) c += chars[Math.random() * chars.length | 0];
@@ -35,21 +42,53 @@ const TEAMS = [
     { id: "LSG", name: "Lucknow Super Giants", short: "LSG", color: "#81D4FA" },
 ];
 
-// ─── Room & History Storage ───
+// ─── Room & History Storage ─────────────────────────────────────────────────
 const rooms = new Map();
+const finishedGames = [];
+// Grace period timers: Map<playerId, timeoutId>
+const disconnectTimers = new Map();
+
+// ─── REST endpoints ─────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
-    res.send('🏏 IPL Auction Server is running globally!');
+    res.send('🏏 IPL Auction Server is running!');
 });
 
-// Store finished games
-const finishedGames = []; // Stores recent completed public games
+// GET /api/rooms — returns all active public rooms (for initial page load without socket)
+app.get('/api/rooms', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const activeRooms = [];
+    rooms.forEach((r) => {
+        if (!r.isPrivate && r.status !== 'finished') {
+            activeRooms.push({
+                code: r.code,
+                name: r.name,
+                host: r.players[r.hostId]?.name || 'Unknown',
+                players: Object.values(r.players).filter(p => !p.isSpectator && !p.offline).length,
+                spectators: Object.values(r.players).filter(p => p.isSpectator).length,
+                status: r.status,
+                mode: r.auctionMode,
+            });
+        }
+    });
 
-// ─── Build player queue (imported inline to avoid ESM issues with shared data) ───
-function buildMegaQueue() {
-    // We'll receive the queue from the host client to avoid duplicating 500+ player data
-    return [];
-}
+    const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
+    res.json({ active: activeRooms, totalRooms: activeRooms.length, totalPlayers });
+});
 
+// GET /api/rooms/:code — room details
+app.get('/api/rooms/:code', (req, res) => {
+    const room = rooms.get(req.params.code?.toUpperCase());
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    res.json({
+        code: room.code,
+        name: room.name,
+        status: room.status,
+        mode: room.auctionMode,
+        playerCount: Object.values(room.players).filter(p => !p.isSpectator).length,
+    });
+});
+
+// ─── Game State helpers ──────────────────────────────────────────────────────
 function createGameState(playerQueue) {
     return {
         playerQueue,
@@ -57,7 +96,7 @@ function createGameState(playerQueue) {
         currentBid: playerQueue[0]?.base || 2,
         currentBidder: null,
         timer: 10,
-        timerDuration: 10, // Default duration to reset to
+        timerDuration: 10,
         phase: "bidding",
         currentSetName: playerQueue[0]?.setName || "",
         purses: Object.fromEntries(TEAMS.map(t => [t.id, 120])),
@@ -66,70 +105,8 @@ function createGameState(playerQueue) {
         selections: Object.fromEntries(TEAMS.map(t => [t.id, false])),
         bidLog: [],
         auctionLog: [],
+        isPaused: false,
     };
-}
-
-function finishCurrent(room) {
-    const gs = room.gameState;
-    if (!gs || gs.phase !== "bidding") return;
-
-    gs.phase = gs.currentBidder ? "sold" : "unsold";
-    const player = gs.playerQueue[gs.currentIdx];
-
-    if (gs.currentBidder) {
-        const price = gs.currentBid;
-        const bidder = gs.currentBidder;
-        gs.purses[bidder] = +(gs.purses[bidder] - price).toFixed(2);
-        gs.squads[bidder] = [...gs.squads[bidder], { ...player, soldFor: price }];
-        gs.auctionLog = [{ player, bidder, price, sold: true }, ...gs.auctionLog];
-    } else {
-        gs.auctionLog = [{ player, bidder: null, price: 0, sold: false }, ...gs.auctionLog];
-    }
-
-    io.to(room.code).emit('game-state', getClientState(room));
-
-    // After 2.5s, advance to next
-    setTimeout(() => advanceToNext(room), 2500);
-}
-
-function advanceToNext(room) {
-    const gs = room.gameState;
-    if (!gs) return;
-
-    const nextIdx = gs.currentIdx + 1;
-    if (nextIdx >= gs.playerQueue.length) {
-        gs.phase = "selection";
-        room.status = "active"; // Still active during selection
-
-        // Save to history if public
-        if (!room.isPrivate) {
-            finishedGames.unshift({
-                id: room.code,
-                name: room.name,
-                mode: room.auctionMode,
-                date: new Date().toISOString(),
-                host: room.players[room.hostId]?.name || "Unknown",
-                totalSold: gs.auctionLog.filter(l => l.sold).length,
-                topBuy: gs.auctionLog.filter(l => l.sold).sort((a, b) => b.price - a.price)[0] || null
-            });
-            if (finishedGames.length > 20) finishedGames.pop(); // Keep last 20
-        }
-
-        io.to(room.code).emit('game-over', getClientState(room));
-        clearInterval(room.timerInterval);
-        return;
-    }
-
-    gs.currentIdx = nextIdx;
-    const np = gs.playerQueue[nextIdx];
-    gs.currentBid = np.base;
-    gs.currentBidder = null;
-    gs.timer = gs.timerDuration || 10;
-    gs.phase = "bidding";
-    gs.bidLog = [];
-    gs.currentSetName = np.setName;
-
-    io.to(room.code).emit('game-state', getClientState(room));
 }
 
 function getClientState(room) {
@@ -155,6 +132,78 @@ function getClientState(room) {
     };
 }
 
+function getLobbyState(room) {
+    return {
+        players: Object.values(room.players).map(p => ({ ...p, socketId: undefined })),
+        auctionMode: room.auctionMode,
+        hostId: room.hostId,
+    };
+}
+
+function finishCurrent(room) {
+    const gs = room.gameState;
+    if (!gs || gs.phase !== "bidding") return;
+
+    gs.phase = gs.currentBidder ? "sold" : "unsold";
+    const player = gs.playerQueue[gs.currentIdx];
+
+    if (gs.currentBidder) {
+        const price = gs.currentBid;
+        const bidder = gs.currentBidder;
+        gs.purses[bidder] = +(gs.purses[bidder] - price).toFixed(2);
+        gs.squads[bidder] = [...gs.squads[bidder], { ...player, soldFor: price }];
+        gs.auctionLog = [{ player, bidder, price, sold: true }, ...gs.auctionLog];
+    } else {
+        gs.auctionLog = [{ player, bidder: null, price: 0, sold: false }, ...gs.auctionLog];
+    }
+
+    io.to(room.code).emit('game-state', getClientState(room));
+    setTimeout(() => advanceToNext(room), 2500);
+}
+
+function advanceToNext(room) {
+    const gs = room.gameState;
+    if (!gs) return;
+
+    const nextIdx = gs.currentIdx + 1;
+    if (nextIdx >= gs.playerQueue.length) {
+        gs.phase = "selection";
+        room.status = "active";
+
+        if (!room.isPrivate) {
+            saveFinishedGame(room, gs);
+        }
+
+        io.to(room.code).emit('game-over', getClientState(room));
+        clearInterval(room.timerInterval);
+        return;
+    }
+
+    gs.currentIdx = nextIdx;
+    const np = gs.playerQueue[nextIdx];
+    gs.currentBid = np.base;
+    gs.currentBidder = null;
+    gs.timer = gs.timerDuration || 10;
+    gs.phase = "bidding";
+    gs.bidLog = [];
+    gs.currentSetName = np.setName;
+
+    io.to(room.code).emit('game-state', getClientState(room));
+}
+
+function saveFinishedGame(room, gs) {
+    finishedGames.unshift({
+        id: room.code,
+        name: room.name,
+        mode: room.auctionMode,
+        date: new Date().toISOString(),
+        host: room.players[room.hostId]?.name || "Unknown",
+        totalSold: gs.auctionLog.filter(l => l.sold).length,
+        topBuy: gs.auctionLog.filter(l => l.sold).sort((a, b) => b.price - a.price)[0] || null
+    });
+    if (finishedGames.length > 20) finishedGames.pop();
+}
+
 function startGameTick(room) {
     if (room.timerInterval) clearInterval(room.timerInterval);
 
@@ -167,29 +216,50 @@ function startGameTick(room) {
         if (gs.timer <= 0) {
             finishCurrent(room);
         } else {
-            io.to(room.code).emit('game-state', getClientState(room));
+            // Only broadcast state every second — no extra delay
+            io.to(room.code).emit('timer-tick', { timer: gs.timer });
         }
     }, 1000);
 }
 
-// ─── Socket.IO ───
+function broadcastRoomList() {
+    // Emit to all connected sockets that public rooms changed
+    io.emit('public-rooms-updated');
+}
+
+// ─── Socket.IO ───────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
     console.log(`[+] ${socket.id} connected`);
     let currentRoom = null;
     let currentPlayerId = null;
 
+    // ── Create Room ──
     socket.on('create-room', ({ playerName, isPrivate, roomName, playerId }, cb) => {
         if (!playerId) return cb({ ok: false, error: 'Missing Player ID' });
+
+        // Cancel any pending disconnect timer for this player
+        if (disconnectTimers.has(playerId)) {
+            clearTimeout(disconnectTimers.get(playerId));
+            disconnectTimers.delete(playerId);
+        }
 
         const code = genCode();
         const room = {
             code,
             name: roomName || `${playerName}'s Room`,
             isPrivate: !!isPrivate,
-            status: 'lobby', // lobby, active, finished
-            hostId: playerId, // Use playerId as host
+            status: 'lobby',
+            hostId: playerId,
             players: {
-                [playerId]: { id: playerId, socketId: socket.id, name: playerName || 'Player 1', teamId: null, isHost: true, offline: false }
+                [playerId]: {
+                    id: playerId,
+                    socketId: socket.id,
+                    name: playerName || 'Player 1',
+                    teamId: null,
+                    isHost: true,
+                    isSpectator: false,
+                    offline: false
+                }
             },
             auctionMode: null,
             gameState: null,
@@ -200,105 +270,175 @@ io.on('connection', (socket) => {
         socket.join(code);
         currentRoom = code;
         currentPlayerId = playerId;
-        console.log(`[ROOM] ${code} (${room.isPrivate ? 'PVT' : 'PUB'}) created by ${playerName} (${playerId})`);
+        console.log(`[ROOM] ${code} (${room.isPrivate ? 'PVT' : 'PUB'}) created by ${playerName}`);
 
-        // Return without socketId to frontend for privacy
-        const safePlayers = Object.values(room.players).map(p => ({ ...p, socketId: undefined }));
-        cb({ ok: true, code, players: safePlayers });
+        const state = getLobbyState(room);
+        cb({ ok: true, code, players: state.players });
 
-        // Broadcast to browsers
-        if (!room.isPrivate) io.emit('public-rooms-updated');
+        if (!room.isPrivate) broadcastRoomList();
     });
 
+    // ── Join Room ──
     socket.on('join-room', ({ code, playerName, playerId }, cb) => {
         if (!playerId) return cb({ ok: false, error: 'Missing Player ID' });
 
         const room = rooms.get(code);
         if (!room) return cb({ ok: false, error: 'Room not found' });
 
-        // Rejoin Logic
+        // Cancel any pending disconnect timer
+        if (disconnectTimers.has(playerId)) {
+            clearTimeout(disconnectTimers.get(playerId));
+            disconnectTimers.delete(playerId);
+        }
+
+        // ── Rejoin ──
         if (room.players[playerId]) {
             room.players[playerId].socketId = socket.id;
             room.players[playerId].offline = false;
-            room.players[playerId].name = playerName; // Update name just in case
+            room.players[playerId].name = playerName;
             socket.join(code);
             currentRoom = code;
             currentPlayerId = playerId;
             console.log(`[ROOM] ${playerName} (${playerId}) REJOINED ${code}`);
 
-            const safePlayers = Object.values(room.players).map(p => ({ ...p, socketId: undefined }));
-            io.to(code).emit('lobby-update', { players: safePlayers });
+            const state = getLobbyState(room);
+            io.to(code).emit('lobby-update', state);
             return cb({
                 ok: true,
                 code,
-                players: safePlayers,
+                players: state.players,
                 roomStatus: room.status,
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
+                isSpectator: room.players[playerId].isSpectator,
                 gameState: room.status !== 'lobby' ? getClientState(room) : null
             });
         }
 
-        if (room.started && room.status !== 'finished') return cb({ ok: false, error: 'Game already active' });
-        if (Object.keys(room.players).length >= 10) return cb({ ok: false, error: 'Room is full' });
+        // ── Game active: add as spectator ──
+        if (room.started && room.status === 'active') {
+            room.players[playerId] = {
+                id: playerId,
+                socketId: socket.id,
+                name: playerName || 'Spectator',
+                teamId: null,
+                isHost: false,
+                isSpectator: true,
+                offline: false,
+            };
+            socket.join(code);
+            currentRoom = code;
+            currentPlayerId = playerId;
+            console.log(`[SPECTATOR] ${playerName} joined ${code} as spectator`);
 
-        // New Join Logic
-        room.players[playerId] = { id: playerId, socketId: socket.id, name: playerName || `Player ${Object.keys(room.players).length + 1}`, teamId: null, isHost: false, offline: false };
+            const state = getLobbyState(room);
+            io.to(code).emit('lobby-update', state);
+            return cb({
+                ok: true,
+                code,
+                players: state.players,
+                roomStatus: room.status,
+                hostId: room.hostId,
+                auctionMode: room.auctionMode,
+                isSpectator: true,
+                gameState: getClientState(room)
+            });
+        }
+
+        // ── Room finished: spectator ──
+        if (room.status === 'finished') {
+            socket.join(code);
+            currentRoom = code;
+            currentPlayerId = playerId;
+            return cb({
+                ok: true,
+                code,
+                players: Object.values(room.players).map(p => ({ ...p, socketId: undefined })),
+                roomStatus: 'finished',
+                hostId: room.hostId,
+                auctionMode: room.auctionMode,
+                isSpectator: true,
+                gameState: getClientState(room)
+            });
+        }
+
+        // ── Full room check ──
+        const activePlayers = Object.values(room.players).filter(p => !p.isSpectator);
+        if (activePlayers.length >= 10) return cb({ ok: false, error: 'Room is full (10 players max)' });
+
+        // ── New Join ──
+        room.players[playerId] = {
+            id: playerId,
+            socketId: socket.id,
+            name: playerName || `Player ${Object.keys(room.players).length + 1}`,
+            teamId: null,
+            isHost: false,
+            isSpectator: false,
+            offline: false
+        };
         socket.join(code);
         currentRoom = code;
         currentPlayerId = playerId;
         console.log(`[ROOM] ${playerName} (${playerId}) joined ${code}`);
 
-        const safePlayers = Object.values(room.players).map(p => ({ ...p, socketId: undefined }));
-        io.to(code).emit('lobby-update', { players: safePlayers });
-        cb({ ok: true, code, players: safePlayers });
+        const state = getLobbyState(room);
+        io.to(code).emit('lobby-update', state);
+        cb({ ok: true, code, players: state.players, roomStatus: room.status, hostId: room.hostId, auctionMode: room.auctionMode, isSpectator: false });
+
+        if (!room.isPrivate) broadcastRoomList();
     });
 
+    // ── Select Team ──
     socket.on('select-team', ({ teamId }, cb) => {
         if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
         const room = rooms.get(currentRoom);
         if (!room) return cb?.({ ok: false });
 
-        // Check if team is already taken by another player
-        const taken = Object.values(room.players).some(p => p.teamId === teamId && p.id !== currentPlayerId);
+        const player = room.players[currentPlayerId];
+        if (!player || player.isSpectator) return cb?.({ ok: false, error: 'Spectators cannot select teams' });
+
+        const taken = Object.values(room.players).some(p => p.teamId === teamId && p.id !== currentPlayerId && !p.offline);
         if (taken) return cb?.({ ok: false, error: 'Team already taken' });
 
-        room.players[currentPlayerId].teamId = teamId;
-        const safePlayers = Object.values(room.players).map(p => ({ ...p, socketId: undefined }));
-        io.to(currentRoom).emit('lobby-update', { players: safePlayers });
+        player.teamId = teamId;
+        const state = getLobbyState(room);
+        io.to(currentRoom).emit('lobby-update', state);
         cb?.({ ok: true });
     });
 
+    // ── Set Auction Mode ──
     socket.on('set-auction-mode', ({ mode }) => {
         if (!currentRoom || !currentPlayerId) return;
         const room = rooms.get(currentRoom);
         if (!room || currentPlayerId !== room.hostId) return;
         room.auctionMode = mode;
-        const safePlayers = Object.values(room.players).map(p => ({ ...p, socketId: undefined }));
-        io.to(currentRoom).emit('lobby-update', { players: safePlayers, auctionMode: mode });
+        const state = getLobbyState(room);
+        io.to(currentRoom).emit('lobby-update', state);
     });
 
+    // ── Start Game ──
     socket.on('start-game', ({ playerQueue }, cb) => {
         if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
         const room = rooms.get(currentRoom);
         if (!room || currentPlayerId !== room.hostId) return cb?.({ ok: false, error: 'Not host' });
 
-        // Validate all players have a team
-        const noTeam = Object.values(room.players).find(p => !p.teamId);
+        // Only check non-spectator players for team selection
+        const activePlayers = Object.values(room.players).filter(p => !p.isSpectator && !p.offline);
+        const noTeam = activePlayers.find(p => !p.teamId);
         if (noTeam) return cb?.({ ok: false, error: `${noTeam.name} hasn't selected a team` });
 
         room.started = true;
         room.status = 'active';
         room.gameState = createGameState(playerQueue);
-        room.gameState.isPaused = false;
 
         io.to(currentRoom).emit('game-started', getClientState(room));
         startGameTick(room);
         cb?.({ ok: true });
-        if (!room.isPrivate) io.emit('public-rooms-updated');
+
+        if (!room.isPrivate) broadcastRoomList();
     });
 
-    // ─── Host Controls ───
+    // ── Host Controls ──
     socket.on('pause-game', () => {
         if (!currentRoom || !currentPlayerId) return;
         const room = rooms.get(currentRoom);
@@ -319,25 +459,22 @@ io.on('connection', (socket) => {
         if (!currentRoom || !currentPlayerId) return;
         const room = rooms.get(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
-
-        room.gameState.currentIdx = room.gameState.playerQueue.length - 1; // force to end
+        room.gameState.currentIdx = room.gameState.playerQueue.length - 1;
         advanceToNext(room);
-        if (!room.isPrivate) io.emit('public-rooms-updated');
+        if (!room.isPrivate) broadcastRoomList();
     });
 
     socket.on('set-timer-duration', ({ duration }) => {
         if (!currentRoom || !currentPlayerId) return;
         const room = rooms.get(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
-
         const newD = Math.max(5, Math.min(60, parseInt(duration) || 10));
         room.gameState.timerDuration = newD;
-        room.gameState.timer = newD; // immediately jump timer up or down to new max
-
+        room.gameState.timer = newD;
         io.to(currentRoom).emit('game-state', getClientState(room));
     });
 
-    // ─── Server Browser Events ───
+    // ── Get Rooms (socket) ──
     socket.on('get-rooms', (cb) => {
         const activeRooms = [];
         rooms.forEach((r) => {
@@ -345,50 +482,55 @@ io.on('connection', (socket) => {
                 activeRooms.push({
                     code: r.code,
                     name: r.name,
-                    host: r.players[r.hostId]?.name || "Unknown",
-                    players: Object.keys(r.players).length,
+                    host: r.players[r.hostId]?.name || 'Unknown',
+                    players: Object.values(r.players).filter(p => !p.isSpectator && !p.offline).length,
+                    spectators: Object.values(r.players).filter(p => p.isSpectator && !p.offline).length,
                     status: r.status,
-                    mode: r.auctionMode
+                    mode: r.auctionMode,
                 });
             }
         });
-        cb?.({ active: activeRooms, history: finishedGames });
+        const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
+        cb?.({ active: activeRooms, totalRooms: activeRooms.length, totalPlayers });
     });
 
+    // ── Place Bid ── (optimized for minimum latency)
     socket.on('place-bid', (_, cb) => {
         if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
         const room = rooms.get(currentRoom);
         if (!room || !room.gameState) return cb?.({ ok: false });
 
         const gs = room.gameState;
-        if (gs.phase !== "bidding") return cb?.({ ok: false });
+        if (gs.phase !== "bidding" || gs.isPaused) return cb?.({ ok: false, error: 'Not in bidding phase' });
 
         const player = room.players[currentPlayerId];
-        if (!player || !player.teamId) return cb?.({ ok: false });
+        if (!player || !player.teamId || player.isSpectator) return cb?.({ ok: false, error: 'Spectators cannot bid' });
 
         const teamId = player.teamId;
-        if (gs.currentBidder === teamId) return cb?.({ ok: false, error: 'Already leading' });
+        if (gs.currentBidder === teamId) return cb?.({ ok: false, error: 'Already leading bid' });
 
         const nb = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
-        if (gs.purses[teamId] < nb) return cb?.({ ok: false, error: 'Insufficient funds' });
+        if (gs.purses[teamId] < nb) return cb?.({ ok: false, error: 'Insufficient purse' });
 
         const maxSquadSize = (gs.playerQueue?.length || 0) <= 200 ? 15 : 25;
         if (gs.squads[teamId].length >= maxSquadSize) return cb?.({ ok: false, error: 'Squad full' });
 
         const playerOnAuction = gs.playerQueue[gs.currentIdx];
         const osCount = gs.squads[teamId].filter(p => p.overseas).length;
-        if (playerOnAuction && playerOnAuction.overseas && osCount >= 8) return cb?.({ ok: false, error: 'Max 8 Overseas players allowed' });
+        if (playerOnAuction?.overseas && osCount >= 8) return cb?.({ ok: false, error: 'Max 8 overseas players reached' });
 
+        // Apply state immediately
         gs.currentBid = nb;
         gs.currentBidder = teamId;
         gs.timer = gs.timerDuration || 10;
         gs.bidLog = [{ teamId, bid: nb, playerName: player.name }, ...gs.bidLog].slice(0, 7);
 
-        // Broadcast immediately for instant feel
+        // Broadcast immediately — no setTimeout, no debounce
         io.to(currentRoom).emit('game-state', getClientState(room));
-        cb?.({ ok: true });
+        cb?.({ ok: true, newBid: nb });
     });
 
+    // ── Submit XI ──
     socket.on('submit-xi', ({ players }, cb) => {
         if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
         const room = rooms.get(currentRoom);
@@ -398,23 +540,27 @@ io.on('connection', (socket) => {
         if (gs.phase !== "selection") return cb?.({ ok: false, error: "Not in selection phase" });
 
         const player = room.players[currentPlayerId];
-        if (!player || !player.teamId) return cb?.({ ok: false });
+        if (!player || !player.teamId || player.isSpectator) return cb?.({ ok: false });
 
         const teamId = player.teamId;
-        if (players.length !== 11) return cb?.({ ok: false, error: "Must select 11 players" });
+        if (players.length !== 11) return cb?.({ ok: false, error: "Must select exactly 11 players" });
 
         gs.playingXI[teamId] = players;
         gs.selections[teamId] = true;
 
-        // Check if all players have submitted
-        const allSubmitted = Object.values(room.players).every(p => gs.selections[p.teamId]);
+        // Check if all non-spectator players have submitted
+        const humanTeamIds = Object.values(room.players)
+            .filter(p => !p.isSpectator && p.teamId)
+            .map(p => p.teamId);
+
+        const allSubmitted = humanTeamIds.every(tid => gs.selections[tid]);
 
         if (allSubmitted) {
-            // For teams not owned by humans (AI teams in multi? unlikely but safe), pick top 11
+            // Auto-fill XI for AI/unowned teams
             TEAMS.forEach(t => {
                 if (!gs.selections[t.id]) {
                     gs.playingXI[t.id] = [...gs.squads[t.id]]
-                        .sort((a, b) => b.soldFor - a.soldFor)
+                        .sort((a, b) => (b.soldFor || 0) - (a.soldFor || 0))
                         .slice(0, 11);
                     gs.selections[t.id] = true;
                 }
@@ -423,22 +569,11 @@ io.on('connection', (socket) => {
             gs.phase = "finished";
             room.status = "finished";
 
-            // Save to history if public
-            if (!room.isPrivate) {
-                finishedGames.unshift({
-                    id: room.code,
-                    name: room.name,
-                    mode: room.auctionMode,
-                    date: new Date().toISOString(),
-                    host: room.players[room.hostId]?.name || "Unknown",
-                    totalSold: gs.auctionLog.filter(l => l.sold).length,
-                    topBuy: gs.auctionLog.filter(l => l.sold).sort((a, b) => b.price - a.price)[0] || null
-                });
-                if (finishedGames.length > 20) finishedGames.pop();
-            }
+            if (!room.isPrivate) saveFinishedGame(room, gs);
 
             io.to(currentRoom).emit('game-over', getClientState(room));
             clearInterval(room.timerInterval);
+            if (!room.isPrivate) broadcastRoomList();
         } else {
             io.to(currentRoom).emit('game-state', getClientState(room));
         }
@@ -446,35 +581,73 @@ io.on('connection', (socket) => {
         cb?.({ ok: true });
     });
 
+    // ── Disconnect ──
     socket.on('disconnect', () => {
         console.log(`[-] ${socket.id} (Player: ${currentPlayerId || 'Unknown'}) disconnected`);
         if (!currentRoom || !currentPlayerId) return;
         const room = rooms.get(currentRoom);
         if (!room || !room.players[currentPlayerId]) return;
 
-        // Mark as offline instead of deleting!
-        room.players[currentPlayerId].offline = true;
+        const player = room.players[currentPlayerId];
+        player.offline = true;
 
         const activePlayers = Object.values(room.players).filter(p => !p.offline);
 
         if (activePlayers.length === 0) {
+            // Immediate cleanup if nobody is left
             clearInterval(room.timerInterval);
             rooms.delete(currentRoom);
-            console.log(`[ROOM] ${currentRoom} deleted (all players offline)`);
-            if (!room.isPrivate) io.emit('public-rooms-updated');
-        } else {
-            // If host left, transfer to next active player
-            if (room.hostId === currentPlayerId) {
-                const newHost = activePlayers[0];
-                if (newHost) {
-                    room.hostId = newHost.id;
-                    room.players[newHost.id].isHost = true;
-                }
-            }
-            const safePlayers = Object.values(room.players).map(p => ({ ...p, socketId: undefined }));
-            io.to(currentRoom).emit('lobby-update', { players: safePlayers });
-            if (!room.isPrivate) io.emit('public-rooms-updated');
+            console.log(`[ROOM] ${currentRoom} deleted (empty)`);
+            if (!room.isPrivate) broadcastRoomList();
+            return;
         }
+
+        // Transfer host if needed
+        if (room.hostId === currentPlayerId) {
+            const newHost = activePlayers.find(p => !p.isSpectator) || activePlayers[0];
+            if (newHost) {
+                room.hostId = newHost.id;
+                room.players[newHost.id].isHost = true;
+                room.players[currentPlayerId].isHost = false;
+                console.log(`[ROOM] Host transferred to ${newHost.name}`);
+            }
+        }
+
+        // Notify room of the change
+        const state = getLobbyState(room);
+        io.to(currentRoom).emit('lobby-update', state);
+        if (!room.isPrivate) broadcastRoomList();
+
+        // Schedule team-slot release after a 30s grace period
+        // (so refreshes don't permanently free the slot)
+        const gracePeriodId = setTimeout(() => {
+            disconnectTimers.delete(currentPlayerId);
+            const r = rooms.get(currentRoom);
+            if (!r || !r.players[currentPlayerId]) return;
+
+            const p = r.players[currentPlayerId];
+            if (!p.offline) return; // They reconnected — skip
+
+            if (r.status === 'lobby') {
+                // Free team slot and remove player from room
+                delete r.players[currentPlayerId];
+                console.log(`[ROOM] ${currentPlayerId} removed after grace period from ${currentRoom}`);
+
+                const remaining = Object.values(r.players).filter(p2 => !p2.offline);
+                if (remaining.length === 0) {
+                    clearInterval(r.timerInterval);
+                    rooms.delete(currentRoom);
+                    console.log(`[ROOM] ${currentRoom} deleted (all expired)`);
+                } else {
+                    const st = getLobbyState(r);
+                    io.to(currentRoom).emit('lobby-update', st);
+                }
+                if (!r.isPrivate) broadcastRoomList();
+            }
+            // In active games, keep the player record but they stay offline
+        }, 30_000);
+
+        disconnectTimers.set(currentPlayerId, gracePeriodId);
     });
 });
 

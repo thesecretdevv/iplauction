@@ -1,344 +1,433 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGame, fmt } from '../GameContext';
 import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from '../../src/MultiScreens';
-import Groq from 'groq-sdk';
+import { calculateLeaderboard, selectPlayingXI, getPlayerRating } from '../data/playerRatings';
 
-const GROQ_API_KEY = process.env.NEXT_PUBLIC_GROQ_API_KEY || "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";
+// ── Medal helpers ──────────────────────────────────────────────────────────
+const MEDAL = ['Gold', 'Silver', 'Bronze'];
+const medalColor = (idx) =>
+  idx === 0 ? GOLD : idx === 1 ? '#aaa' : idx === 2 ? '#CD7F32' : '#444';
+
+// ── Team logos (from /public/assets) ────────────────────────────────────────
+const TEAM_LOGOS = {
+  CSK:  '/assets/CSK.png',
+  MI:   '/assets/MI.png',
+  RCB:  '/assets/RCB.png',
+  KKR:  '/assets/KKR.png',
+  SRH:  '/assets/SRH.png',
+  DC:   '/assets/DC.png',
+  PBKS: '/assets/PBKS.png',
+  RR:   '/assets/RR.png',
+  GT:   '/assets/GT.png',
+  LSG:  '/assets/LSG.png',
+};
 
 export default function ResultsPage() {
   const router = useRouter();
-  const { gs, effectiveMyTeamId, handleRestart } = useGame();
+  const { gs, isMulti, effectiveMyTeamId, handleRestart, lobbyMode, auctionMode } = useGame();
 
+  // While game state loads (e.g. on refresh), show a minimal loader
   if (!gs) {
-    return null;
+    return (
+      <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: GOLD, fontFamily: "'Bebas Neue'", fontSize: 32, letterSpacing: 6 }}>LOADING RESULTS…</div>
+      </div>
+    );
   }
 
-  return <Results gs={gs} myTeamId={effectiveMyTeamId} onRestart={handleRestart} />;
+  const mode = isMulti ? lobbyMode : auctionMode;
+  return <Results gs={gs} myTeamId={effectiveMyTeamId} onRestart={handleRestart} mode={mode} />;
 }
 
-// ── Results Component (ported from App.jsx) ──
-function Results({ gs, myTeamId: mti, onRestart }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Results
+// ─────────────────────────────────────────────────────────────────────────────
+function Results({ gs, myTeamId: mti, onRestart, mode }) {
   const [activeId, setActiveId] = useState(mti || TEAMS[0].id);
-  const [showAnalysis, setShowAnalysis] = useState(false);
+  const [tab, setTab] = useState('squad');   // 'squad' | 'leaderboard'
   const team = TEAMS.find(t => t.id === activeId);
 
-  if (showAnalysis) return <GeminiAnalysisScreen gs={gs} onBack={() => setShowAnalysis(false)} />;
-  const playingXI = gs.playingXI?.[activeId] || [];
-  const fullSquad = gs.squads[activeId] || [];
-  const displayList = playingXI.length === 11 ? playingXI : fullSquad;
-
-  const spent = +(120 - (gs.purses[activeId] || 0)).toFixed(2);
-  const soldCount = (gs.auctionLog || []).filter(l => l.sold).length;
+  const soldCount   = (gs.auctionLog || []).filter(l =>  l.sold).length;
   const unsoldCount = (gs.auctionLog || []).filter(l => !l.sold).length;
 
-  const downloadSheet = async () => {
-    const el = document.getElementById("capture-results");
-    if (!el) return;
-    const canvas = await html2canvas(el, { backgroundColor: BG, scale: 2 });
-    const link = document.createElement("a");
-    link.download = `IPL-Auction-${team?.short}-XI.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-  };
+  // For the active team: decide what to display
+  const rawXI    = gs.playingXI?.[activeId] || [];
+  const fullSquad = gs.squads?.[activeId] || [];
 
-  const shareWhatsApp = () => {
-    const text = `🏏 *IPL Auction* \nCheck out my Playing XI for *${team?.name}*!\n\n${displayList.map((p, i) => `${i + 1}. ${ROLE_EMOJI[p.role]} ${p.name}`).join("\n")}\n\nBuild your own squad at IPL Auction!`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
-  };
+  // Edge-case: player may have submitted <11 or exactly 10 players.
+  // If rawXI has ≥ 1 and ≤ 11 players, respect it; otherwise fall back to selectPlayingXI.
+  const playingXI = rawXI.length >= 1 && rawXI.length <= 11
+    ? rawXI
+    : fullSquad.length > 0
+      ? selectPlayingXI(fullSquad, mode)
+      : [];
+
+  const displayList     = playingXI;
+  const spent           = +(120 - (gs.purses?.[activeId] || 0)).toFixed(2);
+  const teamTotalRating = playingXI.reduce((s, p) => s + getPlayerRating(p.name || p, mode), 0);
+  const teamAvgRating   = playingXI.length ? Math.round(teamTotalRating / playingXI.length) : 0;
+
+  // ── Clipboard share ──
+  const shareText = useCallback(() => {
+    const lines = displayList.map((p, i) => `${i + 1}. [${p.role}] ${p.name || p}`).join('\n');
+    const text  = `IPL Auction — ${team?.name} Playing XI\n\n${lines}\n\nTotal Rating: ${teamTotalRating} pts | Avg: ${teamAvgRating} pts/player\n\nBuilt on Gavel — IPL Auction Online`;
+    if (navigator.share) {
+      navigator.share({ title: 'My IPL XI', text }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(text).then(() => alert('Copied to clipboard!')).catch(() => {});
+    }
+  }, [displayList, team, teamTotalRating, teamAvgRating]);
+
+  // ── WhatsApp share ──
+  const shareWhatsApp = useCallback(() => {
+    const lines = displayList.map((p, i) => `${i + 1}. [${p.role}] ${p.name || p}`).join('\n');
+    const text  = `*IPL Auction* — *${team?.name}* Playing XI\n\n${lines}\n\nTotal Rating: *${teamTotalRating} pts*\nBuilt on Gavel — IPL Auction Online`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  }, [displayList, team, teamTotalRating]);
+
+  // ── Download as plain text file ──
+  const downloadSheet = useCallback(() => {
+    const lines = displayList.map((p, i) => `${i + 1}. [${(p.role || '??').toUpperCase()}] ${p.name || p}  —  ${fmt(p.soldFor || p.base || 0)}`).join('\n');
+    const header = `IPL AUCTION RESULTS\n${'═'.repeat(40)}\nTeam: ${team?.name}\nAuction Mode: ${(mode || 'N/A').toUpperCase()}\nPlaying XI (${playingXI.length} players)\n${'─'.repeat(40)}\n`;
+    const footer = `\n${'─'.repeat(40)}\nTotal Rating : ${teamTotalRating} pts\nAvg Rating   : ${teamAvgRating} pts/player\nPurse Spent  : ${fmt(spent)}\nPurse Left   : ${fmt(gs.purses?.[activeId] || 0)}\n\nAuction Stats\n${'─'.repeat(40)}\nPlayers Sold  : ${soldCount}\nPlayers Unsold: ${unsoldCount}\n\n[Generated by Gavel — IPL Auction Platform]`;
+    const blob = new Blob([header + lines + footer], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${team?.short || 'IPL'}-Playing-XI.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [displayList, team, mode, playingXI, teamTotalRating, teamAvgRating, spent, soldCount, unsoldCount, gs, activeId]);
 
   return (
-    <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Rajdhani',sans-serif", padding: "clamp(16px,3vh,28px)" }}>
-      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}.res-squad{grid-template-columns:repeat(2,1fr)!important}@media(max-width:700px){.res-squad{grid-template-columns:1fr!important}}`}</style>
-      <div style={{ textAlign: "center", marginBottom: 28 }}>
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(30px,5vw,54px)", color: GOLD, letterSpacing: 8 }}>IPL AUCTION COMPLETE</div>
-        <div style={{ color: "#555", fontSize: 12, letterSpacing: 3, marginTop: 4 }}>{soldCount} SOLD · {unsoldCount} UNSOLD</div>
+    <div style={{ minHeight: '100vh', background: BG, fontFamily: "'Rajdhani',sans-serif" }}>
+      <style>{`
+        @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+        .res-card{animation:fadeUp .35s ease-out both}
+        .res-tab-btn{transition:all .2s;border-radius:6px 6px 0 0;font-family:'Barlow Condensed';font-size:13px;letter-spacing:2px;font-weight:700;cursor:pointer;border:none;padding:10px 28px}
+        .res-team-pill{transition:all .2s;border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:700;font-size:13px;font-family:'Rajdhani'}
+      `}</style>
+
+      {/* ── Header ── */}
+      <div style={{ background: '#08090f', borderBottom: `1px solid ${BORDER}`, padding: 'clamp(14px,2vh,22px) clamp(16px,4vw,48px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: 'clamp(24px,4vw,42px)', color: GOLD, letterSpacing: 6, lineHeight: 1 }}>IPL AUCTION COMPLETE</div>
+          <div style={{ color: '#555', fontSize: 11, letterSpacing: 3, marginTop: 3 }}>{soldCount} SOLD · {unsoldCount} UNSOLD · {(mode || 'N/A').toUpperCase()} AUCTION</div>
+        </div>
+        <button
+          onClick={onRestart}
+          style={{ background: `linear-gradient(135deg,${GOLD},#9a7610)`, border: 'none', borderRadius: 6, padding: '10px 24px', color: '#000', fontWeight: 900, cursor: 'pointer', fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}
+        >PLAY AGAIN</button>
       </div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 24, flexWrap: "wrap", justifyContent: "center" }}>
-        {TEAMS.map(t => (
-          <button key={t.id} onClick={() => setActiveId(t.id)} style={{ background: activeId === t.id ? t.color : "transparent", border: `1px solid ${t.color}`, borderRadius: 4, padding: "6px 14px", color: activeId === t.id ? "#000" : t.color, cursor: "pointer", fontWeight: 700, fontSize: 13, fontFamily: "'Rajdhani'" }}>
-            {t.short}{t.id === mti ? " ★" : ""}
+
+      {/* ── Tabs ── */}
+      <div style={{ background: '#0a0b12', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 0, padding: '0 clamp(16px,4vw,48px)' }}>
+        {[['squad', 'SQUADS'], ['leaderboard', 'LEADERBOARD']].map(([key, label]) => (
+          <button key={key} className="res-tab-btn" onClick={() => setTab(key)}
+            style={{ background: tab === key ? CARD : 'transparent', color: tab === key ? GOLD : '#555', borderBottom: tab === key ? `2px solid ${GOLD}` : '2px solid transparent' }}>
+            {label}
           </button>
         ))}
       </div>
-      <div id="capture-results" style={{ maxWidth: 1000, margin: "0 auto", animation: "fadeUp .3s ease-out", background: BG, padding: 20, borderRadius: 16 }}>
-        <div style={{ display: "flex", gap: 14, marginBottom: 18, flexWrap: "wrap" }}>
-          <div style={{ background: `linear-gradient(135deg, ${CARD}, #0A0D15)`, border: `1px solid ${GOLD}40`, borderRadius: 12, padding: "20px", flex: 1, display: "flex", flexDirection: "column", gap: 10, boxShadow: `0 8px 30px ${GOLD}15` }}>
-            <div style={{ fontSize: 13, color: GOLD, letterSpacing: 3, fontWeight: 700 }}>{team?.name}</div>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 38, color: "#fff", letterSpacing: 2 }}>{playingXI.length === 11 ? "FINAL PLAYING XI" : "FULL SQUAD"}</div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px dashed ${BORDER}`, paddingTop: 10, marginTop: 4 }}>
-              <span style={{ fontSize: 12, color: "#aaa" }}>REMAINING PURSE</span>
-              <strong style={{ color: GOLD, fontSize: 16 }}>{fmt(gs.purses[activeId])}</strong>
-            </div>
-          </div>
-        </div>
-        {displayList.length === 0 ? <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: "16px", flex: 1 }}>No players purchased by {team?.name}</div> : (
-          <div className="res-squad" style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 8 }}>
-            {displayList.map((p, i) => (
-              <div key={i} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 18 }}>{ROLE_EMOJI[p.role]}</span>
-                  <div><div style={{ fontWeight: 600, fontSize: 14, color: "#eee" }}>{p.name}</div><div style={{ fontSize: 12, color: ROLE_C[p.role], marginTop: 2 }}>{ROLE_L[p.role]}{p.overseas ? " · OS" : ""}</div></div>
-                </div>
-                <div style={{ textAlign: "right" }}><div style={{ color: GOLD, fontWeight: 700, fontSize: 16 }}>{fmt(p.soldFor)}</div></div>
-              </div>
-            ))}
-          </div>
+
+      <div style={{ padding: 'clamp(14px,2vh,24px) clamp(12px,4vw,40px)' }}>
+        {tab === 'squad' && (
+          <SquadTab
+            gs={gs} mti={mti} mode={mode}
+            activeId={activeId} setActiveId={setActiveId}
+            team={team} displayList={displayList} playingXI={playingXI} fullSquad={fullSquad}
+            spent={spent} soldCount={soldCount} unsoldCount={unsoldCount}
+            teamTotalRating={teamTotalRating} teamAvgRating={teamAvgRating}
+            shareText={shareText} shareWhatsApp={shareWhatsApp} downloadSheet={downloadSheet}
+          />
         )}
+        {tab === 'leaderboard' && <LeaderboardTab gs={gs} mode={mode} mti={mti} />}
       </div>
-      <div style={{ textAlign: "center", marginTop: 40, display: "flex", justifyContent: "center", gap: 16, flexWrap: "wrap" }}>
-        <button onClick={() => setShowAnalysis(true)} style={{ background: `linear-gradient(135deg,#6366f1,#4338ca)`, border: "none", borderRadius: 3, padding: "14px 30px", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'", boxShadow: "0 0 30px #6366f140" }}>AI TEAM ANALYSIS</button>
-        <button onClick={downloadSheet} style={{ background: "#22D3EE", border: "none", borderRadius: 3, padding: "14px 30px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>DOWNLOAD IMAGE</button>
-        <button onClick={shareWhatsApp} style={{ background: "#25D366", border: "none", borderRadius: 3, padding: "14px 30px", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>SHARE ON WHATSAPP</button>
-        <button onClick={onRestart} style={{ background: `linear-gradient(135deg, ${GOLD}, #9a7610)`, border: "none", borderRadius: 3, padding: "14px 36px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>PLAY AGAIN</button>
+
+      <div style={{ padding: '0 40px 40px', textAlign: 'center' }}>
+        <div style={{ fontSize: '10px', color: '#333', letterSpacing: '1px', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6' }}>
+          IPL Auction Online is a fan-made simulator. 
+          Data and ratings are attributed to <a href="https://www.iplt20.com" target="_blank" rel="noreferrer" style={{ color: GOLD, textDecoration: 'none' }}>iplt20.com</a> & <a href="https://cricapi.com" target="_blank" rel="noreferrer" style={{ color: GOLD, textDecoration: 'none' }}>CricAPI</a>.
+        </div>
       </div>
     </div>
   );
 }
 
-// ── AI Analysis Screen (ported from App.jsx) ──
-function GeminiAnalysisScreen({ gs, onBack }) {
-  const [status, setStatus] = useState("idle");
-  const [analysis, setAnalysis] = useState(null);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [expanded, setExpanded] = useState({});
-
-  const toggleExpand = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
-
-  async function runAnalysis() {
-    if (!GROQ_API_KEY) {
-      setErrorMsg("API key missing. Add NEXT_PUBLIC_GROQ_API_KEY OR use the fallback.");
-      setStatus("error");
-      return;
-    }
-    setStatus("loading");
-    setErrorMsg("");
-
-    const teamSummaries = TEAMS.map(t => {
-      const xi = gs.playingXI?.[t.id] || gs.squads?.[t.id]?.slice(0, 11) || [];
-      const lines = xi.map(p => `    - ${p.name} (${p.role === "WK" ? "Wicket-Keeper" : p.role === "BAT" ? "Batter" : p.role === "BOWL" ? "Bowler" : "All-Rounder"}${p.overseas ? ", Overseas" : ""}) -- Rs.${p.soldFor?.toFixed(2) || p.base}Cr`).join("\n");
-      const purseLeft = (gs.purses?.[t.id] || 0).toFixed(2);
-      return `**${t.name} (${t.id})**\nPlaying XI:\n${lines || "  No players"}\nRemaining Purse: Rs.${purseLeft}Cr`;
-    }).join("\n\n---\n\n");
-
-    const prompt = `You are a world-class IPL cricket analyst with deep knowledge of IPL 2025 conditions. Based on the IPL Auction results below, critically analyze and rank ALL 10 teams from BEST (1st) to WORST (10th).
-
-Consider the Playing XI composition, assigning specific batting positions and bowling roles. Evaluate their balance, overseas slot usage (max 4), and overall squad synergy.
-
-Here are the 10 Final Playing XIs:
-
-${teamSummaries}
-
-CRITICAL RULES:
-1. ABSOLUTELY NO EMOJIS anywhere in the response.
-2. RESPOND IN EXACT JSON FORMAT (no markdown wrapper, pure JSON only).
-
-{
-  "rankings": [
-    {
-      "rank": 1,
-      "teamId": "TEAM_ID",
-      "teamName": "Full Team Name",
-      "score": 92,
-      "verdict": "One sentence championship-level verdict",
-      "strengths": ["Strength 1 (NO EMOJIS)", "Strength 2"],
-      "weaknesses": ["Weakness 1", "Weakness 2"],
-      "whyWins": "Detailed explanation of why this team is the strongest based on their assigned roles in the XI."
-    }
-  ],
-  "overallSummary": "Summary of the auction landscape. NO EMOJIS."
-}
-
-Rank ALL 10 teams. DO NOT USE A SINGLE EMOJI IN YOUR OUTPUT. Pure JSON only.`;
-
-    try {
-      const groq = new Groq({
-        apiKey: GROQ_API_KEY,
-        dangerouslyAllowBrowser: true
-      });
-
-      const response = await groq.chat.completions.create({
-        messages: [{ role: "user", content: prompt }],
-        model: "llama-3.3-70b-versatile",
-        temperature: 0.2,
-        response_format: { type: "json_object" }
-      });
-
-      const text = response.choices[0]?.message?.content || "";
-      const jsonStr = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      const parsed = JSON.parse(jsonStr);
-      setAnalysis(parsed);
-      setStatus("done");
-    } catch (e) {
-      console.error("Groq AI error:", e);
-      setErrorMsg(e.message || "Failed to get analysis.");
-      setStatus("error");
-    }
-  }
-
-  useEffect(() => { runAnalysis(); }, []);
-
-  const teamColor = (id) => TEAMS.find(t => t.id === id)?.color || "#888";
-
+// ─────────────────────────────────────────────────────────────────────────────
+// Squad Tab
+// ─────────────────────────────────────────────────────────────────────────────
+function SquadTab({ gs, mti, mode, activeId, setActiveId, team, displayList, playingXI, fullSquad, spent, soldCount, unsoldCount, teamTotalRating, teamAvgRating, shareText, shareWhatsApp, downloadSheet }) {
   return (
-    <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Rajdhani',sans-serif", padding: "clamp(14px,3vh,28px)" }}>
-      <style>{`
-        @keyframes fadeUpG{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-        @keyframes pulseG{0%,100%{opacity:1}50%{opacity:.35}}
-        @keyframes spinG{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-        @keyframes rankInG{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
-        .gem-card{transition:transform .2s,box-shadow .2s;cursor:pointer}
-        .gem-card:hover{transform:translateY(-3px)!important}
-      `}</style>
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28, flexWrap: "wrap", gap: 12, animation: "fadeUpG .4s ease-out" }}>
-        <div>
-          <div style={{ fontFamily: "'Bebas Neue'", fontSize: "clamp(26px,4vw,48px)", color: GOLD, letterSpacing: 6, lineHeight: 1 }}>AI TEAM ANALYSIS</div>
-          <div style={{ color: "#444", fontSize: 11, letterSpacing: 4, marginTop: 4 }}>POWERED BY ADVANCED AI · IPL 2025 CONDITIONS</div>
-        </div>
-        <button onClick={onBack} style={{ background: "transparent", border: `1px solid ${GOLD}50`, borderRadius: 6, padding: "10px 22px", color: GOLD, fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>
-          ← BACK TO RESULTS
-        </button>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+      {/* ── Team selector ── */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
+        {TEAMS.map(t => (
+          <button key={t.id} className="res-team-pill"
+            onClick={() => setActiveId(t.id)}
+            style={{ background: activeId === t.id ? t.color : 'transparent', border: `1px solid ${t.color}`, color: activeId === t.id ? '#000' : t.color }}>
+            {t.short}{t.id === mti ? ' (YOU)' : ''}
+          </button>
+        ))}
       </div>
 
-      {status === "loading" && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: 28 }}>
-          <div style={{ width: 70, height: 70, border: `4px solid ${GOLD}22`, borderTop: `4px solid ${GOLD}`, borderRadius: "50%", animation: "spinG 1s linear infinite" }} />
-          <div style={{ fontFamily: "'Bebas Neue'", fontSize: 26, color: GOLD, letterSpacing: 4, animation: "pulseG 1.5s infinite" }}>AI IS ANALYZING YOUR TEAMS...</div>
-          <div style={{ color: "#444", fontSize: 13, letterSpacing: 2, maxWidth: 420, textAlign: "center" }}>
-            Evaluating squad balance, IPL 2025 form, overseas usage, death bowling and powerplay specialists across all 10 franchises...
+      {/* ── Team summary card ── */}
+      <div className="res-card" style={{ background: `linear-gradient(135deg,${CARD},#0a0d15)`, border: `1px solid ${GOLD}30`, borderRadius: 14, padding: 20, marginBottom: 18, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+        <div>
+          <div style={{ color: GOLD, fontSize: 12, letterSpacing: 3, fontWeight: 700 }}>{team?.name}</div>
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: 30, color: '#fff', letterSpacing: 2 }}>
+            {playingXI.length > 0
+              ? playingXI.length === 11 ? 'FINAL PLAYING XI' : `PLAYING XI (${playingXI.length}/11)`
+              : 'NO PLAYERS ACQUIRED'}
           </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            {TEAMS.map((t, i) => (<div key={t.id} style={{ width: 8, height: 8, borderRadius: "50%", background: t.color, animation: `pulseG ${0.8 + i * 0.1}s infinite` }} />))}
-          </div>
-        </div>
-      )}
-
-      {status === "error" && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: 20, animation: "fadeUpG .4s ease-out" }}>
-          <div style={{ fontSize: 52 }}>⚠️</div>
-          <div style={{ fontFamily: "'Bebas Neue'", fontSize: 30, color: "#ef4444", letterSpacing: 4 }}>ANALYSIS FAILED</div>
-          <div style={{ background: "#0d0d0d", border: "1px solid #ef444428", borderRadius: 12, padding: "18px 28px", maxWidth: 520, textAlign: "center" }}>
-            <div style={{ color: "#ef4444", fontSize: 13, lineHeight: 1.7 }}>{errorMsg}</div>
-            {!CLAUDE_API_KEY && (
-              <div style={{ marginTop: 14, padding: "10px 16px", background: "#1a1a1a", borderRadius: 8, fontFamily: "monospace", fontSize: 12, color: GOLD, letterSpacing: 1 }}>
-                NEXT_PUBLIC_CLAUDE_API_KEY=your_key_here
-              </div>
-            )}
-          </div>
-          <button onClick={runAnalysis} style={{ background: `linear-gradient(135deg,${GOLD},#9a7610)`, border: "none", borderRadius: 6, padding: "12px 32px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: 14, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>
-            RETRY ANALYSIS
-          </button>
-        </div>
-      )}
-
-      {status === "done" && analysis && (
-        <div style={{ animation: "fadeUpG .5s ease-out" }}>
-          {analysis.overallSummary && (
-            <div style={{ background: `${GOLD}09`, border: `1px solid ${GOLD}28`, borderRadius: 12, padding: "18px 24px", maxWidth: 900, margin: "0 auto 28px" }}>
-              <div style={{ fontSize: 10, color: GOLD, letterSpacing: 4, fontWeight: 700, marginBottom: 8 }}>🏏 EXPERT SUMMARY</div>
-              <div style={{ color: "#ccc", fontSize: 15, lineHeight: 1.75 }}>{analysis.overallSummary}</div>
-            </div>
+          {fullSquad.length > 0 && playingXI.length !== fullSquad.length && (
+            <div style={{ color: '#555', fontSize: 11, letterSpacing: 2 }}>{fullSquad.length} IN SQUAD · {playingXI.length} IN XI</div>
           )}
+        </div>
+        <div style={{ display: 'flex', gap: 28, alignItems: 'center', flexWrap: 'wrap' }}>
+          <StatBubble label="TOTAL RATING" val={`${teamTotalRating} PTS`} color={GOLD} />
+          <StatBubble label="AVG RATING" val={`${teamAvgRating} PTS`} color="#22D3EE" />
+          <StatBubble label="PURSE USED" val={fmt(spent)} color="#a78bfa" />
+          <StatBubble label="PURSE LEFT" val={fmt(gs.purses?.[activeId] || 0)} color="#4ade80" />
+        </div>
+      </div>
 
-          {analysis.rankings?.[0] && (() => {
-            const champ = analysis.rankings[0];
-            const tc = teamColor(champ.teamId);
+      {/* ── Role breakdown warning if < 11 ── */}
+      {playingXI.length < 11 && playingXI.length > 0 && (
+        <div style={{ background: '#1a0e00', border: '1px solid #f59e0b50', borderRadius: 8, padding: '10px 16px', marginBottom: 14, color: '#f59e0b', fontSize: 12, letterSpacing: 2 }}>
+          Only {playingXI.length} players selected — a full XI requires 11. The best available players from this squad are shown.
+        </div>
+      )}
+      {playingXI.length === 0 && (
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 24, textAlign: 'center', color: '#555', fontSize: 14, letterSpacing: 2, marginBottom: 18 }}>
+          No players were acquired by {team?.name} — they had ₹{gs.purses?.[activeId] || 120} Cr remaining.
+        </div>
+      )}
+
+      {/* ── Player grid ── */}
+      {displayList.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8, marginBottom: 24 }}>
+          {displayList.map((p, i) => {
+            const pName = p.name || p;
+            const rating = getPlayerRating(pName, mode);
             return (
-              <div style={{ background: `linear-gradient(135deg,${tc}14,${GOLD}06,${CARD})`, border: `2px solid ${GOLD}`, borderRadius: 16, padding: "26px 30px", maxWidth: 900, margin: "0 auto 24px", boxShadow: `0 0 60px ${GOLD}1a`, animation: "fadeUpG .6s ease-out" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16, flexWrap: "wrap" }}>
-                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 16, background: `linear-gradient(135deg,${GOLD},#9a7610)`, color: "#000", borderRadius: 6, padding: "4px 16px", letterSpacing: 2 }}>🥇 #1 CHAMPION</div>
-                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 34, color: GOLD, letterSpacing: 4 }}>{champ.teamName}</div>
-                  <div style={{ marginLeft: "auto", background: `${GOLD}14`, border: `1px solid ${GOLD}40`, borderRadius: 10, padding: "10px 18px", textAlign: "center" }}>
-                    <div style={{ fontFamily: "'Bebas Neue'", fontSize: 36, color: GOLD }}>{champ.score}</div>
-                    <div style={{ fontSize: 9, color: "#888", letterSpacing: 2 }}>SCORE/100</div>
+              <div key={i} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: ROLE_C[p.role] + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: ROLE_C[p.role], fontWeight: 700 }}>{p.role[0]}</div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#eee' }}>{pName}</div>
+                    <div style={{ fontSize: 11, color: ROLE_C[p.role], marginTop: 1 }}>
+                      {ROLE_L[p.role] || p.role}{p.overseas ? ' · ✈ OS' : ''}
+                    </div>
                   </div>
                 </div>
-                <div style={{ color: "#e0c97b", fontSize: 15, fontStyle: "italic", marginBottom: 16, lineHeight: 1.65 }}>&quot;{champ.verdict}&quot;</div>
-                {champ.whyWins && (
-                  <div style={{ background: "#ffffff05", borderRadius: 10, padding: "14px 18px", borderLeft: `4px solid ${GOLD}`, marginBottom: 16 }}>
-                    <div style={{ fontSize: 10, color: GOLD, letterSpacing: 3, fontWeight: 700, marginBottom: 8 }}>WHY THIS TEAM WINS IPL 2025</div>
-                    <div style={{ color: "#bbb", fontSize: 14, lineHeight: 1.8 }}>{champ.whyWins}</div>
-                  </div>
-                )}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  {champ.strengths?.length > 0 && (
-                    <div style={{ background: "#00cc6608", border: "1px solid #00cc6620", borderRadius: 10, padding: "14px 16px" }}>
-                      <div style={{ fontSize: 10, color: "#00cc88", letterSpacing: 3, marginBottom: 8, fontWeight: 700 }}>✅ STRENGTHS</div>
-                      {champ.strengths.map((s, i) => <div key={i} style={{ color: "#aaa", fontSize: 13, marginBottom: 5, paddingLeft: 10, borderLeft: "2px solid #00cc8840" }}>• {s}</div>)}
-                    </div>
-                  )}
-                  {champ.weaknesses?.length > 0 && (
-                    <div style={{ background: "#ff444408", border: "1px solid #ff444422", borderRadius: 10, padding: "14px 16px" }}>
-                      <div style={{ fontSize: 10, color: "#ff6b6b", letterSpacing: 3, marginBottom: 8, fontWeight: 700 }}>⚠️ VULNERABILITIES</div>
-                      {champ.weaknesses.map((w, i) => <div key={i} style={{ color: "#aaa", fontSize: 13, marginBottom: 5, paddingLeft: 10, borderLeft: "2px solid #ff444440" }}>• {w}</div>)}
-                    </div>
-                  )}
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ color: GOLD, fontWeight: 700, fontSize: 15 }}>{p.soldFor ? fmt(p.soldFor) : (p.base ? fmt(p.base) : '—')}</div>
+                  <div style={{ color: '#444', fontSize: 10, letterSpacing: 1 }}>{rating} PTS</div>
                 </div>
               </div>
             );
-          })()}
-
-          <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 16, color: "#444", letterSpacing: 4, marginBottom: 6 }}>ALL TEAM RANKINGS — CLICK TO EXPAND</div>
-            {analysis.rankings?.map((r, idx) => {
-              const tc = teamColor(r.teamId);
-              const isOpen = expanded[r.teamId];
-              const borderC = idx === 0 ? GOLD : idx === 1 ? "#aaa" : idx === 2 ? "#CD7F32" : BORDER;
-              return (
-                <div key={r.teamId} className="gem-card" onClick={() => toggleExpand(r.teamId)}
-                  style={{ background: CARD, border: `1px solid ${borderC}`, borderRadius: 12, overflow: "hidden", animation: `rankInG ${0.15 + idx * 0.06}s ease-out both` }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", background: idx === 0 ? `${GOLD}07` : "transparent" }}>
-                    <div style={{ fontFamily: "'Bebas Neue'", fontSize: 26, minWidth: 40, textAlign: "center", lineHeight: 1, color: idx === 0 ? GOLD : idx === 1 ? "#aaa" : idx === 2 ? "#CD7F32" : "#555" }}>
-                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${r.rank}`}
-                    </div>
-                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: tc, boxShadow: `0 0 8px ${tc}`, flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: "'Bebas Neue'", fontSize: 20, color: tc, letterSpacing: 2, lineHeight: 1 }}>{r.teamName}</div>
-                      <div style={{ color: "#555", fontSize: 12, marginTop: 2, letterSpacing: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.verdict}</div>
-                    </div>
-                    <div style={{ textAlign: "center", minWidth: 52, flexShrink: 0 }}>
-                      <div style={{ fontFamily: "'Bebas Neue'", fontSize: 26, color: idx === 0 ? GOLD : idx === 1 ? "#aaa" : idx === 2 ? "#CD7F32" : "#555" }}>{r.score}</div>
-                      <div style={{ fontSize: 8, color: "#444", letterSpacing: 2 }}>/100</div>
-                    </div>
-                    <div style={{ color: "#444", fontSize: 16, marginLeft: 6, flexShrink: 0 }}>{isOpen ? "▲" : "▼"}</div>
-                  </div>
-                  {isOpen && (
-                    <div style={{ padding: "0 18px 16px", borderTop: `1px solid ${BORDER}`, animation: "fadeUpG .2s ease-out" }}>
-                      {r.whyWins && (
-                        <div style={{ margin: "14px 0 12px", background: "#ffffff05", borderRadius: 8, padding: "12px 16px", borderLeft: `3px solid ${tc}` }}>
-                          <div style={{ fontSize: 9, color: tc, letterSpacing: 3, fontWeight: 700, marginBottom: 6 }}>DETAILED ANALYSIS</div>
-                          <div style={{ color: "#bbb", fontSize: 13, lineHeight: 1.75 }}>{r.whyWins}</div>
-                        </div>
-                      )}
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-                        {r.strengths?.length > 0 && (
-                          <div style={{ background: "#00cc6606", border: "1px solid #00cc6618", borderRadius: 8, padding: "10px 14px" }}>
-                            <div style={{ fontSize: 9, color: "#00cc88", letterSpacing: 3, marginBottom: 6, fontWeight: 700 }}>STRENGTHS</div>
-                            {r.strengths.map((s, i) => <div key={i} style={{ color: "#999", fontSize: 12, marginBottom: 4 }}>• {s}</div>)}
-                          </div>
-                        )}
-                        {r.weaknesses?.length > 0 && (
-                          <div style={{ background: "#ff444406", border: "1px solid #ff444418", borderRadius: 8, padding: "10px 14px" }}>
-                            <div style={{ fontSize: 9, color: "#ff6b6b", letterSpacing: 3, marginBottom: 6, fontWeight: 700 }}>WEAKNESSES</div>
-                            {r.weaknesses.map((w, i) => <div key={i} style={{ color: "#999", fontSize: 12, marginBottom: 4 }}>• {w}</div>)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{ textAlign: "center", marginTop: 32, color: "#2a2a2a", fontSize: 11, letterSpacing: 2 }}>
-            Analysis by Advanced AI · Based on IPL 2025 player form & team balance
-          </div>
+          })}
         </div>
       )}
+
+      {/* ── Action buttons ── */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <ActionBtn onClick={downloadSheet} bg="#22D3EE" color="#000" label="⬇ DOWNLOAD (TXT)" />
+        <ActionBtn onClick={shareWhatsApp} bg="#25D366" color="#fff" label="💬 SHARE ON WHATSAPP" />
+        <ActionBtn onClick={shareText} bg="#6366f1" color="#fff" label="🔗 COPY / SHARE" />
+      </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Leaderboard Tab
+// ─────────────────────────────────────────────────────────────────────────────
+function LeaderboardTab({ gs, mode, mti }) {
+  const [rankings, setRankings] = useState([]);
+  const [expanded, setExpanded] = useState({});
+
+  useEffect(() => {
+    const teamsPayload = TEAMS.map(t => {
+      const squad = gs.squads?.[t.id] || [];
+      const rawXI = gs.playingXI?.[t.id] || [];
+
+      // If the submitted XI has between 1–11 players, use it; otherwise auto-select
+      let xi;
+      if (rawXI.length >= 1 && rawXI.length <= 11) {
+        xi = rawXI.map(p => (typeof p === 'string' ? p : p.name));
+      } else if (squad.length > 0) {
+        xi = selectPlayingXI(squad, mode).map(p => p.name);
+      } else {
+        xi = [];
+      }
+
+      return {
+        teamId:    t.id,
+        teamName:  t.name,
+        squad,
+        playingXI: xi,
+      };
+    });
+
+    const results = calculateLeaderboard(teamsPayload, mode);
+    setRankings(results);
+    // Auto-expand top 3
+    if (results.length > 0) {
+      const top3 = Object.fromEntries(results.slice(0, 3).map(r => [r.teamId, true]));
+      setExpanded(top3);
+    }
+  }, [gs, mode]);
+
+  const toggle = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+  const tc     = (id) => TEAMS.find(t => t.id === id)?.color || '#888';
+
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      {/* Formula explanation */}
+      <div style={{ background: '#0a0d15', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 18px', marginBottom: 20, fontSize: 12, color: '#555', letterSpacing: 1, lineHeight: 1.8 }}>
+        <span style={{ color: GOLD, fontWeight: 700 }}>HOW SCORES ARE CALCULATED</span>
+        <br />
+        Each team's <strong style={{ color: '#aaa' }}>Playing XI</strong> is evaluated: every player has a pre-set rating (out of 100) based on IPL 2025 performance &amp; expert analysis.
+        The <strong style={{ color: '#aaa' }}>Total Score</strong> is the sum of all 11 player ratings. The <strong style={{ color: '#aaa' }}>Average Score</strong> is Total ÷ XI size.
+        Selection rules: Best-rated 11 players, max 4 overseas, at least 1 wicket-keeper.
+        Teams that submitted fewer than 11 players are scored on their submitted XI size.
+        <br />
+        <span style={{ color: '#333' }}>Rating scale: 90–100 Elite · 80–89 Excellent · 70–79 Good · 60–69 Average · 50–59 Below Avg · &lt;50 Reserve</span>
+      </div>
+
+      <div style={{ fontFamily: "'Bebas Neue'", fontSize: 14, color: '#333', letterSpacing: 4, marginBottom: 10 }}>ALL TEAM RANKINGS — CLICK TO EXPAND XI</div>
+
+      {rankings.length === 0 && (
+        <div style={{ color: '#555', textAlign: 'center', padding: 40, fontSize: 14, letterSpacing: 2 }}>Calculating leaderboard…</div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {rankings.map((r, idx) => {
+          const isOpen = !!expanded[r.teamId];
+          const color  = tc(r.teamId);
+          const borderC = medalColor(idx);
+          const isMyTeam = r.teamId === mti;
+          const logo = TEAM_LOGOS[r.teamId];
+
+          return (
+            <div key={r.teamId}
+              onClick={() => toggle(r.teamId)}
+              style={{ background: CARD, border: `1px solid ${isMyTeam ? color : borderC}`, borderRadius: 12, overflow: 'hidden', cursor: 'pointer', transition: 'transform .15s', boxShadow: isMyTeam ? `0 0 20px ${color}20` : 'none' }}>
+              {/* Row header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', background: idx === 0 ? `${GOLD}06` : 'transparent' }}>
+                <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, minWidth: 40, textAlign: 'center', color: medalColor(idx), lineHeight: 1 }}>
+                  {idx < 3 ? MEDAL[idx] : `#${idx + 1}`}
+                </div>
+                {/* Team logo */}
+                {logo ? (
+                  <img
+                    src={logo}
+                    alt={r.teamId}
+                    style={{ width: 40, height: 40, objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 2px 8px rgba(0,0,0,.7))' }}
+                    onError={e => { e.target.style.display='none'; e.target.previousSibling && (e.target.previousSibling.style.display='block'); }}
+                  />
+                ) : (
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}`, flexShrink: 0 }} />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 18, color, letterSpacing: 2, lineHeight: 1 }}>
+                    {r.teamName}{isMyTeam ? ' (YOU)' : ''}
+                  </div>
+                  <div style={{ color: '#444', fontSize: 11, marginTop: 2, letterSpacing: 1 }}>
+                    Avg: <strong style={{ color: '#777' }}>{r.averageScore}</strong> pts · {r.playingXI.length} players in XI
+                  </div>
+                </div>
+                {/* Score */}
+                <div style={{ textAlign: 'center', minWidth: 70, flexShrink: 0 }}>
+                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 28, color: medalColor(idx), lineHeight: 1 }}>{r.totalScore}</div>
+                  <div style={{ fontSize: 8, color: '#333', letterSpacing: 2 }}>TOTAL PTS</div>
+                </div>
+                {/* Rating bar */}
+                <div style={{ minWidth: 80, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <div style={{ height: 4, borderRadius: 2, background: '#111', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.min(100, (r.averageScore / 100) * 100)}%`, background: color, borderRadius: 2, transition: 'width .5s' }} />
+                  </div>
+                  <div style={{ fontSize: 9, color: '#333', letterSpacing: 1 }}>TEAM STRENGTH</div>
+                </div>
+                <div style={{ color: '#444', fontSize: 14, marginLeft: 4 }}>{isOpen ? '▲' : '▼'}</div>
+              </div>
+
+              {/* Expanded XI scorecard */}
+              {isOpen && (
+                <div style={{ padding: '0 18px 16px', borderTop: `1px solid ${BORDER}` }}>
+                  <div style={{ margin: '14px 0 10px', background: '#ffffff04', borderRadius: 8, padding: '12px 16px', borderLeft: `3px solid ${color}` }}>
+                    <div style={{ fontSize: 10, color, letterSpacing: 3, fontWeight: 700, marginBottom: 10 }}>PLAYING XI SCORECARD</div>
+                    {r.playerScores.length === 0 ? (
+                      <div style={{ color: '#555', fontSize: 12 }}>No players acquired by this team.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px' }}>
+                        {r.playerScores.map((p, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #1a1a1a', paddingBottom: 4 }}>
+                            <div>
+                              <span style={{ color: '#bbb', fontSize: 13 }}>{p.name}</span>
+                              {p.rating >= 85 && <span style={{ fontSize: 9, color: GOLD, marginLeft: 6, letterSpacing: 1 }}>ELITE</span>}
+                            </div>
+                            <span style={{ color: p.rating >= 85 ? GOLD : p.rating >= 70 ? '#4ade80' : '#888', fontSize: 13, fontFamily: "'Bebas Neue'", letterSpacing: 1, flexShrink: 0 }}>
+                              {p.rating} PTS
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#444', fontSize: 11, letterSpacing: 2 }}>TEAM TOTAL</span>
+                      <span style={{ color: idx === 0 ? GOLD : '#888', fontFamily: "'Bebas Neue'", fontSize: 16, letterSpacing: 2 }}>{r.totalScore} PTS</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Full leaderboard download */}
+      <div style={{ textAlign: 'center', marginTop: 24 }}>
+        <ActionBtn
+          onClick={() => {
+            const lines = rankings.map((r, i) => {
+              const medal = i < 3 ? ['GOLD', 'SILVER', 'BRONZE'][i] : `#${i + 1}  `;
+              return `${medal.padEnd(8)} ${r.teamName.padEnd(35)} ${r.totalScore} pts (avg ${r.averageScore})`;
+            }).join('\n');
+            const text = `IPL AUCTION LEADERBOARD\n${'═'.repeat(60)}\n${lines}\n\n[Generated by Gavel — IPL Auction Platform]`;
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = 'IPL-Auction-Leaderboard.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          bg="#22D3EE" color="#000" label="⬇ DOWNLOAD FULL LEADERBOARD" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Small helpers ─────────────────────────────────────────────────────────
+function StatBubble({ label, val, color }) {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ color, fontFamily: "'Bebas Neue'", fontSize: 20, letterSpacing: 1 }}>{val}</div>
+      <div style={{ color: '#444', fontSize: 9, letterSpacing: 3 }}>{label}</div>
+    </div>
+  );
+}
+
+function ActionBtn({ onClick, bg, color, label }) {
+  return (
+    <button onClick={onClick} style={{ background: bg, border: 'none', borderRadius: 6, padding: '12px 24px', color, fontWeight: 900, cursor: 'pointer', fontSize: 12, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>
+      {label}
+    </button>
   );
 }

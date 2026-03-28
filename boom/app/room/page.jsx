@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useGame } from '../GameContext';
 
-const GOLD = '#E8B84B';
-const CYAN = '#22D3EE';
-const BG   = '#080808';
+const GOLD  = '#E8B84B';
+const CYAN  = '#22D3EE';
+const GREEN = '#4ade80';
+const BG    = '#080808';
+const CARD  = '#0d0d0d';
 
 const TEAMS = [
   { id:'CSK',  name:'Chennai Super Kings',        short:'CSK',  color:'#F9CA24' },
@@ -21,8 +23,226 @@ const TEAMS = [
   { id:'LSG',  name:'Lucknow Super Giants',        short:'LSG',  color:'#81D4FA' },
 ];
 
-export default function RoomPage() {
+// ── Global styles ───────────────────────────────────────────────────────────
+const globalStyles = `
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;600;700&family=Courier+Prime:wght@400;700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: ${BG}; }
+
+  @keyframes fadeUp    { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
+  @keyframes slideIn   { from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:none} }
+  @keyframes fadeIn    { from{opacity:0} to{opacity:1} }
+  @keyframes shimmer   { 0%{background-position:-200% center} 100%{background-position:200% center} }
+  @keyframes floatOrb  { 0%{transform:translateY(0)rotate(0);opacity:0} 20%{opacity:.12} 80%{opacity:.12} 100%{transform:translateY(-800px)rotate(360deg);opacity:0} }
+  @keyframes scrollMq  { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+  @keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  .rp-particles { position:fixed; top:0;left:0;right:0;bottom:0; overflow:hidden; pointer-events:none; z-index:0; }
+  .particle { position:absolute; border-radius:50%; background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.8),rgba(232,184,75,.4) 40%,rgba(0,0,0,0) 80%); opacity:0; animation:floatOrb linear infinite; }
+  .p1{left:10%;width:12px;height:12px;animation-duration:15s}
+  .p2{left:30%;width:8px;height:8px;animation-duration:22s;animation-delay:3s;filter:hue-rotate(180deg)}
+  .p3{left:50%;width:16px;height:16px;animation-duration:18s;animation-delay:7s}
+  .p4{left:70%;width:10px;height:10px;animation-duration:26s;animation-delay:1s}
+  .p5{left:85%;width:14px;height:14px;animation-duration:20s;animation-delay:5s;filter:hue-rotate(180deg)}
+
+  .rp-nav {
+    position:fixed; top:0;left:0;right:0; z-index:100;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 24px; border-bottom:1px solid #111;
+    background:${BG}ee; backdrop-filter:blur(10px);
+  }
+  .rp-brand { font-family:'Bebas Neue',sans-serif; font-size:1.1rem; letter-spacing:.3em; color:#333; }
+  .rp-brand span { color:${GOLD}; }
+  .rp-back { background:none; border:1px solid #222; color:#555; font-family:'Barlow Condensed',sans-serif; font-weight:600; font-size:12px; letter-spacing:.15em; padding:7px 14px; cursor:pointer; transition:color .2s,border-color .2s; border-radius:4px; }
+  .rp-back:hover { color:#fff; border-color:#555; }
+
+  .rp-eyebrow {
+    font-family:'Courier Prime',monospace; font-weight:700; font-size:11px; letter-spacing:4px; text-transform:uppercase; display:block; margin-bottom:10px;
+    background:linear-gradient(90deg,${GOLD} 0%,#fff 50%,${GOLD} 100%); background-size:200% auto;
+    color:transparent; -webkit-background-clip:text; background-clip:text; animation:shimmer 3s linear infinite;
+  }
+  .rp-h1 { font-family:'Bebas Neue',sans-serif; font-size:clamp(2.5rem,7vw,4.5rem); letter-spacing:-.02em; line-height:.9; color:#fff; }
+  .rp-h1 span { color:${GOLD}; }
+  .rp-live-counter { display:inline-flex; align-items:center; gap:8px; font-family:'Barlow Condensed',sans-serif; font-size:12px; letter-spacing:1px; color:${CYAN}; background:rgba(34,211,238,.1); padding:4px 10px; border-radius:4px; border:1px solid rgba(34,211,238,.2); margin:10px 0 22px; font-weight:700; }
+  .rp-live-dot { width:6px; height:6px; border-radius:50%; background:${CYAN}; box-shadow:0 0 8px ${CYAN}; animation:pulse 1.5s ease-in-out infinite; }
+
+  /* ── Choice cards (home screen) ── */
+  .rp-choices { display:grid; grid-template-columns:1fr 1fr; gap:16px; width:100%; }
+  @media(max-width:560px){ .rp-choices{grid-template-columns:1fr} }
+  .rp-choice { padding:26px 22px; border:1px solid #1a1a1a; cursor:pointer; background:#0a0a0a; transition:all .3s cubic-bezier(.175,.885,.32,1.275); position:relative; overflow:hidden; border-radius:10px; }
+  .rp-choice.create-card:hover { transform:translateY(-6px); border-color:${GOLD}; box-shadow:0 12px 32px rgba(232,184,75,.18); }
+  .rp-choice.join-card:hover   { transform:translateY(-6px); border-color:${CYAN}; box-shadow:0 12px 32px rgba(34,211,238,.18); }
+  .rp-choice-label { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:10px; letter-spacing:3px; text-transform:uppercase; margin-bottom:12px; }
+  .rp-choice-title { font-family:'Bebas Neue',sans-serif; font-size:1.85rem; color:#fff; margin-bottom:6px; }
+  .rp-choice-desc  { font-family:'Courier Prime',monospace; font-size:11px; color:#666; line-height:1.6; }
+
+  /* ── Form elements ── */
+  .rp-label { font-family:'Courier Prime',monospace; font-size:10px; letter-spacing:3px; color:#555; text-transform:uppercase; margin-bottom:7px; margin-top:22px; display:block; }
+  .rp-input { width:100%; padding:15px 16px; background:#0c0c0c; border-radius:6px; border:1px solid #1e1e1e; color:#fff; font-family:'Barlow Condensed',sans-serif; font-size:17px; letter-spacing:.06em; outline:none; transition:border-color .2s,box-shadow .2s; }
+  .rp-input:focus { border-color:${GOLD}; box-shadow:0 0 0 1px ${GOLD} inset; }
+  .rp-input::placeholder { color:#333; }
+  .rp-input.code-input { letter-spacing:.35em; font-family:'Bebas Neue',sans-serif; font-size:1.6rem; text-align:center; }
+  .rp-input.code-input:focus { border-color:${CYAN}; box-shadow:0 0 0 1px ${CYAN} inset; }
+
+  /* ── Toggle cards (tactile selection) ── */
+  .rp-toggle-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px; }
+  @media(max-width:480px) { .rp-toggle-grid { grid-template-columns:1fr; } }
+  .rp-toggle-card {
+    padding:16px 14px; border-radius:8px; cursor:pointer; border:1px solid #1e1e1e;
+    background:#0c0c0c; transition:all .18s ease; position:relative; overflow:hidden;
+    border-left:3px solid transparent;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .rp-toggle-card:hover { border-color:#333; background:#111; }
+  .rp-toggle-card.selected-gold { border-color:${GOLD}; border-left-color:${GOLD}; background:rgba(232,184,75,.07); }
+  .rp-toggle-card.selected-cyan { border-color:${CYAN}; border-left-color:${CYAN}; background:rgba(34,211,238,.07); }
+  .rp-toggle-card-title { font-family:'Bebas Neue',sans-serif; font-size:1.1rem; letter-spacing:.08em; color:#fff; }
+  .rp-toggle-card-sub   { font-family:'Courier Prime',monospace; font-size:9px; letter-spacing:1px; color:#555; }
+  .rp-toggle-check { position:absolute; top:8px; right:10px; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; transition:all .18s; }
+
+  /* ── Buttons ── */
+  .rp-btn { width:100%; padding:16px; background:${GOLD}; border:none; border-radius:6px; font-family:'Bebas Neue',sans-serif; font-size:1.3rem; letter-spacing:.1em; color:#000; cursor:pointer; margin-top:24px; transition:transform .2s,box-shadow .2s; display:flex; align-items:center; justify-content:center; gap:10px; }
+  .rp-btn:hover    { transform:translateY(-3px); box-shadow:0 8px 24px rgba(232,184,75,.4); }
+  .rp-btn:active   { transform:none; }
+  .rp-btn:disabled { opacity:.35; pointer-events:none; }
+  .rp-btn.cyan-btn { background:${CYAN}; }
+  .rp-btn.cyan-btn:hover { box-shadow:0 8px 24px rgba(34,211,238,.4); }
+
+  .rp-error { font-family:'Courier Prime',monospace; font-size:12px; color:#ef4444; margin-top:10px; padding:10px; background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3); border-radius:4px; letter-spacing:.04em; }
+  .rp-hr { height:1px; background:#131313; margin:20px 0; }
+
+  /* ── Room list items ── */
+  .rp-room-item { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:${CARD}; border:1px solid #181818; margin-bottom:8px; border-radius:8px; transition:border-color .2s; }
+  .rp-room-item:hover { border-color:#333; }
+  .rp-room-join-btn    { padding:8px 16px; background:rgba(34,211,238,.08); border:1px solid rgba(34,211,238,.3); color:${CYAN}; font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:12px; letter-spacing:.1em; cursor:pointer; transition:all .2s; border-radius:4px; }
+  .rp-room-join-btn:hover { background:${CYAN}; color:#000; }
+  .rp-room-rejoin-btn  { padding:8px 16px; background:rgba(232,184,75,.08); border:1px solid rgba(232,184,75,.3); color:${GOLD}; font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:12px; letter-spacing:.1em; cursor:pointer; transition:all .2s; border-radius:4px; }
+  .rp-room-rejoin-btn:hover { background:${GOLD}; color:#000; }
+
+  /* ── Join row ── */
+  .rp-join-row { display:flex; gap:10px; margin-top:5px; align-items:flex-start; }
+  .rp-join-row .rp-input { flex:1; min-width:0; }
+  .rp-join-row .rp-btn   { width:auto; padding:15px 24px; margin-top:0; font-size:1.4rem; flex-shrink:0; }
+
+  /* ── LOBBY ── 3-column layout ── */
+  .lobby-shell {
+    min-height:100vh; padding-top:60px; padding-bottom:80px;
+    display:grid; grid-template-columns:280px 1fr 260px; gap:0;
+    align-items:start; background:${BG};
+  }
+  @media(max-width:1100px){ .lobby-shell{grid-template-columns:240px 1fr 220px} }
+  @media(max-width:900px){  .lobby-shell{grid-template-columns:1fr; padding:60px 14px 88px} }
+
+  .lobby-col { padding:24px; height:100%; }
+  .lobby-col-left  { border-right:1px solid #111; }
+  .lobby-col-right { border-left:1px solid #111; }
+  .lobby-col-center { padding:24px 20px; }
+
+  .lobby-section-label { font-family:'Courier Prime',monospace; font-size:10px; letter-spacing:3px; color:#444; text-transform:uppercase; margin-bottom:12px; }
+
+  /* ── Code block ── */
+  .lobby-code-chip { font-family:'Bebas Neue',sans-serif; font-size:2.4rem; letter-spacing:.28em; color:${CYAN}; background:rgba(34,211,238,.06); border:1px solid rgba(34,211,238,.2); padding:8px 18px; border-radius:8px; cursor:pointer; transition:background .2s,box-shadow .2s; display:inline-block; }
+  .lobby-code-chip:hover { background:rgba(34,211,238,.12); box-shadow:0 0 16px rgba(34,211,238,.2); }
+  .lobby-copy-btn { padding:9px 16px; background:rgba(34,211,238,.1); border:1px solid rgba(34,211,238,.3); border-radius:6px; color:${CYAN}; font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:12px; letter-spacing:.1em; cursor:pointer; transition:all .2s; }
+  .lobby-copy-btn:hover { background:${CYAN}; color:#000; }
+  .lobby-wa-btn { padding:9px 16px; background:rgba(37,211,102,.1); border:1px solid rgba(37,211,102,.3); border-radius:6px; color:#25D366; font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:12px; letter-spacing:.1em; cursor:pointer; transition:all .2s; text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+  .lobby-wa-btn:hover { background:#25D366; color:#000; }
+
+  /* ── Player list ── */
+  .lobby-player-row { display:flex; align-items:center; gap:10px; padding:10px 12px; background:${CARD}; border:1px solid #181818; border-radius:8px; margin-bottom:6px; animation:slideIn .3s ease both; }
+  .lobby-player-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .lobby-player-badge { font-family:'Bebas Neue',sans-serif; font-size:.8rem; padding:2px 6px; border-radius:3px; letter-spacing:.05em; }
+
+  /* ── Franchise grid ── */
+  .franchise-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  @media(max-width:900px){ .franchise-grid{ grid-template-columns:repeat(5,1fr) } }
+  @media(max-width:560px){ .franchise-grid{ grid-template-columns:repeat(3,1fr) } }
+
+  .franchise-tile {
+    border-radius:10px; border:2px solid #1c1c1c; cursor:pointer; padding:16px 8px;
+    text-align:center; position:relative; overflow:hidden;
+    transition:transform .2s, border-color .2s, box-shadow .2s;
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+  }
+  .franchise-tile:not(.ft-taken):hover { transform:translateY(-6px); }
+  .franchise-tile.ft-mine  { transform:translateY(-4px); }
+  .franchise-tile.ft-taken { cursor:not-allowed; opacity:.5; filter:grayscale(0.8) brightness(0.7); }
+  .franchise-tile .taken-overlay {
+    position:absolute; inset:0; background:rgba(0,0,0,.4);
+    z-index:2;
+  }
+
+  .franchise-short { font-family:'Bebas Neue',sans-serif; font-size:1.4rem; letter-spacing:.04em; }
+  .franchise-name  { font-family:'Courier Prime',monospace; font-size:7px; line-height:1.3; color:#666; }
+  .franchise-mine-badge { font-family:'Courier Prime',monospace; font-size:8px; letter-spacing:1px; font-weight:700; }
+
+  /* ── RIGHT col stats ── */
+  .lobby-stat-card { background:${CARD}; border:1px solid #181818; border-radius:10px; padding:16px; margin-bottom:10px; }
+  .lobby-stat-val  { font-family:'Bebas Neue',sans-serif; font-size:1.8rem; letter-spacing:.05em; line-height:1; }
+  .lobby-stat-lbl  { font-family:'Courier Prime',monospace; font-size:9px; letter-spacing:2px; color:#444; margin-top:3px; }
+
+  /* ── Fixed bottom start bar ── */
+  .lobby-bottom-bar {
+    position:fixed; bottom:0; left:0; right:0; z-index:50;
+    background:${BG}f0; border-top:1px solid #111; backdrop-filter:blur(12px);
+    padding:12px 24px; display:flex; align-items:center; justify-content:center; gap:16px;
+  }
+  .lobby-start-btn {
+    padding:14px 48px; border:none; border-radius:6px; font-family:'Bebas Neue',sans-serif;
+    font-size:1.3rem; letter-spacing:.1em; cursor:pointer; color:#000; background:${GOLD};
+    transition:transform .2s, box-shadow .2s; min-width:240px;
+  }
+  .lobby-start-btn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 8px 24px rgba(232,184,75,.4); }
+  .lobby-start-btn:disabled { opacity:.4; cursor:not-allowed; }
+  .lobby-waiting { font-family:'Courier Prime',monospace; font-size:13px; color:#555; letter-spacing:.1em; text-align:center; padding:14px 32px; border:1px dashed #222; border-radius:6px; animation:pulse 2.5s ease-in-out infinite; }
+
+  /* ── Marquee ── */
+  .rp-marquee-container { position:fixed; bottom:0; left:0; width:100%; overflow:hidden; background:#000; border-top:1px solid #0d0d0d; z-index:10; padding:6px 0; }
+  .rp-marquee-track { display:flex; white-space:nowrap; width:max-content; animation:scrollMq 30s linear infinite; }
+  .rp-marquee-item { font-family:'Bebas Neue',sans-serif; font-size:1.3rem; color:#1a1a1a; margin:0 36px; letter-spacing:4px; }
+
+  @media(max-width:600px){
+    .rp-h1 { font-size:3rem; }
+    .lobby-section-label { font-size:9px; }
+    .franchise-grid { gap:6px; }
+    .franchise-tile { padding:12px 4px; }
+    .franchise-short { font-size:1.1rem; }
+    .lobby-bottom-bar { padding:10px 14px; }
+    .lobby-start-btn { padding:12px 20px; min-width:0; font-size:1.1rem; width:100%; }
+    .lobby-waiting { padding:12px 14px; font-size:11px; width:100%; }
+  }
+`;
+
+// ─── Check icon ─────────────────────────────────────────────────────────────
+function CheckIcon({ color = GOLD }) {
+  return (
+    <div style={{ width:16, height:16, borderRadius:'50%', background:`${color}25`, border:`1px solid ${color}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9 }}>
+      ✓
+    </div>
+  );
+}
+
+// ─── Toggle Card ────────────────────────────────────────────────────────────
+function ToggleCard({ selected, onSelect, accentColor = GOLD, title, sub, icon }) {
+  const cls = selected ? (accentColor === CYAN ? 'rp-toggle-card selected-cyan' : 'rp-toggle-card selected-gold') : 'rp-toggle-card';
+  return (
+    <div className={cls} onClick={onSelect}>
+      <div className="rp-toggle-check">
+        {selected && <CheckIcon color={accentColor} />}
+      </div>
+      {icon && <div style={{ marginBottom: 6, opacity: selected ? 1 : 0.4, transition: 'opacity 0.2s', color: selected ? accentColor : '#666' }}>{icon}</div>}
+      <div className="rp-toggle-card-title" style={{ color: selected ? accentColor : '#bbb' }}>{title}</div>
+      <div className="rp-toggle-card-sub">{sub}</div>
+    </div>
+  );
+}
+
+// ─── Main RoomContent ────────────────────────────────────────────────────────
+function RoomContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const action = searchParams.get('action');
+
   const {
     emit, playerId,
     roomCode, setRoomCode, lobbyPlayers, setLobbyPlayers,
@@ -36,29 +256,77 @@ export default function RoomPage() {
   const [joinCode,    setJoinCode]    = useState('');
   const [error,       setError]       = useState('');
   const [loading,     setLoading]     = useState(false);
-  const [copied,      setCopied]      = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [aMode,       setAMode]       = useState('mega');
   const [serverRooms, setServerRooms] = useState([]);
+  const [recentRooms, setRecentRooms] = useState([]);
+  const [liveStats,   setLiveStats]   = useState({ rooms: 0, players: 0 });
   const nameRef = useRef(null);
 
+  // ── Restore name from localStorage ──
   useEffect(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('ipl_player_name') : '';
-    if (saved) setName(saved);
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ipl_player_name');
+      if (saved) setName(saved);
+      const savedRecent = JSON.parse(localStorage.getItem('ipl_recent_rooms') || '[]');
+      setRecentRooms(savedRecent);
+    }
   }, []);
 
+  // ── Persist name whenever it changes ──
+  useEffect(() => {
+    if (name.trim() && typeof window !== 'undefined') {
+      localStorage.setItem('ipl_player_name', name.trim());
+    }
+  }, [name]);
+
+  // ── Auto-focus name input ──
   useEffect(() => {
     if (phase === 'join' || phase === 'create-form') nameRef.current?.focus();
   }, [phase]);
 
+  // ── URL action param ──
   useEffect(() => {
-    if (phase !== 'join') return;
-    emit('get-rooms', (data) => { if (data?.active) setServerRooms(data.active); });
-  }, [phase]);
+    if (action === 'create') setPhase('create-form');
+    if (action === 'join')   setPhase('join');
+  }, [action]);
 
+  // ── Fetch public rooms ──
+  const fetchRooms = useCallback(() => {
+    emit('get-rooms', (data) => {
+      if (data?.active) {
+        setServerRooms(data.active);
+        setLiveStats({ rooms: data.totalRooms || 0, players: data.totalPlayers || 0 });
+      }
+    });
+  }, [emit]);
+
+  useEffect(() => {
+    if (phase === 'home' || phase === 'join') {
+      fetchRooms();
+      const t = setInterval(fetchRooms, 10000);
+      return () => clearInterval(t);
+    }
+  }, [phase, fetchRooms]);
+
+  // ── Helpers ──
+  const saveRecentRoom = (code, roomName) => {
+    if (typeof window === 'undefined') return;
+    try {
+      let recents = JSON.parse(localStorage.getItem('ipl_recent_rooms') || '[]');
+      recents = [{ code, name: roomName }, ...recents.filter(r => r.code !== code)].slice(0, 3);
+      localStorage.setItem('ipl_recent_rooms', JSON.stringify(recents));
+      setRecentRooms(recents);
+    } catch(e) {}
+  };
+
+  // ── Handlers ──
   const handleCreate = () => {
     if (!name.trim()) { setError('Enter your name first'); return; }
     setLoading(true); setError('');
-    emit('create-room', { playerName: name.trim(), isPrivate, roomName: `${name.trim()}'s Room`, playerId }, (res) => {
+    const roomName = `${name.trim()}'s Room`;
+    emit('create-room', { playerName: name.trim(), isPrivate, roomName, playerId }, (res) => {
       setLoading(false);
       if (!res?.ok) { setError(res?.error || 'Failed to create room'); return; }
       if (typeof window !== 'undefined') {
@@ -66,6 +334,7 @@ export default function RoomPage() {
         localStorage.setItem('ipl_player_name', name.trim());
         localStorage.setItem('ipl_play_mode',   'multi');
       }
+      saveRecentRoom(res.code, roomName);
       setRoomCode(res.code);
       setIsHost(true);
       setMyName(name.trim());
@@ -90,6 +359,9 @@ export default function RoomPage() {
         localStorage.setItem('ipl_player_name', name.trim());
         localStorage.setItem('ipl_play_mode',   'multi');
       }
+      const hostP   = (res.players || []).find(p => p.id === res.hostId);
+      const roomName = hostP ? `${hostP.name}'s Room` : `Room ${code}`;
+      saveRecentRoom(res.code || code, roomName);
       setRoomCode(res.code || code);
       setIsHost(res.hostId === playerId);
       setMyName(name.trim());
@@ -97,12 +369,11 @@ export default function RoomPage() {
       setPlayMode('multi');
       if (res.auctionMode) { setLobbyMode(res.auctionMode); setAMode(res.auctionMode); }
       if (res.roomStatus === 'active') {
-        setMultiGS(res.gameState); router.push(`/auction?room=${code}`);
+        setMultiGS(res.gameState);
+        router.push(`/auction?room=${code}${res.isSpectator ? '&spectator=1' : ''}`);
       } else if (res.roomStatus === 'finished') {
         setMultiGS(res.gameState); router.push(`/results?room=${code}`);
-      } else {
-        setPhase('lobby');
-      }
+      } else { setPhase('lobby'); }
     });
   };
 
@@ -123,253 +394,134 @@ export default function RoomPage() {
   };
 
   const shareUrl  = typeof window !== 'undefined' ? `${window.location.origin}/join/${roomCode}` : '';
-  const copyLink  = () => { navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2500); };
+  const copyCode  = () => { navigator.clipboard.writeText(roomCode); setCopiedCode(true); setTimeout(() => setCopiedCode(false), 2000); };
+  const copyUrl   = () => { navigator.clipboard.writeText(shareUrl); setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2000); };
   const myTeamId  = lobbyPlayers.find(p => p.name === myName)?.teamId;
-  const takenTeams = new Set(lobbyPlayers.filter(p => p.teamId).map(p => p.teamId));
+  const takenMap  = Object.fromEntries(
+    lobbyPlayers.filter(p => p.teamId).map(p => [p.teamId, p.name])
+  );
   const canStart  = isHost && lobbyPlayers.length >= 1 && !!aMode;
 
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;600;700&family=Courier+Prime:wght@400;700&display=swap');
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        @keyframes fadeUp   { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:none} }
-        @keyframes fadeIn   { from{opacity:0} to{opacity:1} }
-        @keyframes slideL   { from{opacity:0;transform:translateX(-30px)} to{opacity:1;transform:none} }
-        @keyframes slideR   { from{opacity:0;transform:translateX(30px)} to{opacity:1;transform:none} }
+      <style>{globalStyles}</style>
 
-        html, body { height: 100%; background: ${BG}; }
+      {/* Particles */}
+      <div className="rp-particles">
+        {['p1','p2','p3','p4','p5'].map(c => <div key={c} className={`particle ${c}`} />)}
+      </div>
 
-        /* ── OUTER SHELL ── */
-        .rp-shell {
-          min-height: 100vh;
-          background: ${BG};
-          position: relative;
-          overflow-x: hidden;
-        }
+      {/* ── Navbar ── */}
+      <nav className="rp-nav">
+        <button className="rp-back" onClick={() => {
+          if (phase === 'lobby' || phase === 'join' || phase === 'create-form') setPhase('home');
+          else router.push('/');
+        }}>← Back</button>
+        <div className="rp-brand">IPL <span>AUCTION ONLINE</span></div>
+      </nav>
 
-
-
-        /* ── CENTER PANEL ── */
-        .rp-center {
-          display: flex; flex-direction: column;
-          align-items: center; justify-content: center;
-          padding: 72px 20px 40px;
-          min-height: 100vh;
-          overflow-y: auto;
-          position: relative; z-index: 5;
-        }
-        @media (max-width: 520px) { .rp-center { padding: 64px 14px 28px; } }
-
-        /* ── NAVBAR ── */
-        .rp-nav {
-          position: fixed; top: 0; left: 0; right: 0;
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 14px 20px; z-index: 100;
-          border-bottom: 1px solid #111; background: ${BG}dd;
-          backdrop-filter: blur(8px);
-        }
-        .rp-back {
-          background: none; border: 1px solid #222; color: #555;
-          font-family: 'Barlow Condensed', sans-serif; font-weight: 600;
-          font-size: 12px; letter-spacing: .15em; text-transform: uppercase;
-          padding: 7px 14px; cursor: pointer; transition: color .2s, border-color .2s;
-        }
-        .rp-back:hover { color: #fff; border-color: #fff; }
-        .rp-brand { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: .3em; color: #333; }
-        .rp-brand span { color: ${GOLD}; }
-
-        /* ── CONTENT BLOCKS ── */
-        .rp-block { width: 100%; max-width: 480px; animation: fadeUp .4s ease both; }
-        @media (max-width: 520px) { .rp-block { max-width: 100%; } }
-
-        .rp-eyebrow { font-family: 'Courier Prime', monospace; font-weight: 700; font-size: 10px; color: ${GOLD}; letter-spacing: 4px; text-transform: uppercase; display: block; margin-bottom: 10px; }
-        .rp-h1 { font-family: 'Bebas Neue', sans-serif; font-size: clamp(2.5rem, 8vw, 4rem); letter-spacing: -.02em; line-height: .9; color: #fff; margin-bottom: 6px; }
-        .rp-h1 span { color: ${GOLD}; }
-        .rp-h1-sub { font-family: 'Courier Prime', monospace; font-size: 12px; color: #555; margin-bottom: 28px; line-height: 1.6; }
-
-        /* ── CHOICE CARDS ── */
-        .rp-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; margin-bottom: 0; }
-        @media (max-width: 460px) { .rp-choices { grid-template-columns: 1fr; gap: 10px; } }
-        .rp-choice {
-          padding: 22px 18px; border: 1px solid #1e1e1e; cursor: pointer;
-          transition: border-color .2s, transform .2s, background .2s;
-          position: relative; overflow: hidden;
-        }
-        .rp-choice:hover { transform: translateY(-4px); }
-        .rp-choice-label { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 10px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
-        .rp-choice-label::before { content:''; display:inline-block; width:16px; height:1px; }
-        .rp-choice-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem; color: #fff; margin-bottom: 6px; }
-        .rp-choice-desc  { font-family: 'Courier Prime', monospace; font-size: 11px; color: #555; line-height: 1.55; }
-
-        /* ── FORM ── */
-        .rp-label { font-family: 'Courier Prime', monospace; font-size: 10px; letter-spacing: 3px; color: #555; text-transform: uppercase; margin-bottom: 7px; margin-top: 16px; display: block; }
-        .rp-input {
-          width: 100%; padding: 13px 14px; background: #0d0d0d;
-          border: 1px solid #1e1e1e; color: #fff;
-          font-family: 'Barlow Condensed', sans-serif; font-size: 17px; letter-spacing: .06em;
-          outline: none; transition: border-color .2s;
-        }
-        .rp-input:focus { border-color: ${GOLD}; }
-        .rp-input::placeholder { color: #2a2a2a; }
-        .rp-input.code-input { letter-spacing: .35em; font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem; text-align: center; }
-
-        /* ── TOGGLE PILLS ── */
-        .rp-pills  { display: flex; gap: 7px; }
-        .rp-pill {
-          flex: 1; padding: 9px 8px; background: #111; border: 1px solid #1e1e1e;
-          font-family: 'Bebas Neue', sans-serif; font-size: .95rem; letter-spacing: .08em;
-          color: #444; cursor: pointer; transition: all .2s; text-align: center;
-        }
-        .rp-pill sub { font-family: 'Courier Prime', monospace; font-size: 8px; display: block; letter-spacing: 1px; opacity: .6; margin-top: 2px; }
-        .rp-pill.gold-on  { border-color: ${GOLD}; background: rgba(232,184,75,.08); color: ${GOLD}; }
-        .rp-pill.cyan-on  { border-color: ${CYAN}; background: rgba(34,211,238,.07); color: ${CYAN}; }
-
-        /* ── PRIMARY BUTTON ── */
-        .rp-btn {
-          width: 100%; padding: 14px 16px; background: ${GOLD}; border: none;
-          font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: .1em;
-          color: #000; cursor: pointer; margin-top: 14px;
-          transition: transform .18s, box-shadow .18s;
-          display: flex; align-items: center; justify-content: center; gap: 10px;
-        }
-        .rp-btn:hover  { transform: translate(-2px,-2px); box-shadow: 3px 3px 0 #fff; }
-        .rp-btn:disabled { opacity: .35; pointer-events: none; }
-        .rp-btn.cyan-btn { background: ${CYAN}; }
-
-        .rp-error { font-family: 'Courier Prime', monospace; font-size: 11px; color: #ef4444; letter-spacing: .04em; margin-top: 8px; }
-
-        /* ── DIVIDER ── */
-        .rp-hr { height: 1px; background: #181818; margin: 18px 0; }
-        .rp-section { font-family: 'Courier Prime', monospace; font-size: 10px; letter-spacing: 3px; color: #333; text-transform: uppercase; margin-bottom: 10px; }
-
-        /* ── CODE DISPLAY ── */
-        .rp-code-block { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
-        .rp-code-chip {
-          font-family: 'Bebas Neue', sans-serif; font-size: clamp(1.6rem, 6vw, 2.2rem); letter-spacing: .25em;
-          color: ${CYAN}; background: rgba(34,211,238,.05); border: 1px solid rgba(34,211,238,.2);
-          padding: 5px 14px; cursor: pointer; transition: background .2s; flex-shrink: 0;
-        }
-        .rp-code-chip:hover { background: rgba(34,211,238,.12); }
-        .rp-copy-btn {
-          padding: 8px 14px; background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.25);
-          color: ${CYAN}; font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
-          font-size: 12px; letter-spacing: .1em; cursor: pointer; transition: all .2s; white-space: nowrap;
-        }
-        .rp-copy-btn:hover { background: ${CYAN}; color: #000; }
-        .rp-wa-link {
-          padding: 8px 14px; background: rgba(37,211,102,.08); border: 1px solid rgba(37,211,102,.25);
-          color: #25D366; font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
-          font-size: 12px; letter-spacing: .1em; text-decoration: none;
-          display: inline-flex; align-items: center; gap: 6px; transition: all .2s; white-space: nowrap;
-        }
-        .rp-wa-link:hover { background: #25D366; color: #000; }
-        .rp-shareurl { font-family: 'Courier Prime', monospace; font-size: 10px; color: #2a2a2a; word-break: break-all; }
-
-        /* ── PLAYER CHIPS ── */
-        .rp-chips { display: flex; flex-wrap: wrap; gap: 7px; }
-        .rp-chip {
-          display: flex; align-items: center; gap: 7px;
-          background: #0d0d0d; border: 1px solid #1e1e1e; padding: 7px 12px;
-        }
-        .rp-chip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-
-        /* ── TEAM GRID ── */
-        .rp-team-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 7px; }
-        @media (max-width: 480px) { .rp-team-grid { grid-template-columns: repeat(3,1fr); } }
-        .rp-team-tile {
-          padding: 10px 6px; text-align: center; cursor: pointer;
-          border: 1px solid #1a1a1a; background: #111;
-          transition: transform .18s, border-color .18s, background .18s;
-        }
-        .rp-team-tile:not(.t-taken):hover { transform: translateY(-3px); }
-
-        /* ── PUBLIC ROOMS ── */
-        .rp-room-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #0d0d0d; border: 1px solid #181818; margin-bottom: 7px; }
-        .rp-room-join-btn { padding: 6px 14px; background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.25); color: ${CYAN}; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: .1em; cursor: pointer; transition: all .2s; }
-        .rp-room-join-btn:hover { background: ${CYAN}; color: #000; }
-
-        .rp-join-row { display: flex; gap: 8px; margin-top: 4px; align-items: flex-start; }
-        .rp-join-row .rp-input { flex: 1; min-width: 0; }
-        .rp-join-row .rp-btn   { width: auto; padding: 13px 20px; margin-top: 0; flex-shrink: 0; }
-
-        /* ── GLOBAL MOBILE SWEEP ── */
-        @media (max-width: 400px) {
-          .rp-h1  { font-size: 2.4rem; }
-          .rp-nav { padding: 12px 14px; }
-          .rp-choice { padding: 18px 14px; }
-          .rp-pill  { font-size: .85rem; padding: 8px 6px; }
-          .rp-btn   { font-size: 1rem; padding: 13px 12px; }
-          .rp-team-grid { grid-template-columns: repeat(3,1fr) !important; gap:5px; }
-          .rp-team-tile { padding: 8px 4px; }
-          .rp-input { font-size: 15px; padding: 12px 12px; }
-          .rp-join-row { flex-direction: column; }
-          .rp-join-row .rp-input { width: 100%; }
-          .rp-join-row .rp-btn   { width: 100%; margin-top: 0; }
-          .rp-room-item { flex-direction: column; align-items: flex-start; gap: 8px; }
-          .rp-chip { padding: 6px 10px; }
-        }
-      `}</style>
-
-      {/* Center */}
-      <div className="rp-center">
-        {/* ── NAVBAR ── */}
-        <nav className="rp-nav">
-          <button className="rp-back" onClick={() => {
-            if (phase === 'lobby' || phase === 'join' || phase === 'create-form') setPhase('home');
-            else router.push('/');
-          }}>← Back</button>
-          <div className="rp-brand">IPL <span>AUCTION</span></div>
-        </nav>
-
-        {/* ══ HOME ══ */}
-        {phase === 'home' && (
-          <div className="rp-block">
+      {/* ══════════ HOME ══════════ */}
+      {phase === 'home' && (
+        <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 24px 60px', position:'relative', zIndex:5 }}>
+          <div style={{ width:'100%', maxWidth:620, animation:'fadeUp .4s ease both' }}>
             <span className="rp-eyebrow">Multiplayer</span>
             <h1 className="rp-h1">JOIN THE<br /><span>AUCTION ROOM</span></h1>
-            <p className="rp-h1-sub">Create a room or enter a code to join your squad.</p>
+            <div className="rp-live-counter">
+              <div className="rp-live-dot" />
+              {liveStats.rooms > 0
+                ? `${liveStats.rooms} ROOM${liveStats.rooms !== 1 ? 'S' : ''} ACTIVE • ${liveStats.players} PLAYER${liveStats.players !== 1 ? 'S' : ''} ONLINE`
+                : 'NO ACTIVE ROOMS — CREATE ONE!'}
+            </div>
+
             <div className="rp-choices">
-              <div className="rp-choice"
-                style={{ background:'#0a0a0a' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.background = 'rgba(232,184,75,.05)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = '#1e1e1e'; e.currentTarget.style.background = '#0a0a0a'; }}
-                onClick={() => { setError(''); setPhase('create-form'); }}>
-                <div className="rp-choice-label" style={{ color:GOLD }}>HOST</div>
+              <div className="rp-choice create-card" onClick={() => { setError(''); setPhase('create-form'); }}>
+                <div className="rp-choice-label" style={{ color: GOLD }}>HOST</div>
                 <div className="rp-choice-title">CREATE ROOM</div>
-                <div className="rp-choice-desc">Set up a private or public room. Pick MEGA or MINI and invite friends.</div>
+                <div className="rp-choice-desc">Set up a private or public room. Invite friends with a code.</div>
               </div>
-              <div className="rp-choice"
-                style={{ background:'#0a0a0a' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = CYAN; e.currentTarget.style.background = 'rgba(34,211,238,.05)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = '#1e1e1e'; e.currentTarget.style.background = '#0a0a0a'; }}
-                onClick={() => { setError(''); setPhase('join'); }}>
-                <div className="rp-choice-label" style={{ color:CYAN }}>PLAYER</div>
+              <div className="rp-choice join-card" onClick={() => { setError(''); setPhase('join'); }}>
+                <div className="rp-choice-label" style={{ color: CYAN }}>PLAYER</div>
                 <div className="rp-choice-title">JOIN ROOM</div>
-                <div className="rp-choice-desc">Enter a room code or pick from active public rooms.</div>
+                <div className="rp-choice-desc">Enter a room code or pick from active public lobbies.</div>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* ══ CREATE FORM ══ */}
-        {phase === 'create-form' && (
-          <div className="rp-block">
+            {/* Public lobbies preview */}
+            {serverRooms.length > 0 && (
+              <div style={{ marginTop:28 }}>
+                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, letterSpacing:3, color:'#444', textTransform:'uppercase', marginBottom:10, borderBottom:'1px solid #111', paddingBottom:8 }}>PUBLIC LOBBIES</div>
+                {serverRooms.slice(0,3).map((r, i) => (
+                  <div key={i} className="rp-room-item">
+                    <div>
+                      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#eee' }}>{r.name}</div>
+                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#555', marginTop:2 }}>Host: {r.host} · {r.players}/10</div>
+                    </div>
+                    <button className="rp-room-join-btn" onClick={() => { setJoinCode(r.code); setPhase('join'); }}>QUICK JOIN</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Recent rooms */}
+            {recentRooms.length > 0 && (
+              <div style={{ marginTop:24 }}>
+                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, letterSpacing:3, color:'#444', textTransform:'uppercase', marginBottom:10, borderBottom:'1px solid #111', paddingBottom:8 }}>RECENT ROOMS</div>
+                {recentRooms.map((r, i) => (
+                  <div key={i} className="rp-room-item">
+                    <div>
+                      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#aaa' }}>{r.name}</div>
+                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#555', marginTop:2 }}>Code: {r.code}</div>
+                    </div>
+                    <button className="rp-room-rejoin-btn" onClick={() => { setJoinCode(r.code); setPhase('join'); }}>REJOIN</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════ CREATE FORM ══════════ */}
+      {phase === 'create-form' && (
+        <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 24px 40px', position:'relative', zIndex:5 }}>
+          <div style={{ width:'100%', maxWidth:480, animation:'fadeUp .35s ease both' }}>
             <span className="rp-eyebrow">Create Room</span>
-            <h1 className="rp-h1" style={{ fontSize:'clamp(2rem,7vw,3.2rem)' }}>SET UP YOUR<br /><span>ROOM</span></h1>
+            <h1 className="rp-h1" style={{ fontSize:'clamp(2rem,7vw,3.8rem)', marginBottom:4 }}>SET UP YOUR<br /><span>ROOM</span></h1>
+            <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#555', margin:'8px 0 4px', lineHeight:1.6 }}>Configure your auction room and invite up to 10 friends.</p>
 
             <label className="rp-label">Your Name</label>
-            <input ref={nameRef} className="rp-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Rahul" maxLength={20} onKeyDown={e => e.key === 'Enter' && handleCreate()} />
+            <input
+              ref={nameRef}
+              className="rp-input"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Rahul"
+              maxLength={20}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()}
+            />
 
             <label className="rp-label">Visibility</label>
-            <div className="rp-pills">
-              <button className={`rp-pill${!isPrivate ? ' gold-on' : ''}`} onClick={() => setIsPrivate(false)}>PUBLIC<sub>Open to all</sub></button>
-              <button className={`rp-pill${isPrivate ? ' gold-on' : ''}`} onClick={() => setIsPrivate(true)}>PRIVATE<sub>Code only</sub></button>
+            <div className="rp-toggle-grid">
+              <ToggleCard
+                selected={!isPrivate} onSelect={() => setIsPrivate(false)}
+                accentColor={GOLD} title="PUBLIC" sub="Open to all players" 
+                icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>} 
+              />
+              <ToggleCard
+                selected={isPrivate} onSelect={() => setIsPrivate(true)}
+                accentColor={GOLD} title="PRIVATE" sub="Invite code only" 
+                icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>} 
+              />
             </div>
 
             <label className="rp-label">Auction Mode</label>
-            <div className="rp-pills">
-              <button className={`rp-pill${aMode === 'mega' ? ' gold-on' : ''}`} onClick={() => setAMode('mega')}>MEGA<sub>500+ Players</sub></button>
-              <button className={`rp-pill${aMode === 'mini' ? ' cyan-on' : ''}`} onClick={() => setAMode('mini')}>MINI<sub>200 Players</sub></button>
+            <div className="rp-toggle-grid">
+              <ToggleCard
+                selected={aMode === 'mega'} onSelect={() => setAMode('mega')}
+                accentColor={GOLD} title="MEGA" sub="500+ players · Full season" />
+              <ToggleCard
+                selected={aMode === 'mini'} onSelect={() => setAMode('mini')}
+                accentColor={CYAN} title="MINI" sub="~200 players · Fast format" />
             </div>
 
             {error && <div className="rp-error">{error}</div>}
@@ -377,20 +529,36 @@ export default function RoomPage() {
               {loading ? 'CREATING ROOM…' : 'CREATE ROOM →'}
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ══ JOIN ══ */}
-        {phase === 'join' && (
-          <div className="rp-block">
+      {/* ══════════ JOIN ══════════ */}
+      {phase === 'join' && (
+        <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 24px 40px', position:'relative', zIndex:5 }}>
+          <div style={{ width:'100%', maxWidth:480, animation:'fadeUp .35s ease both' }}>
             <span className="rp-eyebrow">Join Room</span>
-            <h1 className="rp-h1" style={{ fontSize:'clamp(2rem,7vw,3.2rem)' }}>ENTER THE<br /><span>AUCTION FLOOR</span></h1>
+            <h1 className="rp-h1" style={{ fontSize:'clamp(2rem,7vw,3.8rem)' }}>ENTER THE<br /><span style={{ color:CYAN }}>AUCTION FLOOR</span></h1>
 
             <label className="rp-label">Your Name</label>
-            <input ref={nameRef} className="rp-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Rahul" maxLength={20} />
+            <input
+              ref={nameRef}
+              className="rp-input"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Rahul"
+              maxLength={20}
+            />
 
             <label className="rp-label">Room Code</label>
             <div className="rp-join-row">
-              <input className="rp-input code-input" value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} placeholder="ABCD" maxLength={6} onKeyDown={e => e.key === 'Enter' && doJoin(joinCode)} />
+              <input
+                className="rp-input code-input"
+                value={joinCode}
+                onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                placeholder="ABCD12"
+                maxLength={6}
+                onKeyDown={e => e.key === 'Enter' && doJoin(joinCode)}
+              />
               <button className="rp-btn cyan-btn" onClick={() => doJoin(joinCode)} disabled={loading}>
                 {loading ? '…' : 'JOIN'}
               </button>
@@ -399,109 +567,248 @@ export default function RoomPage() {
             {error && <div className="rp-error">{error}</div>}
 
             {serverRooms.length > 0 && (
-              <>
-                <div className="rp-hr" />
-                <div className="rp-section">Active Public Rooms</div>
+              <div style={{ marginTop:28 }}>
+                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, letterSpacing:3, color:'#444', textTransform:'uppercase', marginBottom:10, borderBottom:'1px solid #111', paddingBottom:8 }}>ALL PUBLIC ROOMS</div>
                 {serverRooms.map((r, i) => (
                   <div key={i} className="rp-room-item">
                     <div>
-                      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:15, color:'#ddd', letterSpacing:'.04em' }}>{r.name}</div>
-                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#444', marginTop:2 }}>Host: {r.host} · {r.players}/10</div>
+                      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#eee' }}>{r.name}</div>
+                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#555', marginTop:2 }}>Host: {r.host} · {r.players}/10</div>
                     </div>
                     <button className="rp-room-join-btn" onClick={() => doJoin(r.code)} disabled={loading}>JOIN</button>
                   </div>
                 ))}
-              </>
-            )}
-            {serverRooms.length === 0 && (
-              <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#2a2a2a', marginTop:16, textAlign:'center' }}>No public rooms right now.</div>
-            )}
-          </div>
-        )}
-
-        {/* ══ LOBBY ══ */}
-        {phase === 'lobby' && roomCode && (
-          <div className="rp-block" style={{ maxWidth:520 }}>
-            {/* Code */}
-            <div className="rp-section">Room Code — Share to Invite</div>
-            <div className="rp-code-block">
-              <div className="rp-code-chip" onClick={copyLink} title="Click to copy">{roomCode}</div>
-              <button className="rp-copy-btn" onClick={copyLink}>{copied ? '✓ COPIED' : 'COPY CODE'}</button>
-              <a className="rp-wa-link" href={`https://wa.me/?text=${encodeURIComponent(`Join my IPL Auction game! 🏏\n\nClick: ${shareUrl}\nOr code: ${roomCode}`)}`} target="_blank" rel="noreferrer">📱 SHARE</a>
-            </div>
-            <div className="rp-shareurl">{shareUrl}</div>
-
-            <div className="rp-hr" />
-
-            {/* Mode — host only */}
-            {isHost && (
-              <>
-                <div className="rp-section">Auction Mode</div>
-                <div className="rp-pills" style={{ marginBottom:16 }}>
-                  <button className={`rp-pill${aMode === 'mega' ? ' gold-on' : ''}`} onClick={() => changeMode('mega')}>MEGA<sub>500+ Players</sub></button>
-                  <button className={`rp-pill${aMode === 'mini' ? ' cyan-on' : ''}`} onClick={() => changeMode('mini')}>MINI<sub>200 Players</sub></button>
-                </div>
-              </>
-            )}
-            {!isHost && lobbyMode && (
-              <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:12, color:'#444', marginBottom:14 }}>
-                Mode: <span style={{ color: lobbyMode === 'mega' ? GOLD : CYAN }}>{lobbyMode.toUpperCase()} AUCTION</span>
               </div>
             )}
+          </div>
+        </div>
+      )}
 
-            {/* Players */}
-            <div className="rp-section">Players ({lobbyPlayers.length}/10)</div>
-            <div className="rp-chips" style={{ marginBottom:16 }}>
-              {lobbyPlayers.map((p, i) => {
-                const team = TEAMS.find(t => t.id === p.teamId);
-                return (
-                  <div key={i} className="rp-chip">
-                    <div className="rp-chip-dot" style={{ background: team?.color || '#2a2a2a' }} />
-                    <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:600, fontSize:14, color: team?.color || '#aaa', letterSpacing:'.04em' }}>{p.name}</span>
-                    {p.isHost && <span style={{ fontFamily:"'Courier Prime',monospace", fontSize:8, color:GOLD, letterSpacing:'2px' }}>HOST</span>}
+      {/* ══════════ LOBBY ══════════ */}
+      {phase === 'lobby' && roomCode && (
+        <div className="lobby-shell" style={{ position:'relative', zIndex:5 }}>
+
+          {/* ── LEFT: Code + Players ── */}
+          <div className="lobby-col lobby-col-left">
+            <div style={{ animation:'fadeUp .35s ease both' }}>
+              {/* Room code */}
+              <div className="lobby-section-label">ROOM CODE</div>
+              <div style={{ marginBottom:10 }}>
+                <div className="lobby-code-chip" onClick={copyCode} title="Click to copy code">{roomCode}</div>
+              </div>
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
+                <button className="lobby-copy-btn" onClick={copyCode}>{copiedCode ? '✓ COPIED' : 'COPY CODE'}</button>
+                <button className="lobby-copy-btn" onClick={copyUrl}>{copiedLink ? '✓ COPIED' : 'COPY LINK'}</button>
+                <a className="lobby-wa-btn"
+                   href={`https://wa.me/?text=${encodeURIComponent(`Join my IPL Auction! 🏏\n\nLink: ${shareUrl}\nCode: ${roomCode}`)}`}
+                   target="_blank" rel="noreferrer">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: 2 }}>
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
+                  </svg> SHARE
+                </a>
+              </div>
+              <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#2a2a2a', wordBreak:'break-all', marginBottom:20 }}>{shareUrl}</div>
+
+              <div className="rp-hr" />
+
+              {/* Auction mode */}
+              {isHost ? (
+                <>
+                  <div className="lobby-section-label">AUCTION MODE</div>
+                  <div className="rp-toggle-grid" style={{ marginBottom:20 }}>
+                    <ToggleCard selected={aMode==='mega'} onSelect={() => changeMode('mega')} accentColor={GOLD} title="MEGA" sub="500+ players" />
+                    <ToggleCard selected={aMode==='mini'} onSelect={() => changeMode('mini')} accentColor={CYAN} title="MINI" sub="~200 players" />
                   </div>
-                );
-              })}
+                </>
+              ) : (
+                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:12, color:'#555', marginBottom:16 }}>
+                  Mode: <span style={{ color: (lobbyMode || aMode) === 'mega' ? GOLD : CYAN }}>{(lobbyMode || aMode || 'mega').toUpperCase()} AUCTION</span>
+                </div>
+              )}
+
+              <div className="rp-hr" />
+
+              {/* Players */}
+              <div className="lobby-section-label">PLAYERS ({lobbyPlayers.length}/10)</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {lobbyPlayers.map((p, i) => {
+                  const team = TEAMS.find(t => t.id === p.teamId);
+                  return (
+                    <div key={p.id || i} className="lobby-player-row" style={{ animationDelay:`${i * 0.04}s` }}>
+                      <div className="lobby-player-dot" style={{ background: team?.color || '#333' }} />
+                      <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:15, color: team?.color || '#ddd', flex:1, letterSpacing:'.04em' }}>
+                        {p.name}
+                        {p.isHost && <span style={{ fontFamily:"'Courier Prime',monospace", fontSize:8, color:GOLD, marginLeft:6, letterSpacing:'2px' }}>HOST</span>}
+                      </span>
+                      {team && (
+                        <span className="lobby-player-badge" style={{ background:`${team.color}18`, color:team.color, border:`1px solid ${team.color}50` }}>
+                          {team.short}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Placeholder slots */}
+                {Array.from({ length: Math.max(0, 1 - lobbyPlayers.length) }).map((_, i) => (
+                  <div key={`empty-${i}`} style={{ padding:'10px 12px', border:'1px dashed #111', borderRadius:8, height:42 }} />
+                ))}
+              </div>
             </div>
+          </div>
 
-            <div className="rp-hr" />
+          {/* ── CENTER: Franchise grid ── */}
+          <div className="lobby-col lobby-col-center">
+            <div style={{ animation:'fadeUp .4s ease both' }}>
+              <div style={{ marginBottom:4 }}>
+                <span className="rp-eyebrow" style={{ fontSize:10 }}>Lobby · {roomCode}</span>
+              </div>
+              <h2 style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'clamp(1.6rem,4vw,2.8rem)', color:'#fff', letterSpacing:2, marginBottom:6 }}>
+                PICK YOUR <span style={{ color:GOLD }}>FRANCHISE</span>
+              </h2>
+              <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#444', marginBottom:24, lineHeight:1.6 }}>
+                Select the IPL team you want to bid for. Each franchise can only be claimed by one player.
+                {myTeamId && <span style={{ color:GOLD }}> You picked <strong>{TEAMS.find(t=>t.id===myTeamId)?.name}</strong>.</span>}
+              </p>
 
-            {/* Team grid */}
-            <div className="rp-section">Pick Your Franchise</div>
-            <div className="rp-team-grid" style={{ marginBottom:18 }}>
-              {TEAMS.map(t => {
-                const taken  = takenTeams.has(t.id) && t.id !== myTeamId;
-                const isMine = t.id === myTeamId;
-                return (
-                  <div key={t.id}
-                    className={`rp-team-tile${taken ? ' t-taken' : ''}`}
-                    style={{ borderColor: isMine ? t.color : taken ? '#111' : '#1a1a1a', background: isMine ? `${t.color}12` : taken ? '#090909' : '#111', opacity: taken ? .28 : 1, cursor: taken ? 'not-allowed' : 'pointer' }}
-                    onClick={() => !taken && selectTeam(t.id)}
-                  >
-                    <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'1.15rem', color: isMine ? t.color : taken ? '#333' : t.color, letterSpacing:'.03em' }}>{t.short}</div>
-                    <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:'7.5px', color:'#333', marginTop:2, lineHeight:1.3 }}>{t.name}</div>
-                    {isMine && <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:'7px', color:t.color, marginTop:3, letterSpacing:'1px' }}>✓ YOU</div>}
-                    {taken  && <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:'7px', color:'#444', marginTop:3 }}>TAKEN</div>}
+              <div className="franchise-grid">
+                {TEAMS.map(t => {
+                  const isMine  = t.id === myTeamId;
+                  const takenBy = takenMap[t.id];
+                  const taken   = !!takenBy && !isMine;
+                  let cls = 'franchise-tile';
+                  if (isMine)  cls += ' ft-mine';
+                  if (taken)   cls += ' ft-taken';
+
+                  return (
+                    <div
+                      key={t.id}
+                      className={cls}
+                      style={{
+                        borderColor: isMine ? t.color : taken ? '#1c1c1c' : '#242424',
+                        background: isMine
+                          ? `linear-gradient(160deg, ${t.color}18, ${t.color}08)`
+                          : taken ? '#0a0a0a' : `${t.color}06`,
+                        boxShadow: isMine ? `0 0 20px ${t.color}28, inset 0 0 20px ${t.color}08` : 'none',
+                      }}
+                      onClick={() => !taken && selectTeam(t.id)}
+                    >
+                      {/* TAKEN overlay */}
+                      {taken && <div className="taken-overlay" />}
+
+                      {/* Team color accent top bar */}
+                      <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background: isMine ? t.color : `${t.color}40`, borderRadius:'8px 8px 0 0' }} />
+
+                      <div className="franchise-short" style={{ color: isMine ? t.color : taken ? '#333' : t.color }}>
+                        {t.short}
+                      </div>
+                      <div className="franchise-name">{t.name}</div>
+
+                      {isMine && (
+                        <div className="franchise-mine-badge" style={{ color: t.color, marginTop:4 }}>
+                          ✓ YOUR PICK
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {error && <div className="rp-error" style={{ marginTop:16 }}>{error}</div>}
+            </div>
+          </div>
+
+          {/* ── RIGHT: Live stats ── */}
+          <div className="lobby-col lobby-col-right">
+            <div style={{ animation:'fadeUp .45s ease both' }}>
+              <div className="lobby-section-label">LOBBY STATS</div>
+
+              <div className="lobby-stat-card">
+                <div className="lobby-stat-val" style={{ color:GOLD }}>
+                  {lobbyPlayers.filter(p => p.teamId).length}/{lobbyPlayers.length}
+                </div>
+                <div className="lobby-stat-lbl">PLAYERS WITH TEAM</div>
+              </div>
+
+              <div className="lobby-stat-card">
+                <div className="lobby-stat-val" style={{ color:CYAN }}>
+                  {10 - lobbyPlayers.length}
+                </div>
+                <div className="lobby-stat-lbl">SLOTS REMAINING</div>
+              </div>
+
+              <div className="lobby-stat-card">
+                <div className="lobby-stat-val" style={{ color:GREEN }}>
+                  {lobbyPlayers.length >= 1 && lobbyPlayers.every(p => p.teamId) ? 'READY' : 'WAITING'}
+                </div>
+                <div className="lobby-stat-lbl">ROOM STATUS</div>
+              </div>
+
+              <div className="rp-hr" />
+
+              {/* Claimed franchises summary */}
+              <div className="lobby-section-label">CLAIMED FRANCHISES</div>
+              {Object.entries(takenMap).length === 0 ? (
+                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#333', lineHeight:1.8 }}>
+                  No franchise selected yet.<br />Be the first!
+                </div>
+              ) : (
+                TEAMS.filter(t => takenMap[t.id]).map(t => (
+                  <div key={t.id} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, padding:'8px 12px', background:`${t.color}08`, border:`1px solid ${t.color}25`, borderRadius:6 }}>
+                    <div style={{ width:8, height:8, borderRadius:'50%', background:t.color, flexShrink:0 }} />
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'1rem', color:t.color, letterSpacing:1 }}>{t.short}</div>
+                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:9, color:'#555' }}>{takenMap[t.id]}</div>
+                    </div>
                   </div>
-                );
-              })}
+                ))
+              )}
             </div>
+          </div>
+        </div>
+      )}
 
-            {error && <div className="rp-error" style={{ marginBottom:10 }}>{error}</div>}
-
-            {isHost ? (
-              <button className="rp-btn" onClick={handleStart} disabled={!canStart}>
+      {/* ── Fixed bottom start bar (lobby only) ── */}
+      {phase === 'lobby' && (
+        <div className="lobby-bottom-bar">
+          {isHost ? (
+            <>
+              <span style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#444', letterSpacing:2 }}>
+                {canStart ? 'Ready to go!' : 'Waiting for players…'}
+              </span>
+              <button
+                className="lobby-start-btn"
+                onClick={handleStart}
+                disabled={!canStart}
+              >
                 START AUCTION →
               </button>
-            ) : (
-              <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:12, color:'#333', letterSpacing:'.1em', textAlign:'center', padding:'12px 0' }}>
-                Waiting for host to start…
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+            </>
+          ) : (
+            <div className="lobby-waiting">
+              ⏳ Waiting for host to start the auction…
+            </div>
+          )}
+        </div>
+      )}
 
+      {/* Marquee - hidden during lobby to make room for bottom bar */}
+      {phase !== 'lobby' && (
+        <div className="rp-marquee-container">
+          <div className="rp-marquee-track">
+            {[...TEAMS, ...TEAMS].map((t, i) => (
+              <span key={i} className="rp-marquee-item" style={{ color:t.color }}>{t.short}</span>
+            ))}
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+export default function RoomPage() {
+  return (
+    <Suspense fallback={<div style={{ background:'#080808', height:'100vh' }} />}>
+      <RoomContent />
+    </Suspense>
   );
 }

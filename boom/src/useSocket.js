@@ -8,8 +8,19 @@ export function useSocket() {
 
     useEffect(() => {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://bidwicket.onrender.com";
-        console.log("Connecting to Auction Server:", backendUrl || "Same Origin");
-        sock.current = io(backendUrl, { transports: ["websocket", "polling"], reconnection: true });
+        console.log("Connecting to Auction Server:", backendUrl);
+        sock.current = io(backendUrl, {
+            transports: ["websocket", "polling"],
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 500,
+            reconnectionDelayMax: 3000,
+            timeout: 10000,
+        });
+
+        sock.current.on('connect', () => console.log('[Socket] Connected:', sock.current.id));
+        sock.current.on('disconnect', reason => console.warn('[Socket] Disconnected:', reason));
+        sock.current.on('connect_error', err => console.warn('[Socket] Error:', err.message));
 
         return () => { sock.current?.disconnect(); };
     }, []);
@@ -44,9 +55,9 @@ export function playPulse() {
     } catch (e) { /* ignore audio errors */ }
 }
 
-export function playSaleSound() {
+export function playSaleSound(isSold = true) {
     try {
-        const audio = new Audio('/assets/fahhh.mp3');
+        const audio = new Audio(isSold ? '/assets/tadaa.mp3' : '/assets/fahhh.mp3');
         audio.volume = 0.6;
         audio.play().catch(e => console.warn("Audio play failed:", e));
     } catch (e) { }

@@ -237,7 +237,7 @@ export default function App() {
     // Phase Transitions (Sale Sound only)
     if (currentGS.phase === "sold" || currentGS.phase === "unsold") {
       if (prevTimerRef.current !== currentGS.phase) {
-        playSaleSound();
+        playSaleSound(currentGS.phase === "sold");
       }
     }
     prevTimerRef.current = currentGS.phase;

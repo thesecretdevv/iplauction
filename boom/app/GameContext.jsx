@@ -123,6 +123,7 @@ export function GameProvider({ children }) {
   const [viewingTeam, setViewingTeam] = useState(null);
   const [showStats, setShowStats] = useState(false);
   const [multiGS, setMultiGS] = useState(null);
+  const [isSpectator, setIsSpectator] = useState(false);
 
   const [playerId] = useState(() => {
     if (typeof window === 'undefined') return uuidv4();
@@ -235,7 +236,11 @@ export function GameProvider({ children }) {
       setMultiGS(gs);
       router.push(buildUrl('/results', { room: roomCode, mode: (lobbyMode || 'MEGA').toUpperCase() }));
     });
-    return () => { off1(); off2(); off3(); off4(); };
+    // Lightweight timer tick — only updates the timer field to avoid full re-render
+    const off5 = on("timer-tick", ({ timer }) => {
+      setMultiGS(prev => prev ? { ...prev, timer } : prev);
+    });
+    return () => { off1(); off2(); off3(); off4(); off5(); };
   }, [playMode, on, router]);
 
   // Unified Audio & Animation side-effects
@@ -250,7 +255,7 @@ export function GameProvider({ children }) {
     }
     if (currentGS.phase === "sold" || currentGS.phase === "unsold") {
       if (prevTimerRef.current !== currentGS.phase) {
-        playSaleSound();
+        playSaleSound(currentGS.phase === "sold");
       }
     }
     prevTimerRef.current = currentGS.phase;
@@ -428,6 +433,7 @@ export function GameProvider({ children }) {
         setLobbyPlayers(res.players);
         setPlayMode("multi");
         if (res.auctionMode) setLobbyMode(res.auctionMode);
+        setIsSpectator(!!res.isSpectator);
 
         if (res.roomStatus === "active") {
           setMultiGS(res.gameState);
@@ -477,6 +483,7 @@ export function GameProvider({ children }) {
     myTeamId, setMyTeamId, showSquad, setShowSquad,
     viewingTeam, setViewingTeam, showStats, setShowStats,
     multiGS, setMultiGS, playerId, g, effectiveMyTeamId,
+    isSpectator, setIsSpectator,
     // Socket
     emit, on,
     // Actions

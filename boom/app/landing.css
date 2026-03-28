@@ -2,7 +2,7 @@
    GAVEL LANDING PAGE - Full CSS (no Tailwind dependency)
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&family=Bebas+Neue&family=Courier+Prime:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&family=Bebas+Neue&family=Courier+Prime:wght@400;700&family=Montserrat:wght@700&display=swap');
 
 :root {
   --bg: #080808;
@@ -44,6 +44,10 @@
   background: #080808; border-bottom: 1px solid #222;
   z-index: 50; display: flex; align-items: center;
   justify-content: space-between; padding: 0 24px;
+}
+@media (max-width: 640px) {
+  .l-nav { padding: 0 12px; }
+  .l-nav-logo { font-size: 1.25rem; letter-spacing: 2px; }
 }
 .l-nav-logo {
   font-family: 'Bebas Neue', sans-serif;
@@ -128,34 +132,47 @@
 }
 
 .l-hero-subtext {
-  font-family: 'Courier Prime', monospace; font-size: 0.875rem;
-  color: #555; max-width: 448px; margin-top: 32px; line-height: 1.7;
+  font-family: 'Courier Prime', monospace; font-size: 0.9rem;
+  color: #888; max-width: 448px; margin-top: 28px; line-height: 1.75;
 }
 @media (min-width: 768px) { .l-hero-subtext { font-size: 1rem; } }
 
-/* Countdown */
-.l-countdown { margin-top: 48px; }
-.l-countdown-label {
+/* Refined Stats */
+.l-stats-refined { margin-top: 40px; }
+.l-stats-label {
   font-family: 'Courier Prime', monospace; font-weight: 700;
-  font-size: 0.75rem; color: var(--gold); letter-spacing: 3px;
-  text-transform: uppercase; display: block; margin-bottom: 16px;
+  font-size: 0.75rem; color: #555; letter-spacing: 3px;
+  text-transform: uppercase; display: block; margin-bottom: 20px;
 }
-.l-countdown-row { display: flex; align-items: center; gap: 8px; }
-.l-countdown-sep {
-  font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem;
-  color: var(--gold); margin-bottom: 16px;
+.l-stats-grid { display: flex; align-items: flex-start; gap: 40px; }
+.l-stat-item { display: flex; flex-direction: column; gap: 4px; }
+.l-stat-val { font-family: 'Bebas Neue', sans-serif; font-size: 2.5rem; color: #fff; line-height: 1; }
+.l-stat-name {
+  font-family: 'Courier Prime', monospace; font-size: 11px;
+  font-weight: 700; letter-spacing: 2px;
 }
-.l-cd-box {
-  width: 64px; height: 70px; background: #111;
-  border: 2px solid var(--gold); border-radius: 2px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+
+@media (max-width: 640px) {
+  .l-stats-grid { gap: 24px; }
+  .l-stat-val { font-size: 2.1rem; }
 }
-.l-cd-box.pulse { animation: pulse-opacity 1s linear infinite; }
-.l-cd-num { font-family: 'Bebas Neue', sans-serif; font-size: 2.25rem; color: #fff; }
-.l-cd-unit {
-  font-family: 'Courier Prime', monospace; font-size: 10px;
-  color: #555; text-transform: uppercase; margin-top: 4px;
+
+/* Nav Actions */
+.l-nav-login {
+  background: transparent; border: 1px solid rgba(255,255,255,0.2);
+  color: #fff; font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.1rem; padding: 10px 24px; cursor: pointer;
+  transition: all 0.2s; letter-spacing: 1px;
 }
+.l-nav-login:hover { border-color: #fff; background: rgba(255,255,255,0.05); }
+
+.l-btn-gold {
+  background: var(--gold); color: #000;
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem;
+  padding: 10px 24px; border: none; cursor: pointer;
+  transition: transform 0.2s; letter-spacing: 1px;
+}
+.l-btn-gold:hover { transform: translateY(-2px); filter: brightness(1.1); }
 
 /* CTAs */
 .l-ctas { margin-top: 48px; display: flex; flex-direction: column; gap: 16px; }
@@ -223,16 +240,17 @@
 
 /* ── TICKER ── */
 .l-ticker {
-  height: 56px; background: var(--gold);
+  height: 44px; background: var(--gold);
   width: 100%; overflow: hidden;
   display: flex; align-items: center;
 }
-.l-ticker-track { display: flex; width: 200%; }
+.l-ticker-track { display: flex; width: max-content; }
 .l-ticker-set {
-  width: 50%; display: flex; align-items: center;
-  justify-content: space-around;
+  display: flex; align-items: center;
+  gap: 36px;
+  padding-right: 36px;
   font-family: 'Courier Prime', monospace; font-weight: 700;
-  font-size: 0.875rem; color: #000; letter-spacing: 0.15em;
+  font-size: 0.8rem; color: #000; letter-spacing: 0.12em;
   white-space: nowrap;
 }
 
@@ -316,18 +334,25 @@
   margin-bottom: 40px; text-transform: uppercase; letter-spacing: 2px;
 }
 .l-teams-grid {
-  display: flex; flex-wrap: wrap; justify-content: center;
-  gap: 16px; max-width: 1024px; margin: 0 auto; padding: 0 24px;
+  display: flex; flex-wrap: nowrap; justify-content: flex-start;
+  gap: 16px; max-width: 1400px; margin: 0 auto; padding: 0 24px;
+  overflow-x: auto; scrollbar-width: none;
 }
+.l-teams-grid::-webkit-scrollbar { display: none; }
+
 .l-team-badge {
-  width: 64px; height: 64px; border: 1px solid #222;
+  width: 110px; height: 110px; border: 1px solid #222;
+  flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Bebas Neue', sans-serif; font-size: 1.25rem;
-  color: #888; cursor: pointer; border-radius: 2px;
-  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  cursor: pointer; border-radius: 12px;
+  transition: transform 0.22s cubic-bezier(.175,.885,.32,1.275), border-color 0.2s, box-shadow 0.2s;
+  background: rgba(255,255,255,0.02);
 }
-@media (min-width: 640px) { .l-team-badge { width: 80px; height: 80px; font-size: 1.5rem; } }
-.l-team-badge:hover { color: #fff; border-color: var(--gold); background: #111; }
+@media (min-width: 1024px) { 
+  .l-team-badge { width: 130px; height: 130px; } 
+  .l-teams-grid { justify-content: center; overflow-x: visible; }
+}
+.l-team-badge:hover { border-color: var(--gold); transform: translateY(-6px); box-shadow: 0 8px 24px rgba(232,184,75,0.15); }
 
 /* ── FOOTER ── */
 .l-footer { background: #050505; border-top: 1px solid #1A1A1A; padding: 48px 24px; }
@@ -404,6 +429,9 @@
 .blink { animation: blink 1s step-end infinite; }
 
 @keyframes pulse-opacity { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-15px)} }
+.animate-float { animation: float 6s ease-in-out infinite; }
 
 @keyframes orbit { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
 .orbit-anim { animation:orbit 12s linear infinite; transform-origin:center; }

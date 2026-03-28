@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from "react";
-import { GOLD, BG, CARD, BORDER, ROLE_C, ROLE_EMOJI, ROLE_L } from "./MultiScreens";
+import { GOLD, CYAN, BG, CARD, BORDER, ROLE_C, ROLE_EMOJI, ROLE_L } from "./MultiScreens";
 
 
 
@@ -38,10 +38,16 @@ export function SquadModal({ isOpen, onClose, squads, myTeamId, TEAMS }) {
 
                 {/* Header */}
                 <div style={{ padding: "24px 30px", borderBottom: `1px solid ${BORDER}`, display: "flex", justifyContent: "space-between", alignItems: "center", background: `linear-gradient(to right, ${myTeamInfo?.color}15, transparent)` }}>
-                    <div>
-                        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 36, color: myTeamInfo?.color || GOLD, letterSpacing: 3, lineHeight: 1 }}>{myTeamInfo?.name || "MY SQUAD"}</div>
-                        <div style={{ color: "#aaa", fontSize: 13, letterSpacing: 2, marginTop: 4, fontWeight: 600 }}>
-                            PLAYERS: <span style={{ color: "#fff", fontSize: 15 }}>{mySquad.length} <span style={{ color: "#555" }}>/</span> 25</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 15 }}>
+                        <img src={`/assets/${myTeamId}.png`} style={{ width: 50, height: 50, objectFit: 'contain' }} alt="" />
+                        <div>
+                            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 36, color: myTeamInfo?.color || GOLD, letterSpacing: 3, lineHeight: 1 }}>{myTeamInfo?.name || "MY SQUAD"}</div>
+                            <div style={{ color: "#aaa", fontSize: 13, letterSpacing: 2, marginTop: 4, fontWeight: 600, display: "flex", gap: 15 }}>
+                                <div>PLAYERS: <span style={{ color: "#fff", fontSize: 15 }}>{mySquad.length} <span style={{ color: "#555" }}>/</span> 25</span></div>
+                                <div style={{ color: mySquad.filter(p => p.overseas).length >= 8 ? "#ff4d4d" : GOLD }}>
+                                    OVERSEAS: <span style={{ color: "#fff", fontSize: 15 }}>{mySquad.filter(p => p.overseas).length} <span style={{ color: "#555" }}>/</span> 8</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#666", fontSize: 28, cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => e.target.style.color = "#fff"} onMouseLeave={e => e.target.style.color = "#666"}>✕</button>
@@ -71,14 +77,16 @@ export function SquadModal({ isOpen, onClose, squads, myTeamId, TEAMS }) {
                                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                                                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                                             <span style={{ fontSize: 16 }}>{ROLE_EMOJI[p.role]}</span>
-                                                            <div style={{ fontWeight: 800, color: "#fff", fontSize: 15, lineHeight: 1.2 }}>{p.name}</div>
+                                                            <div style={{ fontWeight: 800, color: "#fff", fontSize: 15, lineHeight: 1.2 }}>
+                                                                {p.name} {p.overseas && <span title="Overseas Player">✈️</span>}
+                                                            </div>
                                                         </div>
                                                         <div style={{ fontWeight: 900, color: GOLD, fontSize: 14, whiteSpace: "nowrap", marginLeft: 8 }}>
                                                             {p.soldFor >= 1 ? `₹${p.soldFor.toFixed(2)}Cr` : `₹${Math.round(p.soldFor * 100)}L`}
                                                         </div>
                                                     </div>
                                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto", paddingTop: 8, borderTop: `1px dashed #222` }}>
-                                                        <div style={{ fontSize: 11, color: "#888", fontWeight: 700, letterSpacing: 1 }}>{p.isOS ? "OVERSEAS" : "INDIAN"}</div>
+                                                        <div style={{ fontSize: 11, color: p.overseas ? CYAN : "#888", fontWeight: 700, letterSpacing: 1 }}>{p.overseas ? "OVERSEAS" : "INDIAN"}</div>
                                                     </div>
                                                 </div>
                                             ))}

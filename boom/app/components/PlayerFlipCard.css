@@ -1,0 +1,207 @@
+.flip-container {
+  perspective: 1000px;
+  width: 100%;
+  aspect-ratio: 2 / 3.4;
+  cursor: pointer;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.flipper {
+  transition: 0.8s cubic-bezier(0.4, 0.0, 0.2, 1);
+  transform-style: preserve-3d;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.flipper.flipped {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  backface-visibility: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+}
+
+.front {
+  z-index: 2;
+  transform: rotateY(0deg);
+}
+
+.back {
+  transform: rotateY(180deg);
+}
+
+.player-card-glow {
+  width: 100%;
+  height: 100%;
+}
+
+.p-card-content {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  height: 100%;
+  justify-content: space-between;
+  font-family: 'Inter', sans-serif;
+  color: #fff;
+}
+
+.p-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.p-role-pill {
+  font-size: 0.70rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.p-price {
+  color: #E8B84B;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.p-avatar-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  margin: 8px 0;
+}
+
+.p-avatar {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0) 65%);
+}
+
+.p-primary-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.p-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-align: center;
+  margin-top: 8px;
+}
+
+.p-subtitle {
+  font-size: 0.75rem;
+  text-align: center;
+  color: #888;
+  margin-bottom: 24px;
+}
+
+.p-team {
+  font-weight: 700;
+}
+
+.p-sub-role {
+  color: #888;
+}
+
+.p-stats-row {
+  display: flex;
+  justify-content: space-around;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 16px;
+  padding-bottom: 8px;
+}
+
+.p-stat-box {
+  text-align: center;
+}
+
+.p-stat-val {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.p-stat-lbl {
+  font-size: 0.6rem;
+  color: #888;
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* BACK CONTENT STYLES */
+
+.p-bars-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  padding: 0 8px;
+  justify-content: center;
+}
+
+.p-bar-row {
+  display: flex;
+  align-items: center;
+  font-size: 0.75rem;
+  gap: 12px;
+}
+
+.p-bar-lbl {
+  width: 28px;
+  color: #aaa;
+  font-weight: 600;
+  text-align: left;
+}
+
+.p-bar-track {
+  flex: 1;
+  height: 6px;
+  background: #2a2a2a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.p-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 1s ease-out;
+}
+
+.p-bar-val {
+  width: 36px;
+  text-align: right;
+  font-weight: 700;
+  color: #ddd;
+}
+
+.p-back-footer {
+  text-align: center;
+  margin-top: 24px;
+  padding-bottom: 12px;
+}
+
+.p-price-large {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #E8B84B;
+}
+
+.p-back-footer-lbl {
+  font-size: 0.65rem;
+  color: #888;
+  letter-spacing: 1px;
+}
