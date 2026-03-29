@@ -414,9 +414,9 @@ io.on('connection', (socket) => {
             });
         }
 
-        // ── Full room check ──
+        // ── Full room fallback ──
         const activePlayers = Object.values(room.players).filter(p => !p.isSpectator);
-        if (activePlayers.length >= 10) return cb({ ok: false, error: 'Room is full (10 players max)' });
+        const isFull = activePlayers.length >= 10;
 
         // ── New Join ──
         room.players[playerId] = {
@@ -425,18 +425,18 @@ io.on('connection', (socket) => {
             name: playerName || `Player ${Object.keys(room.players).length + 1}`,
             teamId: null,
             isHost: false,
-            isSpectator: false,
+            isSpectator: isFull,
             offline: false
         };
         socket.join(code);
         currentRoom = code;
         currentPlayerId = playerId;
-        console.log(`[ROOM] ${playerName} (${playerId}) joined ${code}`);
+        console.log(`[ROOM] ${playerName || 'Player'} (${playerId}) joined ${code}${isFull ? ' AS SPECTATOR (Room Full)' : ''}`);
 
         const state = getLobbyState(room);
         io.to(code).emit('lobby-update', state);
-        pushSystemMessage(room, `${playerName || 'Player'} joined`);
-        cb({ ok: true, code, players: state.players, roomStatus: room.status, hostId: room.hostId, auctionMode: room.auctionMode, isSpectator: false });
+        pushSystemMessage(room, `${playerName || 'Player'} joined${isFull ? ' as spectator' : ''}`);
+        cb({ ok: true, code, players: state.players, roomStatus: room.status, hostId: room.hostId, auctionMode: room.auctionMode, isSpectator: isFull });
 
         if (!room.isPrivate) broadcastRoomList();
     });
@@ -585,8 +585,9 @@ io.on('connection', (socket) => {
         const nb = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
         if (gs.purses[teamId] < nb) return cb?.({ ok: false, error: 'Insufficient purse' });
 
-        const maxSquadSize = (gs.playerQueue?.length || 0) <= 200 ? 15 : 25;
-        if (gs.squads[teamId].length >= maxSquadSize) return cb?.({ ok: false, error: 'Squad full' });
+        const isMini = room.auctionMode && room.auctionMode.toLowerCase() === 'mini';
+        const maxSquadSize = isMini ? 11 : ((gs.playerQueue?.length || 0) <= 200 ? 15 : 25);
+        if (gs.squads[teamId].length >= maxSquadSize) return cb?.({ ok: false, error: 'Squad full (' + maxSquadSize + ' max)' });
 
         const playerOnAuction = gs.playerQueue[gs.currentIdx];
         const osCount = gs.squads[teamId].filter(p => p.overseas).length;

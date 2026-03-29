@@ -169,6 +169,18 @@ function AuctionContent() {
   });
 
   if (gs.phase === 'selection') {
+    const isMini = currentMode?.toLowerCase() === 'mini';
+    if (isMini && !gs.selections[effectiveMyTeamId]) {
+      // Auto-submit all 11 players for mini auction
+      const mySquad = gs.squads[effectiveMyTeamId] || [];
+      setTimeout(() => submitXI(mySquad.slice(0, 11)), 500);
+      return (
+        <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+          <div style={{ color: GOLD, fontFamily: "'Bebas Neue'", fontSize: 28, letterSpacing: 4 }}>AUCTION COMPLETE</div>
+          <div style={{ color: '#555', fontSize: 13, letterSpacing: 2 }}>FINALIZING YOUR SQUAD...</div>
+        </div>
+      );
+    }
     return (
       <SelectionScreen
         mySquad={gs.squads[effectiveMyTeamId] || []}

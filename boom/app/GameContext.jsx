@@ -359,7 +359,8 @@ export function GameProvider({ children }) {
     const nb = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
     const osCount = gs.squads[gs.myTeamId].filter(p => p.overseas).length;
     const playerOnAuction = gs.playerQueue[gs.currentIdx];
-    const maxSquadSize = (gs.playerQueue?.length || 0) <= 200 ? 15 : 25;
+    const isMiniMode = (playMode === 'multi' ? lobbyMode === 'mini' : auctionMode === 'mini');
+    const maxSquadSize = isMiniMode ? 11 : ((gs.playerQueue?.length || 0) <= 200 ? 15 : 25);
     if (gs.purses[gs.myTeamId] < nb || gs.squads[gs.myTeamId].length >= maxSquadSize || (playerOnAuction.overseas && osCount >= 8)) return;
     gs.currentBid = nb; gs.currentBidder = gs.myTeamId; gs.timer = 10;
     gs.bidLog = [{ teamId: gs.myTeamId, bid: nb, isMe: true }, ...gs.bidLog].slice(0, 7);

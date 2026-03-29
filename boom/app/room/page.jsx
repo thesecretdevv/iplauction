@@ -67,11 +67,13 @@ const globalStyles = `
   .rp-live-dot { width:6px; height:6px; border-radius:50%; background:${CYAN}; box-shadow:0 0 8px ${CYAN}; animation:pulse 1.5s ease-in-out infinite; }
 
   /* ── Choice cards (home screen) ── */
-  .rp-choices { display:grid; grid-template-columns:1fr 1fr; gap:16px; width:100%; }
+  .rp-choices { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; width:100%; }
+  @media(max-width:768px){ .rp-choices{grid-template-columns:1fr 1fr} }
   @media(max-width:560px){ .rp-choices{grid-template-columns:1fr} }
-  .rp-choice { padding:26px 22px; border:1px solid #1a1a1a; cursor:pointer; background:#0a0a0a; transition:all .3s cubic-bezier(.175,.885,.32,1.275); position:relative; overflow:hidden; border-radius:10px; }
+  .rp-choice { padding:22px 18px; border:1px solid #1a1a1a; cursor:pointer; background:#0a0a0a; transition:all .3s cubic-bezier(.175,.885,.32,1.275); position:relative; overflow:hidden; border-radius:10px; }
   .rp-choice.create-card:hover { transform:translateY(-6px); border-color:${GOLD}; box-shadow:0 12px 32px rgba(232,184,75,.18); }
   .rp-choice.join-card:hover   { transform:translateY(-6px); border-color:${CYAN}; box-shadow:0 12px 32px rgba(34,211,238,.18); }
+  .rp-choice.browse-card:hover { transform:translateY(-6px); border-color:#818cf8; box-shadow:0 12px 32px rgba(129,140,248,.18); }
   .rp-choice-label { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:10px; letter-spacing:3px; text-transform:uppercase; margin-bottom:12px; }
   .rp-choice-title { font-family:'Bebas Neue',sans-serif; font-size:1.85rem; color:#fff; margin-bottom:6px; }
   .rp-choice-desc  { font-family:'Courier Prime',monospace; font-size:11px; color:#94A3B8; line-height:1.6; }
@@ -495,7 +497,7 @@ function RoomContent() {
   const action = searchParams.get('action');
 
   const {
-    emit, playerId,
+    emit, on, playerId,
     roomCode, setRoomCode, lobbyPlayers, setLobbyPlayers,
     isHost, setIsHost, myName, setMyName, setPlayMode,
     lobbyMode, setLobbyMode, multiGS, setMultiGS, startMultiAuction,
@@ -557,9 +559,10 @@ function RoomContent() {
     if (phase === 'home' || phase === 'join') {
       fetchRooms();
       const t = setInterval(fetchRooms, 10000);
+      on('public-rooms-updated', fetchRooms);
       return () => clearInterval(t);
     }
-  }, [phase, fetchRooms]);
+  }, [phase, fetchRooms, on]);
 
   // ── Helpers ──
   const saveRecentRoom = (code, roomName) => {
@@ -681,7 +684,7 @@ function RoomContent() {
       {/* ══════════ HOME ══════════ */}
       {phase === 'home' && (
         <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 24px 60px', position:'relative', zIndex:5 }}>
-          <div style={{ width:'100%', maxWidth:620, animation:'fadeUp .4s ease both' }}>
+          <div style={{ width:'100%', maxWidth:780, animation:'fadeUp .4s ease both' }}>
             <span className="rp-eyebrow">Multiplayer</span>
             <h1 className="rp-h1">JOIN THE<br /><span>AUCTION ROOM</span></h1>
             <div className="rp-live-counter">
@@ -697,10 +700,15 @@ function RoomContent() {
                 <div className="rp-choice-title">CREATE ROOM</div>
                 <div className="rp-choice-desc">Set up a private or public room. Invite friends with a code.</div>
               </div>
-              <div className="rp-choice join-card" onClick={() => { setError(''); setPhase('join'); }}>
+              <div className="rp-choice join-card" onClick={() => { setError(''); setPhase('join-code'); }}>
                 <div className="rp-choice-label" style={{ color: CYAN }}>PLAYER</div>
                 <div className="rp-choice-title">JOIN ROOM</div>
-                <div className="rp-choice-desc">Enter a room code or pick from active public lobbies.</div>
+                <div className="rp-choice-desc">Enter a private room code to join an ongoing auction.</div>
+              </div>
+              <div className="rp-choice browse-card" onClick={() => { setError(''); setPhase('join'); }}>
+                <div className="rp-choice-label" style={{ color: '#818cf8' }}>EXPLORE</div>
+                <div className="rp-choice-title">BROWSE ROOMS</div>
+                <div className="rp-choice-desc">Pick from active public lobbies to spectate or play.</div>
               </div>
             </div>
 
@@ -714,7 +722,7 @@ function RoomContent() {
                       <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#eee' }}>{r.name}</div>
                       <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#94A3B8', marginTop:2 }}>Host: {r.host} · {r.players}/10</div>
                     </div>
-                    <button className="rp-room-join-btn" onClick={() => { setJoinCode(r.code); setPhase('join'); }}>QUICK JOIN</button>
+                    <button className="rp-room-join-btn" onClick={() => { setJoinCode(r.code); setPhase('join-code'); }}>QUICK JOIN</button>
                   </div>
                 ))}
               </div>
@@ -730,7 +738,7 @@ function RoomContent() {
                       <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#aaa' }}>{r.name}</div>
                       <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#94A3B8', marginTop:2 }}>Code: {r.code}</div>
                     </div>
-                    <button className="rp-room-rejoin-btn" onClick={() => { setJoinCode(r.code); setPhase('join'); }}>REJOIN</button>
+                    <button className="rp-room-rejoin-btn" onClick={() => { setJoinCode(r.code); setPhase('join-code'); }}>REJOIN</button>
                   </div>
                 ))}
               </div>
@@ -785,6 +793,41 @@ function RoomContent() {
             {error && <div className="rp-error">{error}</div>}
             <button className="rp-btn" onClick={handleCreate} disabled={loading}>
               {loading ? 'CREATING ROOM…' : 'CREATE ROOM →'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════ JOIN WITH CODE ══════════ */}
+      {phase === 'join-code' && (
+        <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 24px 40px', position:'relative', zIndex:5 }}>
+          <div style={{ width:'100%', maxWidth:480, animation:'fadeUp .35s ease both' }}>
+            <span className="rp-eyebrow">Private Room</span>
+            <h1 className="rp-h1" style={{ fontSize:'clamp(2rem,7vw,3.8rem)', marginBottom:4 }}>JOIN WITH<br /><span>CODE</span></h1>
+            
+            <label className="rp-label">Your Name</label>
+            <input
+              ref={nameRef}
+              className="rp-input"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Rahul"
+              maxLength={20}
+            />
+
+            <label className="rp-label">Room Code</label>
+            <input
+              className="rp-input code-input"
+              value={joinCode}
+              onChange={e => setJoinCode(e.target.value.toUpperCase())}
+              placeholder="e.g. X9QWL"
+              maxLength={6}
+              onKeyDown={e => e.key === 'Enter' && doJoin(joinCode)}
+            />
+
+            {error && <div className="rp-error">{error}</div>}
+            <button className="rp-btn cyan-btn" onClick={() => doJoin(joinCode)} disabled={loading}>
+              {loading ? 'JOINING…' : 'JOIN ROOM →'}
             </button>
           </div>
         </div>

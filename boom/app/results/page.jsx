@@ -29,12 +29,25 @@ const TEAM_LOGOS = {
 export default function ResultsPage() {
   const router = useRouter();
   const { gs, isMulti, effectiveMyTeamId, handleRestart, lobbyMode, auctionMode } = useGame();
+  const [showLoading, setShowLoading] = useState(true);
 
-  // While game state loads (e.g. on refresh), show a minimal loader
-  if (!gs) {
+  useEffect(() => {
+    if (gs) {
+      const timer = setTimeout(() => setShowLoading(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [gs]);
+
+  if (!gs || showLoading) {
     return (
-      <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: GOLD, fontFamily: "'Bebas Neue'", fontSize: 32, letterSpacing: 6 }}>LOADING RESULTS…</div>
+      <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24 }}>
+        <div className="loading-spinner" style={{ width: 60, height: 60, border: `4px solid ${GOLD}22`, borderTopColor: GOLD, borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <div style={{ color: GOLD, fontFamily: "'Bebas Neue'", fontSize: 32, letterSpacing: 6, textAlign: 'center' }}>
+          {gs ? 'CALCULATING FINAL SQUADS...' : 'LOADING RESULTS...'}
+        </div>
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+        `}</style>
       </div>
     );
   }
@@ -103,6 +116,29 @@ function Results({ gs, myTeamId: mti, onRestart, mode }) {
     URL.revokeObjectURL(url);
   }, [displayList, team, mode, playingXI, teamTotalRating, teamAvgRating, spent, soldCount, unsoldCount, gs, activeId]);
 
+  // ── Audio playback ──
+  useEffect(() => {
+    const audio = new Audio('/assets/Ipl.mp3');
+    audio.volume = 0.5;
+    audio.play().catch(e => console.log('Audio playback prevented', e));
+    
+    const stopTimer = setTimeout(() => {
+      audio.pause();
+      audio.currentTime = 0;
+    }, 30000); // 30 seconds
+
+    return () => {
+      clearTimeout(stopTimer);
+      audio.pause();
+    };
+  }, []);
+
+  // ── Calculation ──
+  const batCount = playingXI.filter(p => p.role === 'batsman').length;
+  const bowlCount = playingXI.filter(p => p.role === 'bowler').length;
+  const wkCount = playingXI.filter(p => p.role === 'wicket_keeper').length;
+  const isDisqualified = playingXI.length < 11 || batCount < 2 || bowlCount < 2 || wkCount < 1;
+
   return (
     <div style={{ minHeight: '100vh', background: BG, fontFamily: "'Rajdhani',sans-serif" }}>
       <style>{`
@@ -143,6 +179,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode }) {
             team={team} displayList={displayList} playingXI={playingXI} fullSquad={fullSquad}
             spent={spent} soldCount={soldCount} unsoldCount={unsoldCount}
             teamTotalRating={teamTotalRating} teamAvgRating={teamAvgRating}
+            isDisqualified={isDisqualified}
             shareText={shareText} shareWhatsApp={shareWhatsApp} downloadSheet={downloadSheet}
           />
         )}
@@ -162,9 +199,19 @@ function Results({ gs, myTeamId: mti, onRestart, mode }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Squad Tab
 // ─────────────────────────────────────────────────────────────────────────────
-function SquadTab({ gs, mti, mode, activeId, setActiveId, team, displayList, playingXI, fullSquad, spent, soldCount, unsoldCount, teamTotalRating, teamAvgRating, shareText, shareWhatsApp, downloadSheet }) {
+function SquadTab({ gs, mti, mode, activeId, setActiveId, team, displayList, playingXI, fullSquad, spent, soldCount, unsoldCount, teamTotalRating, teamAvgRating, isDisqualified, shareText, shareWhatsApp, downloadSheet }) {
   return (
     <div style={{ maxWidth: 1600, margin: '0 auto' }}>
+      {/* Disqualified Alert */}
+      {isDisqualified && playingXI.length > 0 && (
+        <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef444444', borderRadius: 12, padding: '16px 24px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 16, animation: 'fadeUp 0.4s ease' }}>
+          <div style={{ fontSize: 28 }}>🚨</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, color: '#ef4444', letterSpacing: 1 }}>SQUAD DISQUALIFIED</div>
+            <div style={{ color: '#ef4444aa', fontSize: 13, letterSpacing: 1, marginTop: 2 }}>This team fails the minimum required criteria: 2 Batters, 2 Bowlers, 1 Wicketkeeper.</div>
+          </div>
+        </div>
+      )}
       {/* ── Team selector ── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
         {TEAMS.map(t => (
@@ -309,7 +356,12 @@ function LeaderboardTab({ gs, mode, mti }) {
         <br />
         Each team's <strong style={{ color: '#aaa' }}>Playing XI</strong> is evaluated: every player has a pre-set rating (out of 100) based on IPL 2025 performance &amp; expert analysis.
         The <strong style={{ color: '#aaa' }}>Total Score</strong> is the sum of all 11 player ratings. The <strong style={{ color: '#aaa' }}>Average Score</strong> is Total ÷ XI size.
-        Selection rules: Best-rated 11 players, max 4 overseas, at least 1 wicket-keeper.
+        {mode?.toLowerCase() === 'mini' ? (
+          <span style={{ color: '#777' }}>Minimum criteria: 2 Batters, 2 Bowlers, 1 Wicketkeeper. Teams failing this are <span style={{ color: '#ef4444' }}>DISQUALIFIED</span>.</span>
+        ) : (
+          <span style={{ color: '#777' }}>Selection rules: Best-rated 11 players, max 4 overseas, at least 1 wicket-keeper.</span>
+        )}
+        <br />
         Teams that submitted fewer than 11 players are scored on their submitted XI size.
         <br />
         <span style={{ color: '#333' }}>Rating scale: 90–100 Elite · 80–89 Excellent · 70–79 Good · 60–69 Average · 50–59 Below Avg · &lt;50 Reserve</span>
@@ -350,8 +402,11 @@ function LeaderboardTab({ gs, mode, mti }) {
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}`, flexShrink: 0 }} />
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 18, color, letterSpacing: 2, lineHeight: 1 }}>
+                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 18, color, letterSpacing: 2, lineHeight: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
                     {r.teamName}{isMyTeam ? ' (YOU)' : ''}
+                    {r.isDisqualified && (
+                      <span style={{ background: '#ef4444', color: '#fff', fontSize: 9, padding: '2px 6px', borderRadius: 4, letterSpacing: 1 }}>DISQUALIFIED</span>
+                    )}
                   </div>
                   <div style={{ color: '#444', fontSize: 11, marginTop: 2, letterSpacing: 1 }}>
                     Avg: <strong style={{ color: '#777' }}>{r.averageScore}</strong> pts · {r.playingXI.length} players in XI

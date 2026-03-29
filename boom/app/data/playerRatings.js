@@ -3,6 +3,8 @@
 // Based on: IPL 2025 performance, auction prices, current form,
 // expert rankings, and IPL 2026 pre-season analysis
 // 
+import ALL_PLAYERS from './Players.json';
+// 
 // Rating Scale:
 //   90-100 → Elite / World Class
 //   80-89  → Excellent / Match Winner
@@ -13,352 +15,174 @@
 // ============================================================
 
 export const PLAYER_RATINGS = {
-
-  // ─────────────────────────────────────────
-  // 🟡 CHENNAI SUPER KINGS (CSK)
-  // ─────────────────────────────────────────
-
-  // Batters
-  "Ruturaj Gaikwad":    82,
-  "MS Dhoni (WK)":      76,
-  "Sanju Samson (WK)":  86,
-  "Dewald Brevis":      67,
-  "Ayush Mhatre":       63,
-  "Kartik Sharma (WK)": 65,
-  "Sarfaraz Khan":      70,
-  "Urvil Patel (WK)":   57,
-
-  // All-Rounders
-  "Anshul Kamboj":      58,
-  "Jamie Overton":      62,
-  "Ramakrishna Ghosh":  55,
-  "Prashant Veer":      65,
-  "Matthew Short":      64,
-  "Aman Khan":          45,
-  "Zak Foulkes":        54,
-  "Shivam Dube":        73,
-
-  // Bowlers
-  "Khaleel Ahmed":      69,
-  "Noor Ahmad":         75,
-  "Mukesh Choudhary":   61,
-  "Nathan Ellis":       64,
-  "Shreyas Gopal":      63,
-  "Gurjapneet Singh":   52,
-  "Akeal Hosein":       59,
-  "Matt Henry":         67,
-  "Rahul Chahar":       65,
-
-  // ─────────────────────────────────────────
-  // 🔵 MUMBAI INDIANS (MI)
-  // ─────────────────────────────────────────
-
-  // Batters
-  "Rohit Sharma":         88,
-  "Suryakumar Yadav":     92,
-  "Robin Minz (WK)":      56,
-  "Sherfane Rutherford":  65,
-  "Ryan Rickelton (WK)":  68,
-  "Quinton de Kock (WK)": 83,
-  "Danish Malewar":       44,
-  "Tilak Varma":          78,
-
-  // All-Rounders
-  "Hardik Pandya":      85,
-  "Naman Dhir":         61,
-  "Mitchell Santner":   71,
-  "Raj Angad Bawa":     55,
-  "Atharva Ankolekar":  52,
-  "Mayank Rawat":       46,
-  "Corbin Bosch":       62,
-  "Will Jacks":         73,
-  "Shardul Thakur":     70,
-
-  // Bowlers
-  "Jasprit Bumrah":     97,
-  "Trent Boult":        83,
-  "Deepak Chahar":      72,
-  "Mayank Markande":    60,
-  "Ashwani Kumar":      50,
-  "Mohammad Izhar":     47,
-  "Raghu Sharma":       44,
-
-  // ─────────────────────────────────────────
-  // 🔴 ROYAL CHALLENGERS BENGALURU (RCB)
-  // ─────────────────────────────────────────
-
-  // Batters
-  "Virat Kohli":        96,
-  "Phil Salt (WK)":     78,
-  "Devdutt Padikkal":   70,
-  "Rajat Patidar":      75,
-  "Jitesh Sharma (WK)": 68,
-  "Jordan Cox (WK)":    62,
-
-  // All-Rounders
-  "Krunal Pandya":      72,
-  "Tim David":          82,
-  "Romario Shepherd":   68,
-  "Jacob Bethell":      70,
-  "Venkatesh Iyer":     74,
-  "Satvik Deswal":      43,
-  "Mangesh Yadav":      52,
-  "Vicky Ostwal":       61,
-  "Vihaan Malhotra":    40,
-  "Kanishk Chouhan":    40,
-
-  // Bowlers
-  "Bhuvneshwar Kumar":  74,
-  "Josh Hazlewood":     83,
-  "Yash Dayal":         55,
-  "Nuwan Thushara":     66,
-  "Suyash Sharma":      60,
-  "Rasikh Dar":         63,
-  "Jacob Duffy":        59,
-  "Abhinandan Singh":   42,
-
-  // ─────────────────────────────────────────
-  // 🟣 KOLKATA KNIGHT RIDERS (KKR)
-  // ─────────────────────────────────────────
-
-  // Batters
-  "Ajinkya Rahane":         67,
-  "Angkrish Raghuvanshi":   65,
-  "Manish Pandey":          62,
-  "Rinku Singh":            79,
-  "Rovman Powell":          72,
-  "Finn Allen (WK)":        72,
-  "Tim Seifert (WK)":       60,
-  "Tejasvi Singh (WK)":     48,
-  "Rahul Tripathi":         65,
-  "Cameron Green":          83,
-
-  // All-Rounders
-  "Anukul Roy":         58,
-  "Sarthak Ranjan":     47,
-  "Daksh Kamra":        50,
-  "Rachin Ravindra":    72,
-  "Ramandeep Singh":    64,
-
-  // Bowlers
-  "Vaibhav Arora":          65,
-  "Matheesha Pathirana":    81,
-  "Kartik Tyagi":           58,
-  "Prashant Solanki":       55,
-  "Akash Deep":             71,
-  "Harshit Rana":           69,
-  "Umran Malik":            65,
-  "Sunil Narine":           85,
-  "Varun Chakravarthy":     81,
-
-  // ─────────────────────────────────────────
-  // 🟠 SUNRISERS HYDERABAD (SRH)
-  // ─────────────────────────────────────────
-
-  // Batters
-  "Ishan Kishan (WK)":      75,
-  "Aniket Verma":           60,
-  "Smaran Ravichandran":    52,
-  "Salil Arora (WK)":       44,
-  "Heinrich Klaasen (WK)":  84,
-  "Travis Head":            89,
-
-  // All-Rounders
-  "Harshal Patel":          71,
-  "Kamindu Mendis":         74,
-  "Harsh Dubey":            60,
-  "Brydon Carse":           68,
-  "Shivang Kumar":          47,
-  "Liam Livingstone":       77,
-  "Jack Edwards":           58,
-  "Abhishek Sharma":        74,
-  "Nitish Kumar Reddy":     72,
-
-  // Bowlers
-  "Pat Cummins":        89,
-  "Zeeshan Ansari":     57,
-  "Jaydev Unadkat":     62,
-  "Eshan Malinga":      54,
-  "Sakib Hussain":      48,
-  "Onkar Tarmale":      45,
-  "Amit Kumar":         43,
-  "Praful Hinge":       42,
-  "Shivam Mavi":        66,
-
-  // ─────────────────────────────────────────
-  // 🔵 DELHI CAPITALS (DC)
-  // ─────────────────────────────────────────
-
-  // Batters
-  "KL Rahul (WK)":        84,
-  "Karun Nair":           68,
-  "David Miller":         76,
-  "Ben Duckett (WK)":     74,
-  "Pathum Nissanka":      70,
-  "Sahil Parakh":         50,
-  "Prithvi Shaw":         65,
-  "Abishek Porel (WK)":   61,
-  "Tristan Stubbs (WK)":  68,
-
-  // All-Rounders
-  "Axar Patel":         83,
-  "Sameer Rizvi":       62,
-  "Ashutosh Sharma":    60,
-  "Vipraj Nigam":       52,
-  "Ajay Mandal":        50,
-  "Tripurana Vijay":    55,
-  "Madhav Tiwari":      48,
-  "Auqib Dar":          51,
-  "Nitish Rana":        66,
-
-  // Bowlers
-  "Mitchell Starc":       84,
-  "T. Natarajan":         72,
-  "Mukesh Kumar":         66,
-  "Dushmantha Chameera":  70,
-  "Lungi Ngidi":          72,
-  "Kyle Jamieson":        68,
-  "Kuldeep Yadav":        85,
-
-  // ─────────────────────────────────────────
-  // 🟡 LUCKNOW SUPER GIANTS (LSG)
-  // ─────────────────────────────────────────
-
-  // Batters
-  "Rishabh Pant (WK)":    90,
-  "Aiden Markram":        78,
-  "Himmat Singh":         58,
-  "Matthew Breetzke":     62,
-  "Mukul Choudhary (WK)": 48,
-  "Akshat Raghuwanshi":   52,
-  "Josh Inglis (WK)":     68,
-  "Nicholas Pooran (WK)": 84,
-
-  // All-Rounders
-  "Mitchell Marsh":       81,
-  "Abdul Samad":          65,
-  "Shahbaz Ahmed":        65,
-  "Arshin Kulkarni":      55,
-  "Wanindu Hasaranga":    82,
-  "Ayush Badoni":         63,
-
-  // Bowlers
-  "Mohammad Shami":     88,
-  "Avesh Khan":         70,
-  "M. Siddharth":       58,
-  "Digvesh Singh":      60,
-  "Akash Singh":        52,
-  "Prince Yadav":       46,
-  "Arjun Tendulkar":    52,
-  "Anrich Nortje":      83,
-  "Naman Tiwari":       53,
-  "Mayank Yadav":       76,
-  "Mohsin Khan":        63,
-
-  // ─────────────────────────────────────────
-  // 🩷 RAJASTHAN ROYALS (RR)
-  // ─────────────────────────────────────────
-
-  // Batters
-  "Riyan Parag":              76,
-  "Shubham Dubey":            60,
-  "Vaibhav Suryavanshi":      68,
-  "Donovan Ferreira (WK)":    62,
-  "Lhuan-dre Pretorius (WK)": 64,
-  "Ravi Singh":               47,
-  "Yashasvi Jaiswal":         89,
-  "Shimron Hetmyer":          74,
-  "Dhruv Jurel (WK)":         68,
-
-  // All-Rounders
-  "Yudhvir Singh Charak":  61,
-  "Ravindra Jadeja":       88,
-  "Sam Curran":            76,
-
-  // Bowlers
-  "Jofra Archer":       87,
-  "Tushar Deshpande":   68,
-  "Kwena Maphaka":      65,
-  "Ravi Bishnoi":       75,
-  "Sushant Mishra":     54,
-  "Yash Raj Punia":     50,
-  "Vignesh Puthur":     52,
-  "Brijesh Sharma":     47,
-  "Adam Milne":         65,
-  "Kuldeep Sen":        60,
-  "Sandeep Sharma":     65,
-  "Nandre Burger":      67,
-
-  // ─────────────────────────────────────────
-  // 🔵 GUJARAT TITANS (GT)
-  // ─────────────────────────────────────────
-
-  // Batters
-  "Shubman Gill":         88,
-  "Jos Buttler (WK)":     86,
-  "Kumar Kushagra (WK)":  57,
-  "Anuj Rawat (WK)":      54,
-  "Tom Banton (WK)":      62,
-  "Glenn Phillips":       72,
-
-  // All-Rounders
-  "Nishant Sindhu":       55,
-  "Washington Sundar":    74,
-  "Mohd. Arshad Khan":    54,
-  "Sai Kishore":          65,
-  "Jayant Yadav":         62,
-  "Jason Holder":         72,
-  "Sai Sudharsan":        79,
-  "Shahrukh Khan":        68,
-
-  // Bowlers
-  "Kagiso Rabada":       89,
-  "Mohammed Siraj":      81,
-  "Prasidh Krishna":     74,
-  "Manav Suthar":        57,
-  "Gurnoor Singh Brar":  62,
-  "Ishant Sharma":       60,
-  "Ashok Sharma":        54,
-  "Prithvi Raj Yarra":   50,
-  "Luke Wood":           62,
-  "Rahul Tewatia":       68,
-  "Rashid Khan":         93,
-
-  // ─────────────────────────────────────────
-  // 🔴 PUNJAB KINGS (PBKS)
-  // ─────────────────────────────────────────
-
-  // Batters
-  "Shreyas Iyer":            82,
-  "Nehal Wadhera":           65,
-  "Vishnu Vinod (WK)":       58,
-  "Harnoor Pannu":           55,
-  "Pyla Avinash":            47,
-  "Prabhsimran Singh (WK)":  70,
-  "Shashank Singh":          68,
-
-  // All-Rounders
-  "Marcus Stoinis":       78,
-  "Harpreet Brar":        65,
-  "Marco Jansen":         74,
-  "Azmatullah Omarzai":   70,
-  "Priyansh Arya":        68,
-  "Musheer Khan":         65,
-  "Suryansh Shedge":      52,
-  "Mitch Owen":           60,
-  "Cooper Connolly":      58,
-  "Ben Dwarshuis":        62,
-
-  // Bowlers
-  "Arshdeep Singh":       83,
-  "Yuzvendra Chahal":     83,
-  "Vyshak Vijaykumar":    68,
-  "Yash Thakur":          62,
-  "Xavier Bartlett":      65,
-  "Pravin Dubey":         54,
-  "Vishal Nishad":        50,
-  "Lockie Ferguson":      74,
-
+  "Virat Kohli": 95,
+  "Rohit Sharma": 92,
+  "Suryakumar Yadav": 91,
+  "Shubman Gill": 90,
+  "Abhishek Sharma": 90,
+  "Yashasvi Jaiswal": 89,
+  "Shreyas Iyer": 89,
+  "Sai Sudharsan": 89,
+  "Ruturaj Gaikwad": 88,
+  "Rinku Singh": 88,
+  "Tilak Varma": 88,
+  "Shivam Dube": 87,
+  "Rajat Patidar": 86,
+  "Nitish Kumar Reddy": 84,
+  "Tim David": 84,
+  "Tristan Stubbs": 84,
+  "Dewald Brevis": 84,
+  "Ashutosh Sharma": 83,
+  "Ajinkya Rahane": 83,
+  "Shashank Singh": 82,
+  "Angkrish Raghuvanshi": 81,
+  "Aiden Markram": 81,
+  "David Miller": 81,
+  "Devdutt Padikkal": 81,
+  "Sherfane Rutherford": 81,
+  "Shimron Hetmyer": 80,
+  "Will Jacks": 80,
+  "Steve Smith": 80,
+  "Vaibhav Suryavanshi": 80,
+  "Ayush Mhatre": 80,
+  "Naman Dhir": 80,
+  "Digvesh Rathi": 80,
+  "Sarfaraz Khan": 79,
+  "Kamindu Mendis": 79,
+  "Nehal Wadhera": 79,
+  "Priyansh Arya": 79,
+  "Manish Pandey": 79,
+  "Prithvi Shaw": 79,
+  "Shahrukh Khan": 78,
+  "Abdul Samad": 78,
+  "Karun Nair": 77,
+  "Ryan Rickelton": 77,
+  "Ramandeep Singh": 77,
+  "Aniket Verma": 77,
+  "Urvil Patel": 76,
+  "Musheer Khan": 75,
+  "Vipraj Nigam": 74,
+  "Sameer Rizvi": 73,
+  "Rahul Tripathi": 72,
+  "Abhinav Manohar": 71,
+  "Yash Dhull": 70,
+  "Mohd. Arshad Khan": 70,
+  "Jasprit Bumrah": 96,
+  "Mitchell Starc": 91,
+  "Rashid Khan": 91,
+  "Sunil Narine": 90,
+  "Yuzvendra Chahal": 90,
+  "Pat Cummins": 89,
+  "Josh Hazlewood": 89,
+  "Arshdeep Singh": 89,
+  "Trent Boult": 89,
+  "Kuldeep Yadav": 89,
+  "Mohammad Shami": 88,
+  "Varun Chakravarthy": 88,
+  "Bhuvneshwar Kumar": 88,
+  "Jofra Archer": 87,
+  "Mohammad Siraj": 87,
+  "Kagiso Rabada": 86,
+  "Matheesha Pathirana": 85,
+  "Suyash Sharma": 85,
+  "Anrich Nortje": 84,
+  "Ravi Bishnoi": 84,
+  "T. Natarajan": 84,
+  "Jacob Duffy": 84,
+  "Noor Ahmad": 83,
+  "Matt Henry": 83,
+  "Deepak Chahar": 82,
+  "Sandeep Sharma": 82,
+  "Prasidh Krishna": 81,
+  "Lockie Ferguson": 81,
+  "Lungisani Ngidi": 81,
+  "Shardul Thakur": 81,
+  "Khaleel Ahmed": 81,
+  "Alzarri Joseph": 80,
+  "Harshit Rana": 80,
+  "Rahul Chahar": 80,
+  "Mayank Yadav": 80,
+  "Umesh Yadav": 80,
+  "Mustafizur Rahman": 79,
+  "Yash Dayal": 79,
+  "Avesh Khan": 79,
+  "Nathan Ellis": 78,
+  "Kyle Jamieson": 78,
+  "Vaibhav Arora": 78,
+  "Mukesh Kumar": 77,
+  "Mangesh Yadav": 77,
+  "Harshal Patel": 77,
+  "Karn Sharma": 77,
+  "Akash Deep": 76,
+  "Akash Madhwal": 76,
+  "Navdeep Saini": 75,
+  "Nuwan Thushara": 75,
+  "Mohsin Khan": 74,
+  "Yash Thakur": 74,
+  "Adam Milne": 73,
+  "Kartik Sharma": 73,
+  "Jhye Richardson": 72,
+  "Taskin Ahmed": 72,
+  "Kuldeep Sen": 72,
+  "Ashwani Kumar": 71,
+  "Shamar Joseph": 71,
+  "Prince Yadav": 71,
+  "Kuldip Yadav": 71,
+  "Sanju Samson": 89,
+  "Nicholas Pooran": 89,
+  "Ishan Kishan": 89,
+  "Rishabh Pant": 88,
+  "Jos Buttler": 88,
+  "KL Rahul": 88,
+  "Heinrich Klaasen": 86,
+  "Quinton De Kock": 86,
+  "Phil Salt": 86,
+  "Jitesh Sharma": 83,
+  "MS Dhoni": 82,
+  "Jonny Bairstow": 80,
+  "Prabhsimran Singh": 80,
+  "Rahmanullah Gurbaz": 79,
+  "Dhruv Jurel": 79,
+  "Josh Inglis": 79,
+  "Shai Hope": 75,
+  "K.S. Bharat": 73,
+  "Ben Duckett": 74,
+  "Jamie Smith": 72,
+  "Kusal Mendis": 71,
+  "Robin Minz": 64,
+  "Kumar Kushagra": 64,
+  "Vishnu Vinod": 64,
+  "Tim Seifert": 60,
+  "Hardik Pandya": 93,
+  "Ravindra Jadeja": 90,
+  "Axar Patel": 88,
+  "Cameron Green": 86,
+  "Krunal Pandya": 85,
+  "Marcus Stoinis": 84,
+  "Wanindu Hasaranga": 83,
+  "Mitchell Marsh": 83,
+  "Riyan Parag": 83,
+  "Romario Shepherd": 83,
+  "Liam Livingstone": 80,
+  "Sam Curran": 80,
+  "Marco Jansen": 80,
+  "Jason Holder": 80,
+  "Washington Sundar": 79,
+  "Venkatesh Iyer": 79,
+  "Glenn Phillips": 79,
+  "Azmatullah Omarzai": 77,
+  "Kyle Mayers": 76,
+  "Michael Bracewell": 74,
+  "Cooper Connolly": 74,
+  "Gulbadin Naib": 73,
+  "Dasun Shanaka": 72,
+  "Matthew Short": 72,
+  "Corbin Bosch": 72,
+  "Daniel Sams": 71,
+  "Roston Chase": 71,
+  "Jack Edwards": 71,
+  "Jamie Overton": 71,
+  "Tom Curran": 70,
 };
 
 // ──────────────────────────────────────────────────────────────
@@ -464,10 +288,23 @@ export function calculateLeaderboard(teams, mode = 'mini') {
       playingXI = [];
     }
 
-    const playerScores = playingXI.map(playerName => ({
-      name: playerName,
-      rating: getPlayerRating(playerName, mode)
-    }));
+    const playerScores = playingXI.map(playerName => {
+      const rating = getPlayerRating(playerName, mode);
+      // We need roles to check disqualification
+      const pRecord = ALL_PLAYERS.find(p => p.name.toLowerCase() === (playerName||'').toLowerCase());
+      return {
+        name: playerName,
+        rating,
+        role: pRecord?.role || 'batsman'
+      };
+    });
+
+    const batCount = playerScores.filter(p => p.role === 'batsman').length;
+    const bowlCount = playerScores.filter(p => p.role === 'bowler').length;
+    const wkCount = playerScores.filter(p => p.role === 'wicket_keeper').length;
+    
+    // Disqualified if < 11 players OR fails role counts
+    const isDisqualified = playingXI.length < 11 || batCount < 2 || bowlCount < 2 || wkCount < 1;
     
     const totalScore = playerScores.reduce((sum, p) => sum + p.rating, 0);
     return {
@@ -476,11 +313,13 @@ export function calculateLeaderboard(teams, mode = 'mini') {
       totalScore,
       playerScores,
       averageScore: playingXI.length ? Math.round(totalScore / playingXI.length) : 0,
-      playingXI
+      playingXI,
+      isDisqualified
     };
   });
 
-  // Sort descending by total score
+  // Sort descending by total score, but push disqualified to bottom? 
+  // User didn't specify, but I'll keeping sorting by score.
   return results.sort((a, b) => b.totalScore - a.totalScore);
 }
 
