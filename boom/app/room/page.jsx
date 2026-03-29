@@ -338,153 +338,137 @@ const TEAM_COLORS = {
 const ALL_TEAM_IDS = ['MI','CSK','RCB','KKR','DC','PBKS','RR','SRH','GT','LSG'];
 
 function BrowseRooms({ name, setName, nameRef, serverRooms, fetchRooms, loading, error, doJoin, joinCode, setJoinCode, liveStats, onBack, onCreate, TEAMS, GOLD, CYAN }) {
-  const [sport, setSport] = useState('All');
-  const [activeTab, setActiveTab] = useState('live');
+  const [activeTab, setActiveTab] = useState('waiting'); // Show joinable rooms first!
 
-  // Split rooms into live (in-progress or full) and waiting
-  const liveRooms    = serverRooms.filter(r => r.status === 'active' || r.players >= 10);
-  const waitingRooms = serverRooms.filter(r => r.status !== 'active' && r.players < 10);
+  // Filter logic
+  const liveRooms    = serverRooms.filter(r => r.status === 'active');
+  const waitingRooms = serverRooms.filter(r => r.status === 'lobby');
   const displayRooms = activeTab === 'live' ? liveRooms : waitingRooms;
 
-  const sports = [
-    { id: 'All', label: 'All' },
-    { id: 'Cricket', label: '🏏 Cricket' },
-    { id: 'Football', label: '⚽ Football' },
-  ];
-
   return (
-    <div className="rb-shell" style={{ position: 'relative', zIndex: 5 }}>
+    <div className="rb-shell" style={{ position: 'relative', zIndex: 5, animation: 'fadeIn .4s ease' }}>
       {/* ── Header ── */}
-      <div className="rb-header">
-        <div className="rb-header-row">
-          <button className="rb-back-btn" onClick={onBack}>←</button>
+      <div className="rb-header" style={{ borderBottom: '1px solid #111', background: '#0a0a0aee', backdropFilter: 'blur(12px)', padding: '16px 24px 0' }}>
+        <div className="rb-header-row" style={{ marginBottom: 16 }}>
+          <button className="rb-back-btn" onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, letterSpacing: 1 }}>
+            <span style={{ fontSize: 18 }}>←</span> BACK
+          </button>
           <div className="rb-title-block">
-            <div className="rb-title">Live Auction Rooms</div>
-            <div className="rb-subtitle">{liveStats.rooms > 0 ? `${liveStats.rooms} rooms available` : 'No rooms active'}</div>
+            <div className="rb-title" style={{ fontSize: 26, letterSpacing: 2 }}>BROWSING <span style={{ color: GOLD }}>ROOMS</span></div>
+            <div className="rb-subtitle" style={{ fontSize: 10, letterSpacing: 2, color: '#444' }}>{liveStats.rooms} PUBLIC LOBBIES ACTIVE</div>
           </div>
-          <button className="rb-icon-btn" onClick={fetchRooms} title="Refresh">↻</button>
-          <button className="rb-create-btn" onClick={onCreate}>
-            <span>⚡</span> Create
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="rb-icon-btn" onClick={fetchRooms} title="Refresh" style={{ background: '#111' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+            <button className="rb-create-btn" onClick={onCreate} style={{ height: 36, padding: '0 18px' }}>
+              NEW ROOM
+            </button>
+          </div>
+        </div>
+
+        {/* ── Tabs ── */}
+        <div className="rb-tabs" style={{ marginBottom: 0, border: 'none' }}>
+          <button className={`rb-tab${activeTab === 'waiting' ? ' active' : ''}`} 
+            onClick={() => setActiveTab('waiting')}
+            style={{ paddingBottom: 14 }}>
+            <span style={{ fontFamily: "'Bebas Neue'", fontSize: 18, letterSpacing: 1 }}>JOINABLE</span>
+            <span className="rb-tab-count" style={{ marginLeft: 6 }}>{waitingRooms.length}</span>
+          </button>
+          <button className={`rb-tab live-tab${activeTab === 'live' ? ' active' : ''}`} 
+            onClick={() => setActiveTab('live')}
+            style={{ paddingBottom: 14 }}>
+            <span style={{ fontFamily: "'Bebas Neue'", fontSize: 18, letterSpacing: 1 }}>IN PROGRESS</span>
+            <span className="rb-tab-count" style={{ marginLeft: 6, background: '#ef444422', color: '#ef4444' }}>{liveRooms.length}</span>
           </button>
         </div>
-        {/* Sport pills */}
-        <div className="rb-sport-pills">
-          {sports.map(s => (
-            <button key={s.id} className={`rb-sport-pill${sport === s.id ? ' active' : ''}`} onClick={() => setSport(s.id)}>
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Tabs ── */}
-      <div className="rb-tabs">
-        <button className={`rb-tab live-tab${activeTab === 'live' ? ' active' : ''}`} onClick={() => setActiveTab('live')}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: activeTab === 'live' ? '#ef4444' : '#333', display: 'inline-block', animation: activeTab === 'live' ? 'pulse .8s infinite' : 'none' }} />
-          Live Auctions
-          <span className="rb-tab-count">{liveRooms.length}</span>
-        </button>
-        <button className={`rb-tab${activeTab === 'waiting' ? ' active' : ''}`} onClick={() => setActiveTab('waiting')}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Waiting for Players
-          <span className="rb-tab-count">{waitingRooms.length}</span>
-        </button>
       </div>
 
       {/* ── Name input ── */}
-      <div className="rb-name-box">
-        <label className="rb-name-label">Your Name</label>
-        <input
-          ref={nameRef}
-          className="rb-name-input"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="Enter your name to join"
-          maxLength={20}
-        />
-        {error && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 6, letterSpacing: .5 }}>{error}</div>}
+      <div className="rb-name-box" style={{ background: '#0d0d0d', borderBottom: '1px solid #111', padding: '24px 32px' }}>
+        <div style={{ maxWidth: 600, margin: '0 auto' }}>
+          <label className="rb-name-label" style={{ color: '#555', fontSize: 9 }}>YOUR IDENTITY</label>
+          <input
+            ref={nameRef}
+            className="rb-name-input"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="What should we call you?"
+            style={{ background: '#080808', padding: '16px 20px', fontSize: 18, borderRadius: 8 }}
+          />
+          {error && <div style={{ color: '#ef4444', fontSize: 11, marginTop: 8, letterSpacing: 1, paddingLeft: 4 }}>⚠️ {error}</div>}
+        </div>
       </div>
 
       {/* ── Rooms list ── */}
-      <div className="rb-rooms-list">
-        {displayRooms.length === 0 ? (
-          <div className="rb-empty">
-            {activeTab === 'live' ? '🏏 No live auctions right now' : '⏳ No rooms waiting for players'}
-            <div style={{ fontSize: 12, marginTop: 8, color: '#333' }}>Create one to get started!</div>
-          </div>
-        ) : (
-          displayRooms.map((room, i) => {
-            const isFull   = room.players >= 10;
-            const isActive = room.status === 'active' || isFull;
-            // Build team bubble list: taken teams + empty slots
-            const takenTeams  = room.teamIds || [];
-            const available   = ALL_TEAM_IDS.filter(t => !takenTeams.includes(t));
-            const availCount  = Math.max(0, 10 - (room.players || 0));
-
-            return (
-              <div key={i} className="rb-room-card" style={{ animation: `fadeUp .3s ease ${i * 0.05}s both` }}>
-                {/* Card header row */}
-                <div className="rb-room-card-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <div className={`rb-status-badge ${isActive ? 'live' : 'waiting'}`}>
-                      <span className={`rb-status-dot ${isActive ? 'live' : 'waiting'}`} />
-                      {isActive ? 'IN PROGRESS' : 'WAITING'}
-                    </div>
-                    <span className="rb-room-code">{room.code}</span>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div className="rb-team-count">{room.players || 0}<span>/{10}</span></div>
-                    <div className="rb-team-label">TEAMS</div>
-                  </div>
-                </div>
-
-                {/* Room name */}
-                <div className="rb-room-name">{room.name || 'Mega Auction'}</div>
-                <div className="rb-room-desc">
-                  {isActive ? 'Auction in progress - spectate only' : `${availCount} team${availCount !== 1 ? 's' : ''} available`}
-                </div>
-
-                {/* Team bubbles */}
-                <div className="rb-team-bubbles">
-                  {ALL_TEAM_IDS.map(tid => {
-                    const taken  = takenTeams.includes(tid);
-                    const color  = TEAM_COLORS[tid] || '#555';
-                    return (
-                      <div key={tid} className="rb-team-bubble" style={{
-                        background: taken ? color : '#1a1a1a',
-                        color: taken ? '#000' : '#444',
-                        border: taken ? 'none' : '1px solid #2a2a2a',
-                        opacity: taken ? 1 : 0.5,
-                      }}>
-                        {tid}
+      <div className="rb-rooms-list" style={{ padding: '32px 32px 60px', background: '#080808' }}>
+        <div style={{ maxWidth: 800, margin: '0 auto' }}>
+          {displayRooms.length === 0 ? (
+            <div className="rb-empty" style={{ padding: '80px 20px', border: '1px dashed #222', borderRadius: 20 }}>
+               <div style={{ fontSize: 40, marginBottom: 16 }}>{activeTab === 'live' ? '🍿' : '🏟️'}</div>
+               <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, letterSpacing: 2, color: '#444' }}>
+                {activeTab === 'live' ? 'NO LIVE MATCHES' : 'NO PUBLIC LOBBIES'}
+               </div>
+               <div style={{ fontSize: 11, color: '#222', marginTop: 8, letterSpacing: 2 }}>
+                BE THE FIRST TO START THE EXCITEMENT
+               </div>
+               <button className="rp-btn" onClick={onCreate} style={{ maxWidth: 200, margin: '24px auto 0', height: 44, fontSize: 16 }}>
+                CREATE LOBBY
+               </button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+              {displayRooms.map((room, i) => {
+                const isActive = room.status === 'active';
+                const teamCount = room.players || 0;
+                
+                return (
+                  <div key={i} className="rb-room-card" 
+                    style={{ 
+                      animation: `fadeUp .4s ease ${i * 0.05}s both`,
+                      background: '#0d0d0d',
+                      border: '1px solid #1a1a1a',
+                      borderRadius: 16,
+                      padding: 24,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      minHeight: 180
+                    }}>
+                    
+                    <div className="rb-room-card-header" style={{ marginBottom: 16 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <span className={`rb-status-dot ${isActive ? 'live' : 'waiting'}`} />
+                          <div className="rb-room-code" style={{ fontSize: 12, color: GOLD, background: `${GOLD}11`, padding: '2px 8px', borderRadius: 4 }}>{room.code}</div>
+                          <div style={{ fontSize: 9, color: '#444', letterSpacing: 1, textTransform: 'uppercase' }}>{(room.mode || 'MEGA').toUpperCase()}</div>
+                        </div>
+                        <div className="rb-room-name" style={{ fontSize: 28, letterSpacing: 1 }}>{room.name || 'Mega Auction'}</div>
                       </div>
-                    );
-                  })}
-                </div>
+                      
+                      <div style={{ textAlign: 'right' }}>
+                        <div className="rb-team-count" style={{ color: teamCount >= 10 ? '#ef4444' : '#fff' }}>{teamCount}<span>/10</span></div>
+                        <div className="rb-team-label" style={{ fontSize: 8 }}>PARTICIPANTS</div>
+                      </div>
+                    </div>
 
-                {/* Action button */}
-                {isActive ? (
-                  <button
-                    className="rb-spectate-btn"
-                    onClick={() => doJoin(room.code)}
-                    disabled={loading || !name.trim()}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    Spectate
-                  </button>
-                ) : (
-                  <button
-                    className="rb-join-btn"
-                    onClick={() => doJoin(room.code)}
-                    disabled={loading || !name.trim()}
-                  >
-                    → Join Game
-                  </button>
-                )}
-              </div>
-            );
-          })
-        )}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
+                       <div style={{ fontSize: 11, color: '#555', letterSpacing: 1 }}>
+                          Hosted by <span style={{ color: '#888', fontWeight: 700 }}>{room.host}</span>
+                       </div>
+                       <button 
+                        className="rb-join-btn" 
+                        onClick={() => doJoin(room.code)}
+                        style={{ width: 'auto', padding: '10px 24px', borderRadius: 8, background: isActive ? '#22D3EE15' : GOLD, color: isActive ? '#22D3EE' : '#000', border: isActive ? '1px solid #22D3EE40' : 'none' }}>
+                        {isActive ? 'SPECTATE' : 'JOIN LOBBY'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -548,6 +532,7 @@ function RoomContent() {
   // ── Fetch public rooms ──
   const fetchRooms = useCallback(() => {
     emit('get-rooms', (data) => {
+      console.log("[SOCKET] Received Rooms:", data);
       if (data?.active) {
         setServerRooms(data.active);
         setLiveStats({ rooms: data.totalRooms || 0, players: data.totalPlayers || 0 });
@@ -558,9 +543,12 @@ function RoomContent() {
   useEffect(() => {
     if (phase === 'home' || phase === 'join') {
       fetchRooms();
-      const t = setInterval(fetchRooms, 10000);
-      on('public-rooms-updated', fetchRooms);
-      return () => clearInterval(t);
+      const t = setInterval(fetchRooms, 8000);
+      const off = on('public-rooms-updated', fetchRooms);
+      return () => {
+        clearInterval(t);
+        if (off) off();
+      };
     }
   }, [phase, fetchRooms, on]);
 
@@ -705,9 +693,14 @@ function RoomContent() {
                 <div className="rp-choice-title">JOIN ROOM</div>
                 <div className="rp-choice-desc">Enter a private room code to join an ongoing auction.</div>
               </div>
-              <div className="rp-choice browse-card" onClick={() => { setError(''); setPhase('join'); }}>
+              <div className="rp-choice browse-card" onClick={() => { setError(''); setPhase('join'); }} style={{ position: 'relative' }}>
                 <div className="rp-choice-label" style={{ color: '#818cf8' }}>EXPLORE</div>
                 <div className="rp-choice-title">BROWSE ROOMS</div>
+                {liveStats.rooms > 0 && (
+                   <div style={{ position: 'absolute', top: -8, right: -8, background: '#818cf8', color: '#fff', fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 20, boxShadow: '0 4px 12px rgba(129, 140, 248, 0.4)', animation: 'pulse 2s infinite' }}>
+                    {liveStats.rooms} Lobbies
+                   </div>
+                )}
                 <div className="rp-choice-desc">Pick from active public lobbies to spectate or play.</div>
               </div>
             </div>

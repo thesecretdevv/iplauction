@@ -138,35 +138,37 @@ export function GameProvider({ children }) {
   // Auto-Rejoin (runs once on mount)
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const savedPlayMode = localStorage.getItem("ipl_play_mode");
+    // ── Rejoin logic ──
+    const search = new URLSearchParams(window.location.search);
+    const roomParam = search.get('room');
+    const savedRoom = roomParam || localStorage.getItem("ipl_room_code");
+    const savedName = localStorage.getItem("ipl_player_name");
 
-    if (savedPlayMode === "multi") {
-      const savedRoom = localStorage.getItem("ipl_room_code");
-      const savedName = localStorage.getItem("ipl_player_name");
-      if (savedRoom && savedName) {
-        setRoomCode(savedRoom);
-        setMyName(savedName);
-        setPlayMode("multi");
-        emit("join-room", { code: savedRoom, playerName: savedName, playerId }, (res) => {
-          if (res.ok) {
-            setLobbyPlayers(res.players);
-            setIsHost(res.hostId === playerId);
-            if (res.auctionMode) setLobbyMode(res.auctionMode);
-            if (res.roomStatus === "active") {
-              setMultiGS(res.gameState);
-              router.push(buildUrl('/auction', { room: savedRoom, mode: res.auctionMode }));
-            } else if (res.roomStatus === "finished") {
-              setMultiGS(res.gameState);
-              router.push(buildUrl('/results', { room: savedRoom, mode: res.auctionMode }));
-            } else {
-              router.push(buildUrl(`/lobby/${savedRoom}`, { mode: res.auctionMode }));
-            }
-          } else {
-            localStorage.removeItem("ipl_room_code");
-            localStorage.removeItem("ipl_play_mode");
+    if (savedRoom && savedName) {
+      // Auto-join if we have all data
+      setRoomCode(savedRoom);
+      setMyName(savedName);
+      setPlayMode("multi");
+      
+      emit("join-room", { code: savedRoom, playerName: savedName, playerId }, (res) => {
+        if (res.ok) {
+          setLobbyPlayers(res.players);
+          setIsHost(res.hostId === playerId);
+          if (res.auctionMode) setLobbyMode(res.auctionMode);
+          if (res.roomStatus === "active") {
+            setMultiGS(res.gameState);
+          } else if (res.roomStatus === "finished") {
+            setMultiGS(res.gameState);
+            router.push(buildUrl('/results', { room: savedRoom, mode: res.auctionMode }));
+          } else if (pathname === '/room') {
+             // If they were at home and chose a public room, stay on appropriate phase
+             setAMode(res.auctionMode || 'mega');
           }
-        });
-      }
+        } else {
+          localStorage.removeItem("ipl_room_code");
+          localStorage.removeItem("ipl_play_mode");
+        }
+      });
     } else if (savedPlayMode === "single") {
       const savedGS = localStorage.getItem("ipl_single_gs");
       const savedScreen = localStorage.getItem("ipl_single_screen");
@@ -222,9 +224,10 @@ export function GameProvider({ children }) {
   // Socket listeners for multiplayer
   useEffect(() => {
     if (playMode !== "multi") return;
-    const off1 = on("lobby-update", ({ players, auctionMode: m }) => {
+    const off1 = on("lobby-update", ({ players, auctionMode: m, hostId }) => {
       setLobbyPlayers(players);
       if (m) setLobbyMode(m);
+      if (hostId) setIsHost(hostId === playerId);
     });
     const off2 = on("game-started", (gs) => {
       setMultiGS(gs);

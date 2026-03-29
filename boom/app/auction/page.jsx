@@ -94,7 +94,15 @@ function AuctionContent() {
     humanBid();
   }, [humanBid]);
 
-  if (!gs) return null;
+  if (!gs) {
+    return (
+      <div style={{ height: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+        <div style={{ width: 40, height: 40, border: `3px solid ${GOLD}20`, borderTopColor: GOLD, borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, color: GOLD, letterSpacing: 3 }}>CONNECTING TO ARENA...</div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   const upcomingPlayers = gs.playerQueue.slice(gs.currentIdx + 1);
   const groupedUpcoming = upcomingPlayers.reduce((acc, p) => {

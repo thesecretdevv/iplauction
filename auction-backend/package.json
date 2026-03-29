@@ -6,6 +6,7 @@
         "start": "node index.js"
     },
     "dependencies": {
+        "@upstash/redis": "^1.37.0",
         "express": "^5.2.1",
         "socket.io": "^4.8.3"
     }

@@ -2,8 +2,15 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 
+import { Redis } from '@upstash/redis';
+
 const app = express();
 app.use(express.json());
+
+const redis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL || "https://close-condor-71996.upstash.io",
+    token: process.env.UPSTASH_REDIS_REST_TOKEN || "gQAAAAAAARk8AAIncDI3M2E4OGIwNzQ5NTU0YWU5YmU4OWEzYjJlMGYzYmU3NXAyNzE5OTY"
+});
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -87,6 +94,52 @@ app.get('/api/rooms/:code', (req, res) => {
         playerCount: Object.values(room.players).filter(p => !p.isSpectator).length,
     });
 });
+
+// ─── Persistence ────────────────────────────────────────────────────────────
+async function persistRoom(room) {
+    if (!room) return;
+    try {
+        const data = {
+            code: room.code,
+            name: room.name,
+            hostId: room.hostId,
+            status: room.status, 
+            isPrivate: room.isPrivate || false,
+            auctionMode: room.auctionMode || 'mega',
+            chatLog: room.chatLog || [],
+            players: room.players,
+            gameState: room.gameState,
+            started: room.started || false,
+            updatedAt: Date.now()
+        };
+        // Save with 24-hour expiry
+        await redis.set(`room:${room.code}`, JSON.stringify(data), { ex: 3600 * 24 });
+    } catch(e) { console.error("[REDIS] Save Error:", e); }
+}
+
+async function getRoom(code) {
+    if (!code) return null;
+    let room = rooms.get(code.toUpperCase());
+    if (!room) {
+        try {
+            const data = await redis.get(`room:${code.toUpperCase()}`);
+            if (data) {
+                const rData = typeof data === 'string' ? JSON.parse(data) : data;
+                room = {
+                    ...rData,
+                    timerInterval: null // This will be restarted on activity if needed
+                };
+                rooms.set(room.code, room);
+                console.log(`[REDIS] Restored Room: ${room.code}`);
+                // If it was active, we may need to resume its game tick
+                if (room.status === 'active' && room.gameState && !room.timerInterval) {
+                   startGameTick(room); 
+                }
+            }
+        } catch(e) { console.error("[REDIS] Load Error:", e); }
+    }
+    return room;
+}
 
 // ─── Game State helpers ──────────────────────────────────────────────────────
 function createGameState(playerQueue) {
@@ -248,8 +301,8 @@ io.on('connection', (socket) => {
     let currentPlayerId = null;
 
     // ── Create Room ──
-    socket.on('create-room', ({ playerName, isPrivate, roomName, playerId }, cb) => {
-        if (!playerId) return cb({ ok: false, error: 'Missing Player ID' });
+    socket.on('create-room', async ({ playerName, isPrivate, roomName, playerId }, cb) => {
+        if (!playerId) return cb?.({ ok: false, error: 'Missing Player ID' });
 
         // Cancel any pending disconnect timer for this player
         if (disconnectTimers.has(playerId)) {
@@ -288,17 +341,18 @@ io.on('connection', (socket) => {
         console.log(`[ROOM] ${code} (${room.isPrivate ? 'PVT' : 'PUB'}) created by ${playerName}`);
 
         const state = getLobbyState(room);
-        cb({ ok: true, code, players: state.players });
+        cb?.({ ok: true, code, players: state.players });
 
+        await persistRoom(room);
         if (!room.isPrivate) broadcastRoomList();
     });
 
     // ── Join Room ──
-    socket.on('join-room', ({ code, playerName, playerId }, cb) => {
-        if (!playerId) return cb({ ok: false, error: 'Missing Player ID' });
+    socket.on('join-room', async ({ code, playerName, playerId }, cb) => {
+        if (!playerId) return cb?.({ ok: false, error: 'Missing Player ID' });
 
-        const room = rooms.get(code);
-        if (!room) return cb({ ok: false, error: 'Room not found' });
+        const room = await getRoom(code);
+        if (!room) return cb?.({ ok: false, error: 'Room not found' });
 
         // Cancel any pending disconnect timer
         if (disconnectTimers.has(playerId)) {
@@ -310,7 +364,7 @@ io.on('connection', (socket) => {
         if (room.players[playerId]) {
             room.players[playerId].socketId = socket.id;
             room.players[playerId].offline = false;
-            room.players[playerId].name = playerName;
+            room.players[playerId].name = playerName || room.players[playerId].name;
             socket.join(code);
             currentRoom = code;
             currentPlayerId = playerId;
@@ -319,7 +373,9 @@ io.on('connection', (socket) => {
             const state = getLobbyState(room);
             io.to(code).emit('lobby-update', state);
             pushSystemMessage(room, `${playerName} rejoined`);
-            return cb({
+            
+            await persistRoom(room);
+            return cb?.({
                 ok: true,
                 code,
                 players: state.players,
@@ -354,8 +410,9 @@ io.on('connection', (socket) => {
                 
                 const state = getLobbyState(room);
                 io.to(code).emit('lobby-update', state);
-                pushSystemMessage(room, `${playerName || 'Player'} joined`);
-                return cb({
+                pushSystemMessage(room, `${playerName || 'Player'} joined (Game in progress)`);
+                await persistRoom(room);
+                return cb?.({
                     ok: true,
                     code,
                     players: state.players,
@@ -384,7 +441,8 @@ io.on('connection', (socket) => {
                 const state = getLobbyState(room);
                 io.to(code).emit('lobby-update', state);
                 pushSystemMessage(room, `${playerName || 'Spectator'} joined as spectator`);
-                return cb({
+                await persistRoom(room);
+                return cb?.({
                     ok: true,
                     code,
                     players: state.players,
@@ -402,7 +460,7 @@ io.on('connection', (socket) => {
             socket.join(code);
             currentRoom = code;
             currentPlayerId = playerId;
-            return cb({
+            return cb?.({
                 ok: true,
                 code,
                 players: Object.values(room.players).map(p => ({ ...p, socketId: undefined })),
@@ -415,8 +473,8 @@ io.on('connection', (socket) => {
         }
 
         // ── Full room fallback ──
-        const activePlayers = Object.values(room.players).filter(p => !p.isSpectator);
-        const isFull = activePlayers.length >= 10;
+        const activePlayersCount = Object.values(room.players).filter(p => !p.isSpectator).length;
+        const isFull = activePlayersCount >= 10;
 
         // ── New Join ──
         room.players[playerId] = {
@@ -436,15 +494,16 @@ io.on('connection', (socket) => {
         const state = getLobbyState(room);
         io.to(code).emit('lobby-update', state);
         pushSystemMessage(room, `${playerName || 'Player'} joined${isFull ? ' as spectator' : ''}`);
-        cb({ ok: true, code, players: state.players, roomStatus: room.status, hostId: room.hostId, auctionMode: room.auctionMode, isSpectator: isFull });
+        cb?.({ ok: true, code, players: state.players, roomStatus: room.status, hostId: room.hostId, auctionMode: room.auctionMode, isSpectator: isFull });
 
+        await persistRoom(room);
         if (!room.isPrivate) broadcastRoomList();
     });
 
     // ── Select Team ──
-    socket.on('select-team', ({ teamId }, cb) => {
+    socket.on('select-team', async ({ teamId }, cb) => {
         if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
-        const room = rooms.get(currentRoom);
+        const room = await getRoom(currentRoom);
         if (!room) return cb?.({ ok: false });
 
         const player = room.players[currentPlayerId];
@@ -457,22 +516,24 @@ io.on('connection', (socket) => {
         const state = getLobbyState(room);
         io.to(currentRoom).emit('lobby-update', state);
         cb?.({ ok: true });
+        await persistRoom(room);
     });
 
     // ── Set Auction Mode ──
-    socket.on('set-auction-mode', ({ mode }) => {
+    socket.on('set-auction-mode', async ({ mode }) => {
         if (!currentRoom || !currentPlayerId) return;
-        const room = rooms.get(currentRoom);
+        const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId) return;
         room.auctionMode = mode;
         const state = getLobbyState(room);
         io.to(currentRoom).emit('lobby-update', state);
+        await persistRoom(room);
     });
 
     // ── Start Game ──
-    socket.on('start-game', ({ playerQueue }, cb) => {
+    socket.on('start-game', async ({ playerQueue }, cb) => {
         if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
-        const room = rooms.get(currentRoom);
+        const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId) return cb?.({ ok: false, error: 'Not host' });
 
         // Only check non-spectator players for team selection
@@ -488,49 +549,54 @@ io.on('connection', (socket) => {
         startGameTick(room);
         cb?.({ ok: true });
 
+        await persistRoom(room);
         if (!room.isPrivate) broadcastRoomList();
     });
 
     // ── Host Controls ──
-    socket.on('pause-game', () => {
+    socket.on('pause-game', async () => {
         if (!currentRoom || !currentPlayerId) return;
-        const room = rooms.get(currentRoom);
+        const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
         room.gameState.isPaused = true;
         io.to(currentRoom).emit('game-state', getClientState(room));
+        await persistRoom(room);
     });
 
-    socket.on('resume-game', () => {
+    socket.on('resume-game', async () => {
         if (!currentRoom || !currentPlayerId) return;
-        const room = rooms.get(currentRoom);
+        const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
         room.gameState.isPaused = false;
         io.to(currentRoom).emit('game-state', getClientState(room));
+        await persistRoom(room);
     });
 
-    socket.on('end-game', () => {
+    socket.on('end-game', async () => {
         if (!currentRoom || !currentPlayerId) return;
-        const room = rooms.get(currentRoom);
+        const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
         room.gameState.currentIdx = room.gameState.playerQueue.length - 1;
         advanceToNext(room);
+        await persistRoom(room);
         if (!room.isPrivate) broadcastRoomList();
     });
 
-    socket.on('set-timer-duration', ({ duration }) => {
+    socket.on('set-timer-duration', async ({ duration }) => {
         if (!currentRoom || !currentPlayerId) return;
-        const room = rooms.get(currentRoom);
+        const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
         const newD = Math.max(5, Math.min(60, parseInt(duration) || 10));
         room.gameState.timerDuration = newD;
         room.gameState.timer = newD;
         io.to(currentRoom).emit('game-state', getClientState(room));
+        await persistRoom(room);
     });
 
     // ── Chat ──
-    socket.on('send-chat', (payload) => {
+    socket.on('send-chat', async (payload) => {
         if (!currentRoom || !currentPlayerId) return;
-        const room = rooms.get(currentRoom);
+        const room = await getRoom(currentRoom);
         if (!room) return;
         const player = room.players[currentPlayerId];
         if (!room.chatLog) room.chatLog = [];
@@ -545,6 +611,7 @@ io.on('connection', (socket) => {
         });
         if (room.chatLog.length > 200) room.chatLog.shift();
         io.to(currentRoom).emit('chat-update', room.chatLog);
+        await persistRoom(room);
     });
 
     // ── Get Rooms (socket) ──
@@ -568,9 +635,9 @@ io.on('connection', (socket) => {
     });
 
     // ── Place Bid ── (optimized for minimum latency)
-    socket.on('place-bid', (_, cb) => {
+    socket.on('place-bid', async (_, cb) => {
         if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
-        const room = rooms.get(currentRoom);
+        const room = await getRoom(currentRoom);
         if (!room || !room.gameState) return cb?.({ ok: false });
 
         const gs = room.gameState;
@@ -604,12 +671,15 @@ io.on('connection', (socket) => {
         // Broadcast immediately — no setTimeout, no debounce
         io.to(currentRoom).emit('game-state', getClientState(room));
         cb?.({ ok: true, newBid: nb });
+        
+        // Save to Redis (async)
+        persistRoom(room);
     });
 
     // ── Submit XI ──
-    socket.on('submit-xi', ({ players }, cb) => {
+    socket.on('submit-xi', async ({ players }, cb) => {
         if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
-        const room = rooms.get(currentRoom);
+        const room = await getRoom(currentRoom);
         if (!room || !room.gameState) return cb?.({ ok: false });
 
         const gs = room.gameState;
@@ -648,20 +718,22 @@ io.on('connection', (socket) => {
             if (!room.isPrivate) saveFinishedGame(room, gs);
 
             io.to(currentRoom).emit('game-over', getClientState(room));
-            clearInterval(room.timerInterval);
+            if (room.timerInterval) clearInterval(room.timerInterval);
             if (!room.isPrivate) broadcastRoomList();
+            await persistRoom(room);
         } else {
             io.to(currentRoom).emit('game-state', getClientState(room));
+            await persistRoom(room);
         }
 
         cb?.({ ok: true });
     });
 
     // ── Disconnect ──
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
         console.log(`[-] ${socket.id} (Player: ${currentPlayerId || 'Unknown'}) disconnected`);
         if (!currentRoom || !currentPlayerId) return;
-        const room = rooms.get(currentRoom);
+        const room = await getRoom(currentRoom);
         if (!room || !room.players[currentPlayerId]) return;
 
         const player = room.players[currentPlayerId];
@@ -672,10 +744,11 @@ io.on('connection', (socket) => {
 
         if (activePlayers.length === 0) {
             // Immediate cleanup if nobody is left
-            clearInterval(room.timerInterval);
+            if (room.timerInterval) clearInterval(room.timerInterval);
             rooms.delete(currentRoom);
             console.log(`[ROOM] ${currentRoom} deleted (empty)`);
             if (!room.isPrivate) broadcastRoomList();
+            await redis.del(`room:${currentRoom}`); // Remove from Redis too if truly empty
             return;
         }
 
@@ -684,8 +757,8 @@ io.on('connection', (socket) => {
             const newHost = activePlayers.find(p => !p.isSpectator) || activePlayers[0];
             if (newHost) {
                 room.hostId = newHost.id;
-                room.players[newHost.id].isHost = true;
-                room.players[currentPlayerId].isHost = false;
+                if (room.players[newHost.id]) room.players[newHost.id].isHost = true;
+                if (room.players[currentPlayerId]) room.players[currentPlayerId].isHost = false;
                 console.log(`[ROOM] Host transferred to ${newHost.name}`);
             }
         }
@@ -694,34 +767,33 @@ io.on('connection', (socket) => {
         const state = getLobbyState(room);
         io.to(currentRoom).emit('lobby-update', state);
         if (!room.isPrivate) broadcastRoomList();
+        await persistRoom(room);
 
         // Schedule team-slot release after a 30s grace period
-        // (so refreshes don't permanently free the slot)
-        const gracePeriodId = setTimeout(() => {
+        const gracePeriodId = setTimeout(async () => {
             disconnectTimers.delete(currentPlayerId);
-            const r = rooms.get(currentRoom);
+            const r = await getRoom(currentRoom);
             if (!r || !r.players[currentPlayerId]) return;
 
             const p = r.players[currentPlayerId];
-            if (!p.offline) return; // They reconnected — skip
+            if (!p.offline) return; // They reconnected
 
             if (r.status === 'lobby') {
-                // Free team slot and remove player from room
                 delete r.players[currentPlayerId];
-                console.log(`[ROOM] ${currentPlayerId} removed after grace period from ${currentRoom}`);
+                console.log(`[ROOM] ${currentPlayerId} removed from ${currentRoom}`);
 
                 const remaining = Object.values(r.players).filter(p2 => !p2.offline);
                 if (remaining.length === 0) {
-                    clearInterval(r.timerInterval);
+                    if (r.timerInterval) clearInterval(r.timerInterval);
                     rooms.delete(currentRoom);
-                    console.log(`[ROOM] ${currentRoom} deleted (all expired)`);
+                    await redis.del(`room:${currentRoom}`);
                 } else {
                     const st = getLobbyState(r);
                     io.to(currentRoom).emit('lobby-update', st);
+                    await persistRoom(r);
                 }
                 if (!r.isPrivate) broadcastRoomList();
             }
-            // In active games, keep the player record but they stay offline
         }, 30_000);
 
         disconnectTimers.set(currentPlayerId, gracePeriodId);
