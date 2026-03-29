@@ -74,13 +74,13 @@ const globalStyles = `
   .rp-choice.join-card:hover   { transform:translateY(-6px); border-color:${CYAN}; box-shadow:0 12px 32px rgba(34,211,238,.18); }
   .rp-choice-label { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:10px; letter-spacing:3px; text-transform:uppercase; margin-bottom:12px; }
   .rp-choice-title { font-family:'Bebas Neue',sans-serif; font-size:1.85rem; color:#fff; margin-bottom:6px; }
-  .rp-choice-desc  { font-family:'Courier Prime',monospace; font-size:11px; color:#666; line-height:1.6; }
+  .rp-choice-desc  { font-family:'Courier Prime',monospace; font-size:11px; color:#94A3B8; line-height:1.6; }
 
   /* ── Form elements ── */
-  .rp-label { font-family:'Courier Prime',monospace; font-size:10px; letter-spacing:3px; color:#555; text-transform:uppercase; margin-bottom:7px; margin-top:22px; display:block; }
+  .rp-label { font-family:'Courier Prime',monospace; font-size:10px; letter-spacing:3px; color:#94A3B8; text-transform:uppercase; margin-bottom:7px; margin-top:22px; display:block; }
   .rp-input { width:100%; padding:15px 16px; background:#0c0c0c; border-radius:6px; border:1px solid #1e1e1e; color:#fff; font-family:'Barlow Condensed',sans-serif; font-size:17px; letter-spacing:.06em; outline:none; transition:border-color .2s,box-shadow .2s; }
   .rp-input:focus { border-color:${GOLD}; box-shadow:0 0 0 1px ${GOLD} inset; }
-  .rp-input::placeholder { color:#333; }
+  .rp-input::placeholder { color:#666; }
   .rp-input.code-input { letter-spacing:.35em; font-family:'Bebas Neue',sans-serif; font-size:1.6rem; text-align:center; }
   .rp-input.code-input:focus { border-color:${CYAN}; box-shadow:0 0 0 1px ${CYAN} inset; }
 
@@ -97,7 +97,7 @@ const globalStyles = `
   .rp-toggle-card.selected-gold { border-color:${GOLD}; border-left-color:${GOLD}; background:rgba(232,184,75,.07); }
   .rp-toggle-card.selected-cyan { border-color:${CYAN}; border-left-color:${CYAN}; background:rgba(34,211,238,.07); }
   .rp-toggle-card-title { font-family:'Bebas Neue',sans-serif; font-size:1.1rem; letter-spacing:.08em; color:#fff; }
-  .rp-toggle-card-sub   { font-family:'Courier Prime',monospace; font-size:9px; letter-spacing:1px; color:#555; }
+  .rp-toggle-card-sub   { font-family:'Courier Prime',monospace; font-size:9px; letter-spacing:1px; color:#888; }
   .rp-toggle-check { position:absolute; top:8px; right:10px; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; transition:all .18s; }
 
   /* ── Buttons ── */
@@ -138,7 +138,7 @@ const globalStyles = `
   .lobby-col-right { border-left:1px solid #111; }
   .lobby-col-center { padding:24px 20px; }
 
-  .lobby-section-label { font-family:'Courier Prime',monospace; font-size:10px; letter-spacing:3px; color:#444; text-transform:uppercase; margin-bottom:12px; }
+  .lobby-section-label { font-family:'Courier Prime',monospace; font-size:10px; letter-spacing:3px; color:#888; text-transform:uppercase; margin-bottom:12px; }
 
   /* ── Code block ── */
   .lobby-code-chip { font-family:'Bebas Neue',sans-serif; font-size:2.4rem; letter-spacing:.28em; color:${CYAN}; background:rgba(34,211,238,.06); border:1px solid rgba(34,211,238,.2); padding:8px 18px; border-radius:8px; cursor:pointer; transition:background .2s,box-shadow .2s; display:inline-block; }
@@ -173,13 +173,13 @@ const globalStyles = `
   }
 
   .franchise-short { font-family:'Bebas Neue',sans-serif; font-size:1.4rem; letter-spacing:.04em; }
-  .franchise-name  { font-family:'Courier Prime',monospace; font-size:7px; line-height:1.3; color:#666; }
+  .franchise-name  { font-family:'Courier Prime',monospace; font-size:7px; line-height:1.3; color:#94A3B8; }
   .franchise-mine-badge { font-family:'Courier Prime',monospace; font-size:8px; letter-spacing:1px; font-weight:700; }
 
   /* ── RIGHT col stats ── */
   .lobby-stat-card { background:${CARD}; border:1px solid #181818; border-radius:10px; padding:16px; margin-bottom:10px; }
   .lobby-stat-val  { font-family:'Bebas Neue',sans-serif; font-size:1.8rem; letter-spacing:.05em; line-height:1; }
-  .lobby-stat-lbl  { font-family:'Courier Prime',monospace; font-size:9px; letter-spacing:2px; color:#444; margin-top:3px; }
+  .lobby-stat-lbl  { font-family:'Courier Prime',monospace; font-size:9px; letter-spacing:2px; color:#888; margin-top:3px; }
 
   /* ── Fixed bottom start bar ── */
   .lobby-bottom-bar {
@@ -194,7 +194,7 @@ const globalStyles = `
   }
   .lobby-start-btn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 8px 24px rgba(232,184,75,.4); }
   .lobby-start-btn:disabled { opacity:.4; cursor:not-allowed; }
-  .lobby-waiting { font-family:'Courier Prime',monospace; font-size:13px; color:#555; letter-spacing:.1em; text-align:center; padding:14px 32px; border:1px dashed #222; border-radius:6px; animation:pulse 2.5s ease-in-out infinite; }
+  .lobby-waiting { font-family:'Courier Prime',monospace; font-size:13px; color:#888; letter-spacing:.1em; text-align:center; padding:14px 32px; border:1px dashed #222; border-radius:6px; animation:pulse 2.5s ease-in-out infinite; }
 
   /* ── Marquee ── */
   .rp-marquee-container { position:fixed; bottom:0; left:0; width:100%; overflow:hidden; background:#000; border-top:1px solid #0d0d0d; z-index:10; padding:6px 0; }
@@ -247,7 +247,7 @@ function RoomContent() {
     emit, playerId,
     roomCode, setRoomCode, lobbyPlayers, setLobbyPlayers,
     isHost, setIsHost, myName, setMyName, setPlayMode,
-    lobbyMode, setLobbyMode, setMultiGS, startMultiAuction,
+    lobbyMode, setLobbyMode, multiGS, setMultiGS, startMultiAuction,
   } = useGame();
 
   const [phase,       setPhase]       = useState('home');
@@ -370,7 +370,12 @@ function RoomContent() {
       if (res.auctionMode) { setLobbyMode(res.auctionMode); setAMode(res.auctionMode); }
       if (res.roomStatus === 'active') {
         setMultiGS(res.gameState);
-        router.push(`/auction?room=${code}${res.isSpectator ? '&spectator=1' : ''}`);
+        const myP = (res.players || []).find(p => p.id === playerId);
+        if (res.isSpectator || (myP && myP.teamId)) {
+          router.push(`/auction?room=${code}${res.isSpectator ? '&spectator=1' : ''}`);
+        } else {
+          setPhase('lobby'); // Participant but no team -> pick one first
+        }
       } else if (res.roomStatus === 'finished') {
         setMultiGS(res.gameState); router.push(`/results?room=${code}`);
       } else { setPhase('lobby'); }
@@ -449,12 +454,12 @@ function RoomContent() {
             {/* Public lobbies preview */}
             {serverRooms.length > 0 && (
               <div style={{ marginTop:28 }}>
-                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, letterSpacing:3, color:'#444', textTransform:'uppercase', marginBottom:10, borderBottom:'1px solid #111', paddingBottom:8 }}>PUBLIC LOBBIES</div>
+                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, letterSpacing:3, color:'#888', textTransform:'uppercase', marginBottom:10, borderBottom:'1px solid #111', paddingBottom:8 }}>PUBLIC LOBBIES</div>
                 {serverRooms.slice(0,3).map((r, i) => (
                   <div key={i} className="rp-room-item">
                     <div>
                       <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#eee' }}>{r.name}</div>
-                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#555', marginTop:2 }}>Host: {r.host} · {r.players}/10</div>
+                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#94A3B8', marginTop:2 }}>Host: {r.host} · {r.players}/10</div>
                     </div>
                     <button className="rp-room-join-btn" onClick={() => { setJoinCode(r.code); setPhase('join'); }}>QUICK JOIN</button>
                   </div>
@@ -465,12 +470,12 @@ function RoomContent() {
             {/* Recent rooms */}
             {recentRooms.length > 0 && (
               <div style={{ marginTop:24 }}>
-                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, letterSpacing:3, color:'#444', textTransform:'uppercase', marginBottom:10, borderBottom:'1px solid #111', paddingBottom:8 }}>RECENT ROOMS</div>
+                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, letterSpacing:3, color:'#888', textTransform:'uppercase', marginBottom:10, borderBottom:'1px solid #111', paddingBottom:8 }}>RECENT ROOMS</div>
                 {recentRooms.map((r, i) => (
                   <div key={i} className="rp-room-item">
                     <div>
                       <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#aaa' }}>{r.name}</div>
-                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#555', marginTop:2 }}>Code: {r.code}</div>
+                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#94A3B8', marginTop:2 }}>Code: {r.code}</div>
                     </div>
                     <button className="rp-room-rejoin-btn" onClick={() => { setJoinCode(r.code); setPhase('join'); }}>REJOIN</button>
                   </div>
@@ -487,7 +492,7 @@ function RoomContent() {
           <div style={{ width:'100%', maxWidth:480, animation:'fadeUp .35s ease both' }}>
             <span className="rp-eyebrow">Create Room</span>
             <h1 className="rp-h1" style={{ fontSize:'clamp(2rem,7vw,3.8rem)', marginBottom:4 }}>SET UP YOUR<br /><span>ROOM</span></h1>
-            <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#555', margin:'8px 0 4px', lineHeight:1.6 }}>Configure your auction room and invite up to 10 friends.</p>
+            <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#94A3B8', margin:'8px 0 4px', lineHeight:1.6 }}>Configure your auction room and invite up to 10 friends.</p>
 
             <label className="rp-label">Your Name</label>
             <input
@@ -568,18 +573,28 @@ function RoomContent() {
 
             {serverRooms.length > 0 && (
               <div style={{ marginTop:28 }}>
-                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, letterSpacing:3, color:'#444', textTransform:'uppercase', marginBottom:10, borderBottom:'1px solid #111', paddingBottom:8 }}>ALL PUBLIC ROOMS</div>
-                {serverRooms.map((r, i) => (
-                  <div key={i} className="rp-room-item">
-                    <div>
-                      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#eee' }}>{r.name}</div>
-                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#555', marginTop:2 }}>Host: {r.host} · {r.players}/10</div>
+                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, letterSpacing:3, color:'#888', textTransform:'uppercase', marginBottom:12, borderBottom:'1px solid #111', paddingBottom:8 }}>ALL ACTIVE PUBLIC ROOMS</div>
+                <div style={{ maxHeight: 240, overflowY: 'auto', paddingRight: 4 }} className="squad-scroller">
+                  {serverRooms.map((r, i) => (
+                    <div key={i} className="rp-room-item" style={{ marginBottom: 10 }}>
+                      <div>
+                        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#eee' }}>{r.name}</div>
+                        <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#94A3B8', marginTop:2 }}>Host: {r.host} · {r.players}/10</div>
+                      </div>
+                      <button className="rp-room-join-btn" onClick={() => doJoin(r.code)} disabled={loading}>JOIN</button>
                     </div>
-                    <button className="rp-room-join-btn" onClick={() => doJoin(r.code)} disabled={loading}>JOIN</button>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
+
+            <button 
+              className="room-back-btn" 
+              onClick={() => setPhase('home')}
+              style={{ marginTop: 30, width: '100%', background: 'transparent', border: '1px solid #222', color: '#888', padding: '12px', borderRadius: 6, fontFamily: "'Barlow Condensed'", cursor: 'pointer' }}
+            >
+              ← BACK TO HOME
+            </button>
           </div>
         </div>
       )}
@@ -607,7 +622,7 @@ function RoomContent() {
                   </svg> SHARE
                 </a>
               </div>
-              <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#2a2a2a', wordBreak:'break-all', marginBottom:20 }}>{shareUrl}</div>
+              <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#666', wordBreak:'break-all', marginBottom:20 }}>{shareUrl}</div>
 
               <div className="rp-hr" />
 
@@ -621,7 +636,7 @@ function RoomContent() {
                   </div>
                 </>
               ) : (
-                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:12, color:'#555', marginBottom:16 }}>
+                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:12, color:'#888', marginBottom:16 }}>
                   Mode: <span style={{ color: (lobbyMode || aMode) === 'mega' ? GOLD : CYAN }}>{(lobbyMode || aMode || 'mega').toUpperCase()} AUCTION</span>
                 </div>
               )}
@@ -665,7 +680,7 @@ function RoomContent() {
               <h2 style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'clamp(1.6rem,4vw,2.8rem)', color:'#fff', letterSpacing:2, marginBottom:6 }}>
                 PICK YOUR <span style={{ color:GOLD }}>FRANCHISE</span>
               </h2>
-              <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#444', marginBottom:24, lineHeight:1.6 }}>
+              <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#888', marginBottom:24, lineHeight:1.6 }}>
                 Select the IPL team you want to bid for. Each franchise can only be claimed by one player.
                 {myTeamId && <span style={{ color:GOLD }}> You picked <strong>{TEAMS.find(t=>t.id===myTeamId)?.name}</strong>.</span>}
               </p>
@@ -748,7 +763,7 @@ function RoomContent() {
               {/* Claimed franchises summary */}
               <div className="lobby-section-label">CLAIMED FRANCHISES</div>
               {Object.entries(takenMap).length === 0 ? (
-                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#333', lineHeight:1.8 }}>
+                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#666', lineHeight:1.8 }}>
                   No franchise selected yet.<br />Be the first!
                 </div>
               ) : (
@@ -757,7 +772,7 @@ function RoomContent() {
                     <div style={{ width:8, height:8, borderRadius:'50%', background:t.color, flexShrink:0 }} />
                     <div style={{ flex:1 }}>
                       <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'1rem', color:t.color, letterSpacing:1 }}>{t.short}</div>
-                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:9, color:'#555' }}>{takenMap[t.id]}</div>
+                      <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:9, color:'#888' }}>{takenMap[t.id]}</div>
                     </div>
                   </div>
                 ))
@@ -772,20 +787,29 @@ function RoomContent() {
         <div className="lobby-bottom-bar">
           {isHost ? (
             <>
-              <span style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#444', letterSpacing:2 }}>
-                {canStart ? 'Ready to go!' : 'Waiting for players…'}
+              <span style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#888', letterSpacing:2 }}>
+                {multiGS ? 'Auction is ongoing' : (canStart ? 'Ready to go!' : 'Waiting for players…')}
               </span>
               <button
                 className="lobby-start-btn"
-                onClick={handleStart}
-                disabled={!canStart}
+                onClick={multiGS ? () => router.push(`/auction?room=${roomCode}`) : handleStart}
+                disabled={!multiGS && !canStart}
               >
-                START AUCTION →
+                {multiGS ? 'ENTER AUCTION →' : 'START AUCTION →'}
               </button>
             </>
           ) : (
-            <div className="lobby-waiting">
-              ⏳ Waiting for host to start the auction…
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', alignItems: 'center' }}>
+               {!myTeamId ? (
+                 <div className="lobby-waiting">⏳ Select your franchise to join the auction…</div>
+               ) : (
+                 <button
+                   className="lobby-start-btn"
+                   onClick={() => router.push(`/auction?room=${roomCode}${isSpectator?'&spectator=1':''}`)}
+                 >
+                   {multiGS ? 'ENTER AUCTION →' : 'WAITING FOR HOST…'}
+                 </button>
+               )}
             </div>
           )}
         </div>

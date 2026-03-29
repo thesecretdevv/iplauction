@@ -315,34 +315,68 @@ io.on('connection', (socket) => {
             });
         }
 
-        // ── Game active: add as spectator ──
+        // ── Game active: check for slots ──
         if (room.started && room.status === 'active') {
-            room.players[playerId] = {
-                id: playerId,
-                socketId: socket.id,
-                name: playerName || 'Spectator',
-                teamId: null,
-                isHost: false,
-                isSpectator: true,
-                offline: false,
-            };
-            socket.join(code);
-            currentRoom = code;
-            currentPlayerId = playerId;
-            console.log(`[SPECTATOR] ${playerName} joined ${code} as spectator`);
+            const takenTeams = new Set(Object.values(room.players).map(p => p.teamId).filter(Boolean));
+            const availableTeams = TEAMS.filter(t => !takenTeams.has(t.id));
+            const activeHumanPlayers = Object.values(room.players).filter(p => !p.isSpectator && !p.offline);
 
-            const state = getLobbyState(room);
-            io.to(code).emit('lobby-update', state);
-            return cb({
-                ok: true,
-                code,
-                players: state.players,
-                roomStatus: room.status,
-                hostId: room.hostId,
-                auctionMode: room.auctionMode,
-                isSpectator: true,
-                gameState: getClientState(room)
-            });
+            // If there's an available team AND room isn't full (10 players)
+            if (availableTeams.length > 0 && activeHumanPlayers.length < 10) {
+                room.players[playerId] = {
+                    id: playerId,
+                    socketId: socket.id,
+                    name: playerName || `Player ${Object.keys(room.players).length + 1}`,
+                    teamId: null, // They'll have to select one in the lobby first
+                    isHost: false,
+                    isSpectator: false,
+                    offline: false,
+                };
+                socket.join(code);
+                currentRoom = code;
+                currentPlayerId = playerId;
+                
+                const state = getLobbyState(room);
+                io.to(code).emit('lobby-update', state);
+                return cb({
+                    ok: true,
+                    code,
+                    players: state.players,
+                    roomStatus: room.status,
+                    hostId: room.hostId,
+                    auctionMode: room.auctionMode,
+                    isSpectator: false,
+                    gameState: getClientState(room)
+                });
+            } else {
+                // Join as spectator
+                room.players[playerId] = {
+                    id: playerId,
+                    socketId: socket.id,
+                    name: playerName || 'Spectator',
+                    teamId: null,
+                    isHost: false,
+                    isSpectator: true,
+                    offline: false,
+                };
+                socket.join(code);
+                currentRoom = code;
+                currentPlayerId = playerId;
+                console.log(`[SPECTATOR] ${playerName} joined ${code} as spectator (ongoing)`);
+
+                const state = getLobbyState(room);
+                io.to(code).emit('lobby-update', state);
+                return cb({
+                    ok: true,
+                    code,
+                    players: state.players,
+                    roomStatus: room.status,
+                    hostId: room.hostId,
+                    auctionMode: room.auctionMode,
+                    isSpectator: true,
+                    gameState: getClientState(room)
+                });
+            }
         }
 
         // ── Room finished: spectator ──

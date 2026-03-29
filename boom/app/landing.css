@@ -10,7 +10,7 @@
   --gold: #E8B84B;
   --gold-dark: #C8A84B;
   --white: #F7F7F7;
-  --muted: #555555;
+  --muted: #94A3B8;
 }
 
 /* ── Reset ── */
@@ -133,7 +133,7 @@
 
 .l-hero-subtext {
   font-family: 'Courier Prime', monospace; font-size: 0.9rem;
-  color: #888; max-width: 448px; margin-top: 28px; line-height: 1.75;
+  color: #94A3B8; max-width: 448px; margin-top: 28px; line-height: 1.75;
 }
 @media (min-width: 768px) { .l-hero-subtext { font-size: 1rem; } }
 
@@ -141,7 +141,7 @@
 .l-stats-refined { margin-top: 40px; }
 .l-stats-label {
   font-family: 'Courier Prime', monospace; font-weight: 700;
-  font-size: 0.75rem; color: #555; letter-spacing: 3px;
+  font-size: 0.75rem; color: #888; letter-spacing: 3px;
   text-transform: uppercase; display: block; margin-bottom: 20px;
 }
 .l-stats-grid { display: flex; align-items: flex-start; gap: 40px; }
@@ -324,7 +324,7 @@
   font-family: 'Bebas Neue', sans-serif; font-size: 1.875rem;
   color: #fff; letter-spacing: -0.02em; margin-bottom: 16px;
 }
-.l-step-body { font-family: 'Courier Prime', monospace; font-size: 0.875rem; color: #666; line-height: 1.7; }
+.l-step-body { font-family: 'Courier Prime', monospace; font-size: 0.875rem; color: #94A3B8; line-height: 1.7; }
 
 /* ── TEAMS ── */
 .l-teams { background: #0F0F0F; padding: 64px 0; border-top: 1px solid #1A1A1A; border-bottom: 1px solid #1A1A1A; }
@@ -371,12 +371,12 @@
 }
 @media (min-width: 768px) { .l-footer-logo { justify-content: flex-start; } }
 .l-footer-logo span { color: var(--gold); font-size: 0.875rem; margin-left: 4px; }
-.l-footer-tagline { font-family: 'Courier Prime', monospace; font-size: 0.875rem; color: #555; }
+.l-footer-tagline { font-family: 'Courier Prime', monospace; font-size: 0.875rem; color: #888; }
 
 .l-footer-links { display: flex; gap: 24px; }
 .l-footer-link {
   font-family: 'Courier Prime', monospace; font-size: 0.75rem;
-  color: #555; text-transform: uppercase; letter-spacing: 0.15em;
+  color: #888; text-transform: uppercase; letter-spacing: 0.15em;
   text-decoration: none; transition: color 0.2s;
 }
 .l-footer-link:hover { color: #fff; }
@@ -384,7 +384,7 @@
 .l-footer-bottom {
   border-top: 1px solid #111; margin-top: 48px; padding-top: 32px;
   text-align: center; font-family: 'Courier Prime', monospace;
-  font-size: 11px; color: #444; letter-spacing: 0.15em; text-transform: uppercase;
+  font-size: 11px; color: #777; letter-spacing: 0.15em; text-transform: uppercase;
 }
 
 /* ── ANIMATIONS ── */

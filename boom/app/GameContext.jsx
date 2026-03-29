@@ -437,7 +437,15 @@ export function GameProvider({ children }) {
 
         if (res.roomStatus === "active") {
           setMultiGS(res.gameState);
-          router.push(buildUrl('/auction', { room: code, mode: res.auctionMode }));
+          // If spectator, go to auction. If participant but has team, go to auction.
+          // If participant NO team, let them pick team in lobby.
+          const myP = (res.players || []).find(p => p.id === playerId);
+          if (res.isSpectator || (myP && myP.teamId)) {
+            router.push(buildUrl('/auction', { room: code, mode: res.auctionMode }));
+          } else {
+             // Stay in lobby (handled by phase in room/page.jsx or just navigate to lobby)
+             // room/page.jsx uses 'lobby' phase locally.
+          }
         } else if (res.roomStatus === "finished") {
           setMultiGS(res.gameState);
           router.push(buildUrl('/results', { room: code, mode: res.auctionMode }));

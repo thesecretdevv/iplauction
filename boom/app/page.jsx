@@ -259,12 +259,12 @@ export default function LandingPage() {
           <div className="l-footer-bottom" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', textAlign: 'center' }}>
             <span>© 2026 IPL AUCTION ONLINE. FREE TO PLAY. BUILT FOR THE GAME.</span>
 
-            <div style={{ fontSize: '10px', color: '#444', letterSpacing: '1px', lineHeight: '1.6', maxWidth: '600px', marginTop: '4px' }}>
+            <div style={{ fontSize: '10px', color: '#888', letterSpacing: '1px', lineHeight: '1.6', maxWidth: '600px', marginTop: '4px' }}>
               IPL Auction Online is a fan-made simulator and is not affiliated with the BCCI, IPL, or any official franchise.
               Data and player information are attributed to <a href="https://www.iplt20.com" target="_blank" rel="noreferrer" style={{ color: '#E8B84B', textDecoration: 'none' }}>iplt20.com</a> & <a href="https://cricapi.com" target="_blank" rel="noreferrer" style={{ color: '#E8B84B', textDecoration: 'none' }}>CricAPI</a>.
             </div>
 
-            <span style={{ fontSize: '9px', color: '#333', letterSpacing: '2px', textTransform: 'lowercase', marginTop: '8px' }}>
+            <span style={{ fontSize: '9px', color: '#666', letterSpacing: '2px', textTransform: 'lowercase', marginTop: '8px' }}>
               <a target="_blank" rel="noreferrer" href="https://icons8.com/icon/OLf3WK9ioebI/auction" style={{ color: 'inherit', textDecoration: 'none' }}>Auction Hammer</a> icon by <a target="_blank" rel="noreferrer" href="https://icons8.com" style={{ color: 'inherit', textDecoration: 'none' }}>Icons8</a>
             </span>
           </div>

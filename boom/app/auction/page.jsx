@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, Suspense } from 'react';
+import { useState, useRef, useCallback, Suspense, memo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useGame, fmt, nextBid } from '../GameContext';
 import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from '../../src/MultiScreens';
@@ -83,45 +83,46 @@ function AuctionContent() {
 
   const CYAN = '#22D3EE';
 
-  const UpcomingModal = () => {
-    if (!showUpcoming) return null;
-    return (
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.9)", backdropFilter: "blur(12px)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "'Rajdhani', sans-serif" }}>
-        <div style={{ width: "100%", maxWidth: 1000, background: "#0a0a0c", border: `1px solid ${GOLD}44`, borderRadius: 16, display: "flex", flexDirection: "column", maxHeight: "90vh", animation: "fadeUp 0.3s ease", boxShadow: "0 0 50px rgba(0,0,0,1)" }}>
-          <div style={{ padding: "20px 24px", borderBottom: `1px solid ${BORDER}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontFamily: "'Bebas Neue'", fontSize: 28, color: GOLD, letterSpacing: 2 }}>UPCOMING PLAYERS</div>
-              <div style={{ color: "#555", fontSize: 11, letterSpacing: 1, marginTop: 2 }}>POOLED BY CATEGORY · {upcomingPlayers.length} LEFT</div>
-            </div>
-            <button onClick={() => setShowUpcoming(false)} style={{ background: "transparent", border: "none", color: "#666", fontSize: 24, cursor: "pointer" }}>✕</button>
+const UpcomingModal = memo(({ showUpcoming, setShowUpcoming, upcomingPlayers, groupedUpcoming }) => {
+  if (!showUpcoming) return null;
+  const CYAN = '#22D3EE';
+  return (
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.9)", backdropFilter: "blur(12px)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "'Rajdhani', sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 1000, background: "#0a0a0c", border: `1px solid ${GOLD}44`, borderRadius: 16, display: "flex", flexDirection: "column", maxHeight: "90vh", animation: "fadeUp 0.3s ease", boxShadow: "0 0 50px rgba(0,0,0,1)" }}>
+        <div style={{ padding: "20px 24px", borderBottom: `1px solid ${BORDER}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 28, color: GOLD, letterSpacing: 2 }}>UPCOMING PLAYERS</div>
+            <div style={{ color: "#555", fontSize: 11, letterSpacing: 1, marginTop: 2 }}>POOLED BY CATEGORY · {upcomingPlayers.length} LEFT</div>
           </div>
-          <div className="squad-scroller" style={{ padding: 24, overflowY: "auto", flex: 1 }}>
-            {Object.entries(groupedUpcoming).length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#444' }}>No players remaining in the auction.</div>
-            ) : (
-              Object.entries(groupedUpcoming).map(([cat, players]) => (
-                <div key={cat} style={{ marginBottom: 30 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                    <div style={{ fontFamily: "'Bebas Neue'", fontSize: 18, color: "#fff", letterSpacing: 2 }}>{cat.toUpperCase()}</div>
-                    <div style={{ color: CYAN, fontSize: 10, background: `${CYAN}15`, padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>{players.length}</div>
-                    <div style={{ flex: 1, height: 1, background: `linear-gradient(to right, ${BORDER}, transparent)` }} />
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10 }}>
-                    {players.map((p, i) => (
-                      <div key={i} style={{ background: "#0d0d10", border: `1px solid #1a1a1e`, borderRadius: 6, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "#aaa" }}>{p.name}</div>
-                        <div style={{ fontSize: 10, color: ROLE_C[p.role] }}>{ROLE_EMOJI[p.role]}</div>
-                      </div>
-                    ))}
-                  </div>
+          <button onClick={() => setShowUpcoming(false)} style={{ background: "transparent", border: "none", color: "#666", fontSize: 24, cursor: "pointer" }}>✕</button>
+        </div>
+        <div className="squad-scroller" style={{ padding: 24, overflowY: "auto", flex: 1 }}>
+          {Object.entries(groupedUpcoming).length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: '#444' }}>No players remaining in the auction.</div>
+          ) : (
+            Object.entries(groupedUpcoming).map(([cat, players]) => (
+              <div key={cat} style={{ marginBottom: 30 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 18, color: "#fff", letterSpacing: 2 }}>{cat.toUpperCase()}</div>
+                  <div style={{ color: CYAN, fontSize: 10, background: `${CYAN}15`, padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>{players.length}</div>
+                  <div style={{ flex: 1, height: 1, background: `linear-gradient(to right, ${BORDER}, transparent)` }} />
                 </div>
-              ))
-            )}
-          </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10 }}>
+                  {players.map((p, i) => (
+                    <div key={i} style={{ background: "#0d0d10", border: `1px solid #1a1a1e`, borderRadius: 6, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "#aaa" }}>{p.name}</div>
+                      <div style={{ fontSize: 10, color: ROLE_C[p.role] }}>{ROLE_EMOJI[p.role]}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+});
 
   if (gs.phase === 'selection') {
     return (
@@ -348,7 +349,12 @@ function AuctionContent() {
 
       <SquadModal isOpen={showSquad} onClose={() => { setShowSquad(false); setViewingTeam(null); }} squads={gs.squads} myTeamId={viewingTeam || effectiveMyTeamId} TEAMS={TEAMS} />
       <StatsModal  isOpen={showStats} onClose={() => setShowStats(false)} gs={multiGS || g.current} TEAMS={TEAMS} myTeamId={myTeamId} />
-      <UpcomingModal />
+      <UpcomingModal
+        showUpcoming={showUpcoming}
+        setShowUpcoming={setShowUpcoming}
+        upcomingPlayers={upcomingPlayers}
+        groupedUpcoming={groupedUpcoming}
+      />
 
       {/* ── TOP BAR ── */}
       <div className="ac-top">
