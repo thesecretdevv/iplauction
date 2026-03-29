@@ -143,6 +143,7 @@ export function GameProvider({ children }) {
     const roomParam = search.get('room');
     const savedRoom = roomParam || localStorage.getItem("ipl_room_code");
     const savedName = localStorage.getItem("ipl_player_name");
+    const savedPlayMode = localStorage.getItem("ipl_play_mode");
 
     if (savedRoom && savedName) {
       // Auto-join if we have all data
