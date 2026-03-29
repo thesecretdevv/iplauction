@@ -210,12 +210,17 @@ function AuctionContent() {
   const myTeam      = TEAMS.find(t => t.id === effectiveMyTeamId);
   const bidderTeam  = gs.currentBidder ? TEAMS.find(t => t.id === gs.currentBidder) : null;
   const osCount     = (gs.squads[effectiveMyTeamId] || []).filter(p => p.overseas).length;
-  const maxSquadSize= (gs.playerQueue?.length || 0) <= 200 ? 15 : 25;
+  
+  // Dynamic limits based on mode
+  const isMini      = gs.auctionMode?.toLowerCase() === 'mini';
+  const maxSquadSize= isMini ? 11 : ((gs.playerQueue?.length || 0) <= 200 ? 15 : 25);
+  const maxOverseas = isMini ? 4 : 8;
+
   const canBid      = gs.phase === 'bidding'
     && gs.currentBidder !== effectiveMyTeamId
     && (gs.purses[effectiveMyTeamId] || 0) >= (gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid))
     && (gs.squads[effectiveMyTeamId]?.length || 0) < maxSquadSize
-    && (!player.overseas || osCount < 8);
+    && (!player.overseas || osCount < maxOverseas);
   const iLeading    = gs.currentBidder === effectiveMyTeamId;
   const nextPrice   = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
   const isTimerLow  = !gs.isPaused && gs.timer <= 5;
@@ -482,7 +487,15 @@ function AuctionContent() {
         }
       `}</style>
 
-      <SquadModal isOpen={showSquad} onClose={() => { setShowSquad(false); setViewingTeam(null); }} squads={gs.squads} myTeamId={viewingTeam || effectiveMyTeamId} TEAMS={TEAMS} />
+      <SquadModal 
+        isOpen={showSquad} 
+        onClose={() => { setShowSquad(false); setViewingTeam(null); }} 
+        squads={gs.squads} 
+        myTeamId={viewingTeam || effectiveMyTeamId} 
+        TEAMS={TEAMS}
+        maxSquad={maxSquadSize}
+        maxOverseas={maxOverseas}
+      />
       <StatsModal  isOpen={showStats} onClose={() => setShowStats(false)} gs={multiGS || g.current} TEAMS={TEAMS} myTeamId={myTeamId} />
       <UpcomingModal
         showUpcoming={showUpcoming}

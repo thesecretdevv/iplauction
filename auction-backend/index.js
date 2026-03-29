@@ -697,11 +697,13 @@ io.on('connection', (socket) => {
 
         const isMini = room.auctionMode && room.auctionMode.toLowerCase() === 'mini';
         const maxSquadSize = isMini ? 11 : ((gs.playerQueue?.length || 0) <= 200 ? 15 : 25);
+        const maxOverseas = isMini ? 4 : 8;
+
         if (gs.squads[teamId].length >= maxSquadSize) return cb?.({ ok: false, error: 'Squad full (' + maxSquadSize + ' max)' });
 
         const playerOnAuction = gs.playerQueue[gs.currentIdx];
         const osCount = gs.squads[teamId].filter(p => p.overseas).length;
-        if (playerOnAuction?.overseas && osCount >= 8) return cb?.({ ok: false, error: 'Max 8 overseas players reached' });
+        if (playerOnAuction?.overseas && osCount >= maxOverseas) return cb?.({ ok: false, error: 'Max ' + maxOverseas + ' overseas players' });
 
         // Apply state immediately
         gs.currentBid = nb;

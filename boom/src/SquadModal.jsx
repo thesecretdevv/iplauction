@@ -5,7 +5,7 @@ import { GOLD, CYAN, BG, CARD, BORDER, ROLE_C, ROLE_EMOJI, ROLE_L } from "./Mult
 
 
 
-export function SquadModal({ isOpen, onClose, squads, myTeamId, TEAMS }) {
+export function SquadModal({ isOpen, onClose, squads, myTeamId, TEAMS, maxSquad = 25, maxOverseas = 8 }) {
     if (!isOpen) return null;
 
     const mySquad = squads[myTeamId] || [];
@@ -43,9 +43,9 @@ export function SquadModal({ isOpen, onClose, squads, myTeamId, TEAMS }) {
                         <div>
                             <div style={{ fontFamily: "'Bebas Neue'", fontSize: 36, color: myTeamInfo?.color || GOLD, letterSpacing: 3, lineHeight: 1 }}>{myTeamInfo?.name || "MY SQUAD"}</div>
                             <div style={{ color: "#aaa", fontSize: 13, letterSpacing: 2, marginTop: 4, fontWeight: 600, display: "flex", gap: 15 }}>
-                                <div>PLAYERS: <span style={{ color: "#fff", fontSize: 15 }}>{mySquad.length} <span style={{ color: "#555" }}>/</span> 25</span></div>
-                                <div style={{ color: mySquad.filter(p => p.overseas).length >= 8 ? "#ff4d4d" : GOLD }}>
-                                    OVERSEAS: <span style={{ color: "#fff", fontSize: 15 }}>{mySquad.filter(p => p.overseas).length} <span style={{ color: "#555" }}>/</span> 8</span>
+                                <div>PLAYERS: <span style={{ color: "#fff", fontSize: 15 }}>{mySquad.length} <span style={{ color: "#555" }}>/</span> {maxSquad}</span></div>
+                                <div style={{ color: mySquad.filter(p => p.overseas).length >= maxOverseas ? "#ff4d4d" : GOLD }}>
+                                    OVERSEAS: <span style={{ color: "#fff", fontSize: 15 }}>{mySquad.filter(p => p.overseas).length} <span style={{ color: "#555" }}>/</span> {maxOverseas}</span>
                                 </div>
                             </div>
                         </div>
