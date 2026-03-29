@@ -60,26 +60,38 @@ app.get('/', (req, res) => {
     res.send('🏏 IPL Auction Server is running!');
 });
 
-// GET /api/rooms — returns all active public rooms (for initial page load without socket)
-app.get('/api/rooms', (req, res) => {
-    res.setHeader('Cache-Control', 'no-store');
-    const activeRooms = [];
-    rooms.forEach((r) => {
-        if (!r.isPrivate && r.status !== 'finished') {
-            activeRooms.push({
-                code: r.code,
-                name: r.name,
-                host: r.players[r.hostId]?.name || 'Unknown',
-                players: Object.values(r.players).filter(p => !p.isSpectator && !p.offline).length,
-                spectators: Object.values(r.players).filter(p => p.isSpectator).length,
-                status: r.status,
-                mode: r.auctionMode,
-            });
-        }
-    });
+// GET /api/rooms — returns all active public rooms (from Redis index)
+app.get('/api/rooms', async (req, res) => {
+    try {
+        res.setHeader('Cache-Control', 'no-store');
+        // Fetch all candidates from Redis index
+        const publicCodes = await redis.smembers('public_rooms');
+        const activeRooms = [];
 
-    const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
-    res.json({ active: activeRooms, totalRooms: activeRooms.length, totalPlayers });
+        // Hydrate each code
+        for (const code of publicCodes) {
+            const r = await getRoom(code);
+            if (r && !r.isPrivate && r.status !== 'finished') {
+                activeRooms.push({
+                    code: r.code,
+                    name: r.name,
+                    host: r.players[r.hostId]?.name || 'Unknown',
+                    players: Object.values(r.players).filter(p => !p.isSpectator && !p.offline).length,
+                    spectators: Object.values(r.players).filter(p => p.isSpectator && !p.offline).length,
+                    status: r.status,
+                    mode: r.auctionMode,
+                    // Useful for discovery:
+                    currentPlayer: r.gameState?.playerQueue[r.gameState?.currentIdx]?.name || null
+                });
+            }
+        }
+
+        const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
+        res.json({ active: activeRooms, totalRooms: activeRooms.length, totalPlayers });
+    } catch (e) {
+        console.error("[REST] Room Fetch Error:", e);
+        res.status(500).json({ error: "Failed to fetch rooms" });
+    }
 });
 
 // GET /api/rooms/:code — room details
@@ -96,6 +108,23 @@ app.get('/api/rooms/:code', (req, res) => {
 });
 
 // ─── Persistence ────────────────────────────────────────────────────────────
+
+// Helper to keep track of public rooms in a central index
+async function addToPublicIndex(code) {
+    try { await redis.sadd('public_rooms', code); } catch(e) {}
+}
+async function removeFromPublicIndex(code) {
+    try { await redis.srem('public_rooms', code); } catch(e) {}
+}
+
+async function removeRoom(code) {
+    if (!code) return;
+    rooms.delete(code.toUpperCase());
+    await redis.del(`room:${code.toUpperCase()}`);
+    await removeFromPublicIndex(code.toUpperCase());
+    console.log(`[ROOM] ${code} fully removed from memory and Redis`);
+}
+
 async function persistRoom(room) {
     if (!room) return;
     try {
@@ -112,26 +141,33 @@ async function persistRoom(room) {
             started: room.started || false,
             updatedAt: Date.now()
         };
-        // Save with 24-hour expiry
+        // Save room with 24-hour expiry
         await redis.set(`room:${room.code}`, JSON.stringify(data), { ex: 3600 * 24 });
+        
+        // Track in public index if not private and not finished
+        if (!data.isPrivate && data.status !== 'finished') {
+            await addToPublicIndex(room.code);
+        } else {
+            await removeFromPublicIndex(room.code);
+        }
     } catch(e) { console.error("[REDIS] Save Error:", e); }
 }
 
 async function getRoom(code) {
     if (!code) return null;
-    let room = rooms.get(code.toUpperCase());
+    const ucCode = code.toUpperCase();
+    let room = rooms.get(ucCode);
     if (!room) {
         try {
-            const data = await redis.get(`room:${code.toUpperCase()}`);
+            const data = await redis.get(`room:${ucCode}`);
             if (data) {
                 const rData = typeof data === 'string' ? JSON.parse(data) : data;
                 room = {
                     ...rData,
-                    timerInterval: null // This will be restarted on activity if needed
+                    timerInterval: null 
                 };
-                rooms.set(room.code, room);
-                console.log(`[REDIS] Restored Room: ${room.code}`);
-                // If it was active, we may need to resume its game tick
+                rooms.set(ucCode, room);
+                console.log(`[REDIS] Restored Room: ${ucCode}`);
                 if (room.status === 'active' && room.gameState && !room.timerInterval) {
                    startGameTick(room); 
                 }
@@ -614,24 +650,31 @@ io.on('connection', (socket) => {
         await persistRoom(room);
     });
 
-    // ── Get Rooms (socket) ──
-    socket.on('get-rooms', (cb) => {
-        const activeRooms = [];
-        rooms.forEach((r) => {
-            if (!r.isPrivate && r.status !== 'finished') {
-                activeRooms.push({
-                    code: r.code,
-                    name: r.name,
-                    host: r.players[r.hostId]?.name || 'Unknown',
-                    players: Object.values(r.players).filter(p => !p.isSpectator && !p.offline).length,
-                    spectators: Object.values(r.players).filter(p => p.isSpectator && !p.offline).length,
-                    status: r.status,
-                    mode: r.auctionMode,
-                });
+    // ── Get Rooms (socket) ── pull from Redis
+    socket.on('get-rooms', async (cb) => {
+        try {
+            const publicCodes = await redis.smembers('public_rooms');
+            const activeRooms = [];
+            
+            for (const code of publicCodes) {
+                const r = await getRoom(code);
+                if (r && !r.isPrivate && r.status !== 'finished') {
+                    activeRooms.push({
+                        code: r.code,
+                        name: r.name,
+                        host: r.players[r.hostId]?.name || 'Unknown',
+                        players: Object.values(r.players).filter(p => !p.isSpectator && !p.offline).length,
+                        spectators: Object.values(r.players).filter(p => p.isSpectator && !p.offline).length,
+                        status: r.status,
+                        mode: r.auctionMode,
+                        currentPlayer: r.gameState?.playerQueue[r.gameState?.currentIdx]?.name || null
+                    });
+                }
             }
-        });
-        const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
-        cb?.({ active: activeRooms, totalRooms: activeRooms.length, totalPlayers });
+            
+            const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
+            cb?.({ active: activeRooms, totalRooms: activeRooms.length, totalPlayers });
+        } catch(e) { console.error("[SOCKET] Room Fetch Error:", e); cb?.({ active: [] }); }
     });
 
     // ── Place Bid ── (optimized for minimum latency)
@@ -745,10 +788,8 @@ io.on('connection', (socket) => {
         if (activePlayers.length === 0) {
             // Immediate cleanup if nobody is left
             if (room.timerInterval) clearInterval(room.timerInterval);
-            rooms.delete(currentRoom);
-            console.log(`[ROOM] ${currentRoom} deleted (empty)`);
+            await removeRoom(currentRoom);
             if (!room.isPrivate) broadcastRoomList();
-            await redis.del(`room:${currentRoom}`); // Remove from Redis too if truly empty
             return;
         }
 
@@ -785,8 +826,7 @@ io.on('connection', (socket) => {
                 const remaining = Object.values(r.players).filter(p2 => !p2.offline);
                 if (remaining.length === 0) {
                     if (r.timerInterval) clearInterval(r.timerInterval);
-                    rooms.delete(currentRoom);
-                    await redis.del(`room:${currentRoom}`);
+                    await removeRoom(currentRoom);
                 } else {
                     const st = getLobbyState(r);
                     io.to(currentRoom).emit('lobby-update', st);
