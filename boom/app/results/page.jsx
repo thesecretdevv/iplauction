@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useGame, fmt } from '../GameContext';
 import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from '../../src/MultiScreens';
 import { calculateLeaderboard, selectPlayingXI, getPlayerRating } from '../data/playerRatings';
+import ALL_PLAYERS from '../data/Players.json';
 
 // ── Medal helpers ──────────────────────────────────────────────────────────
 const MEDAL = ['Gold', 'Silver', 'Bronze'];
@@ -109,6 +110,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode }) {
         .res-card{animation:fadeUp .35s ease-out both}
         .res-tab-btn{transition:all .2s;border-radius:6px 6px 0 0;font-family:'Barlow Condensed';font-size:13px;letter-spacing:2px;font-weight:700;cursor:pointer;border:none;padding:10px 28px}
         .res-team-pill{transition:all .2s;border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:700;font-size:13px;font-family:'Rajdhani'}
+        .res-action-btn:hover { filter: brightness(1.3); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
       `}</style>
 
       {/* ── Header ── */}
@@ -162,7 +164,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function SquadTab({ gs, mti, mode, activeId, setActiveId, team, displayList, playingXI, fullSquad, spent, soldCount, unsoldCount, teamTotalRating, teamAvgRating, shareText, shareWhatsApp, downloadSheet }) {
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1600, margin: '0 auto' }}>
       {/* ── Team selector ── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
         {TEAMS.map(t => (
@@ -213,13 +215,26 @@ function SquadTab({ gs, mti, mode, activeId, setActiveId, team, displayList, pla
           {displayList.map((p, i) => {
             const pName = p.name || p;
             const rating = getPlayerRating(pName, mode);
+            const pRec = ALL_PLAYERS.find(ap => ap.name === pName);
+            const photoUrl = pRec?.photo_url;
             return (
-              <div key={i} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: ROLE_C[p.role] + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: ROLE_C[p.role], fontWeight: 700 }}>{p.role[0]}</div>
+              <div key={i} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: "transform 0.2s" }}
+                onMouseOver={e => e.currentTarget.style.borderColor = ROLE_C[p.role]}
+                onMouseOut={e => e.currentTarget.style.borderColor = BORDER}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {photoUrl ? (
+                    <div style={{ width: 42, height: 42, borderRadius: '50%', overflow: 'hidden', background: '#080808', border: `1px solid ${ROLE_C[p.role]}`, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', flexShrink: 0 }}>
+                      <img src={photoUrl} alt={pName} style={{ height: '95%', objectFit: 'contain' }} />
+                    </div>
+                  ) : (
+                    <div style={{ width: 42, height: 42, borderRadius: '50%', background: ROLE_C[p.role] + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, border: `1px solid ${ROLE_C[p.role]}50`, flexShrink: 0 }}>
+                      {ROLE_EMOJI[p.role]}
+                    </div>
+                  )}
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14, color: '#eee' }}>{pName}</div>
-                    <div style={{ fontSize: 11, color: ROLE_C[p.role], marginTop: 1 }}>
+                    <div style={{ fontSize: 11, color: ROLE_C[p.role], marginTop: 2 }}>
                       {ROLE_L[p.role] || p.role}{p.overseas ? ' · ✈ OS' : ''}
                     </div>
                   </div>
@@ -235,10 +250,10 @@ function SquadTab({ gs, mti, mode, activeId, setActiveId, team, displayList, pla
       )}
 
       {/* ── Action buttons ── */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <ActionBtn onClick={downloadSheet} bg="#22D3EE" color="#000" label="⬇ DOWNLOAD (TXT)" />
-        <ActionBtn onClick={shareWhatsApp} bg="#25D366" color="#fff" label="💬 SHARE ON WHATSAPP" />
-        <ActionBtn onClick={shareText} bg="#6366f1" color="#fff" label="🔗 COPY / SHARE" />
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center', marginTop: 10 }}>
+        <ActionBtn onClick={downloadSheet} bg="#22D3EE" label="⬇ DOWNLOAD (TXT)" />
+        <ActionBtn onClick={shareWhatsApp} bg="#25D366" label="💬 SHARE ON WHATSAPP" />
+        <ActionBtn onClick={shareText} bg="#a78bfa" label="🔗 COPY / SHARE" />
       </div>
     </div>
   );
@@ -287,7 +302,7 @@ function LeaderboardTab({ gs, mode, mti }) {
   const tc     = (id) => TEAMS.find(t => t.id === id)?.color || '#888';
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1400, margin: '0 auto' }}>
       {/* Formula explanation */}
       <div style={{ background: '#0a0d15', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 18px', marginBottom: 20, fontSize: 12, color: '#555', letterSpacing: 1, lineHeight: 1.8 }}>
         <span style={{ color: GOLD, fontWeight: 700 }}>HOW SCORES ARE CALCULATED</span>
@@ -408,7 +423,7 @@ function LeaderboardTab({ gs, mode, mti }) {
             a.click();
             URL.revokeObjectURL(url);
           }}
-          bg="#22D3EE" color="#000" label="⬇ DOWNLOAD FULL LEADERBOARD" />
+          bg="#22D3EE" label="⬇ DOWNLOAD FULL LEADERBOARD" />
       </div>
     </div>
   );
@@ -424,9 +439,21 @@ function StatBubble({ label, val, color }) {
   );
 }
 
-function ActionBtn({ onClick, bg, color, label }) {
+function ActionBtn({ onClick, bg, label }) {
   return (
-    <button onClick={onClick} style={{ background: bg, border: 'none', borderRadius: 6, padding: '12px 24px', color, fontWeight: 900, cursor: 'pointer', fontSize: 12, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}>
+    <button className="res-action-btn" onClick={onClick} style={{ 
+      background: `${bg}15`, 
+      border: `1px solid ${bg}50`, 
+      borderRadius: 8, 
+      padding: '12px 28px', 
+      color: bg, 
+      fontWeight: 700, 
+      cursor: 'pointer', 
+      fontSize: 14, 
+      letterSpacing: 2, 
+      fontFamily: "'Barlow Condensed'",
+      transition: 'all 0.2s ease-out'
+    }}>
       {label}
     </button>
   );

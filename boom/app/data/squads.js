@@ -168,7 +168,7 @@ export const SQUADS = [
   {
     id: "GT",
     name: "Gujarat Titans",
-    primaryColor: "#1B2133",
+    primaryColor: "#4DD0E1",
     captain: "Shubman Gill",
     coach: "Ashish Nehra",
     home: "Narendra Modi Stadium, Ahmedabad",

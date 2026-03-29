@@ -167,7 +167,7 @@ export default function LandingPage() {
             <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '80%', height: '80%', background: '#E8B84B', borderRadius: '50%', filter: 'blur(120px)', opacity: 0.15, pointerEvents: 'none' }}></div>
 
             {/* Hero Players Image */}
-            <img src="/assets/Hero_players.png" alt="IPL Star Players" style={{ position: 'relative', zIndex: 10, width: '130%', maxWidth: '850px', objectFit: 'contain', filter: 'drop-shadow(0 10px 40px rgba(232,184,75,0.15))', transform: 'translateX(-15%)' }} />
+            <img src="/assets/Hero_players.png" alt="" fetchPriority="high" style={{ position: 'relative', zIndex: 10, width: '130%', maxWidth: '850px', objectFit: 'contain', filter: 'drop-shadow(0 10px 40px rgba(232,184,75,0.15))', transform: 'translateX(-15%)' }} />
           </div>
         </div>
       </section>
@@ -193,14 +193,24 @@ export default function LandingPage() {
             <div className="l-gold-bar" />
             <h2 className="l-section-h2">MARQUEE PLAYERS</h2>
           </div>
-          <div style={{ height: '600px', position: 'relative', width: '100%', cursor: 'grab' }}>
-            <CircularGallery
-              items={GALLERY_ITEMS}
-              bend={3}
-              textColor="#E8B84B"
-              borderRadius={0.05}
-              font="700 32px 'Montserrat', sans-serif"
-            />
+        </div>
+        <div className="l-desktop-marquee" style={{ height: '600px', position: 'relative', width: '100%', maxWidth: '100vw', cursor: 'grab', overflow: 'hidden' }}>
+          <CircularGallery
+            items={GALLERY_ITEMS}
+            bend={3}
+            textColor="#E8B84B"
+            borderRadius={0.05}
+            font="700 32px 'Montserrat', sans-serif"
+          />
+        </div>
+        <div className="l-mobile-marquee">
+          <div style={{ display: 'flex', overflowX: 'auto', gap: 16, padding: '24px', scrollSnapType: 'x mandatory' }}>
+            {GALLERY_ITEMS.map((item, i) => (
+              <div key={i} style={{ minWidth: 220, flexShrink: 0, scrollSnapAlign: 'start', borderRadius: 12, overflow: 'hidden', background: '#111', border: '1px solid #222' }}>
+                <img src={item.image} style={{ width: '100%', height: 280, objectFit: 'cover' }} alt="" fetchPriority="high" />
+                <div style={{ padding: 12, textAlign: 'center', background: '#0a0a0c', color: '#E8B84B', fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: 1 }}>{item.text}</div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

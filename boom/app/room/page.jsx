@@ -25,7 +25,7 @@ const TEAMS = [
 
 // ── Global styles ───────────────────────────────────────────────────────────
 const globalStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;600;700&family=Courier+Prime:wght@400;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;600;700&family=Rajdhani:wght@500;600;700&family=Courier+Prime:wght@400;700&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; background: ${BG}; }
 
@@ -118,6 +118,96 @@ const globalStyles = `
   .rp-room-join-btn:hover { background:${CYAN}; color:#000; }
   .rp-room-rejoin-btn  { padding:8px 16px; background:rgba(232,184,75,.08); border:1px solid rgba(232,184,75,.3); color:${GOLD}; font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:12px; letter-spacing:.1em; cursor:pointer; transition:all .2s; border-radius:4px; }
   .rp-room-rejoin-btn:hover { background:${GOLD}; color:#000; }
+
+  /* ── BROWSE ROOMS (mobile-native) ── */
+  .rb-shell {
+    min-height: 100vh; background: #0a0a0a;
+    display: flex; flex-direction: column;
+    font-family: 'Barlow Condensed', sans-serif;
+  }
+  .rb-header {
+    position: sticky; top: 0;
+    background: #0a0a0a; border-bottom: 1px solid #1a1a1a;
+    z-index: 20; padding: 14px 16px 10px;
+  }
+  .rb-header-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .rb-back-btn { background: none; border: none; color: #ccc; font-size: 20px; cursor: pointer; padding: 0 4px; flex-shrink: 0; line-height:1; }
+  .rb-title-block { flex: 1; }
+  .rb-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: #fff; letter-spacing: 1px; line-height: 1; }
+  .rb-subtitle { font-size: 12px; color: #555; margin-top: 1px; }
+  .rb-icon-btn { background: none; border: 1px solid #1e1e1e; color: #888; border-radius: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; flex-shrink: 0; transition: all .2s; }
+  .rb-icon-btn:hover { border-color: #444; color: #ccc; }
+  .rb-create-btn { background: ${GOLD}; border: none; border-radius: 8px; color: #000; font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 1px; padding: 8px 14px; cursor: pointer; display: flex; align-items: center; gap: 5px; flex-shrink: 0; transition: filter .2s; white-space:nowrap; }
+  .rb-create-btn:hover { filter: brightness(1.1); }
+
+  .rb-sport-pills { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .rb-sport-pills::-webkit-scrollbar { display: none; }
+  .rb-sport-pill { padding: 5px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .18s; letter-spacing: .5px; white-space: nowrap; border: 1px solid transparent; }
+  .rb-sport-pill.active { background: ${GOLD}; color: #000; }
+  .rb-sport-pill:not(.active) { background: #1a1a1a; color: #888; }
+  .rb-sport-pill:not(.active):hover { border-color: #333; color: #ccc; }
+
+  .rb-tabs { display: flex; border-bottom: 1px solid #1a1a1a; margin: 0 0 12px; }
+  .rb-tab { flex: 1; padding: 10px 8px; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .5px; cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .rb-tab.active { color: #fff; border-bottom-color: ${GOLD}; }
+  .rb-tab:not(.active) { color: #555; }
+  .rb-tab-count { background: #222; color: #888; font-size: 11px; padding: 1px 6px; border-radius: 10px; }
+  .rb-tab.active .rb-tab-count { background: ${GOLD}22; color: ${GOLD}; }
+  .rb-tab.active.live-tab .rb-tab-count { background: #ef444422; color: #ef4444; }
+
+  .rb-name-box { padding: 0 16px 12px; }
+  .rb-name-label { font-size: 10px; letter-spacing: 2px; color: #555; text-transform: uppercase; margin-bottom: 6px; display: block; }
+  .rb-name-input { width: 100%; padding: 12px 14px; background: #141414; border: 1px solid #1e1e1e; border-radius: 10px; color: #fff; font-family: 'Barlow Condensed', sans-serif; font-size: 16px; letter-spacing: .06em; outline: none; transition: border-color .2s; }
+  .rb-name-input:focus { border-color: ${GOLD}; }
+  .rb-name-input::placeholder { color: #444; }
+
+  .rb-rooms-list { flex: 1; overflow-y: auto; padding: 0 14px 24px; }
+
+  .rb-room-card {
+    background: #111; border: 1px solid #1c1c1c; border-radius: 14px;
+    padding: 14px; margin-bottom: 12px; transition: border-color .2s;
+  }
+  .rb-room-card:hover { border-color: #333; }
+
+  .rb-room-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
+  .rb-status-badge { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; letter-spacing: 1px; padding: 3px 8px; border-radius: 5px; }
+  .rb-status-badge.live { background: #ef444415; color: #ef4444; border: 1px solid #ef444430; }
+  .rb-status-badge.waiting { background: #22c55e15; color: #22c55e; border: 1px solid #22c55e30; }
+  .rb-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .rb-status-dot.live { background: #ef4444; animation: pulse .8s ease-in-out infinite; }
+  .rb-status-dot.waiting { background: #22c55e; }
+
+  .rb-room-code { font-family: 'Courier Prime', monospace; font-size: 10px; color: #444; letter-spacing: 2px; }
+  .rb-team-count { font-family: 'Bebas Neue', sans-serif; font-size: 20px; color: #fff; line-height: 1; }
+  .rb-team-count span { font-size: 13px; color: #555; }
+  .rb-team-label { font-size: 9px; letter-spacing: 2px; color: #555; text-transform: uppercase; }
+
+  .rb-room-name { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: #fff; letter-spacing: 1px; line-height: 1.1; margin-bottom: 2px; }
+  .rb-room-desc { font-size: 12px; color: #555; margin-bottom: 10px; }
+
+  .rb-team-bubbles { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .rb-team-bubble { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Bebas Neue', sans-serif; font-size: 9px; letter-spacing: .5px; flex-shrink: 0; cursor: default; }
+
+  .rb-join-btn {
+    width: 100%; padding: 13px; background: ${GOLD}; border: none; border-radius: 10px;
+    font-family: 'Bebas Neue', sans-serif; font-size: 16px; letter-spacing: 2px; color: #000;
+    cursor: pointer; transition: filter .18s, transform .12s; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .rb-join-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .rb-join-btn:active { transform: scale(.97); }
+  .rb-join-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+  .rb-spectate-btn {
+    width: 100%; padding: 11px; background: transparent; border: 1px solid #282828; border-radius: 10px;
+    font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 1px; color: #888;
+    cursor: pointer; transition: all .18s; display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .rb-spectate-btn:hover { border-color: #555; color: #ccc; }
+
+  .rb-empty { text-align: center; padding: 60px 20px; color: #444; font-size: 14px; letter-spacing: 1px; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
 
   /* ── Join row ── */
   .rp-join-row { display:flex; gap:10px; margin-top:5px; align-items:flex-start; }
@@ -233,6 +323,167 @@ function ToggleCard({ selected, onSelect, accentColor = GOLD, title, sub, icon }
       {icon && <div style={{ marginBottom: 6, opacity: selected ? 1 : 0.4, transition: 'opacity 0.2s', color: selected ? accentColor : '#666' }}>{icon}</div>}
       <div className="rp-toggle-card-title" style={{ color: selected ? accentColor : '#bbb' }}>{title}</div>
       <div className="rp-toggle-card-sub">{sub}</div>
+    </div>
+  );
+}
+
+// ─── BrowseRooms ─────────────────────────────────────────────────────────────
+const TEAM_COLORS = {
+  CSK:'#F9CA24', MI:'#4FC3F7', RCB:'#FF5252', KKR:'#CE93D8',
+  SRH:'#FF8A65', DC:'#64B5F6', PBKS:'#EF9A9A', RR:'#F48FB1',
+  GT:'#4DD0E1', LSG:'#81D4FA',
+};
+const ALL_TEAM_IDS = ['MI','CSK','RCB','KKR','DC','PBKS','RR','SRH','GT','LSG'];
+
+function BrowseRooms({ name, setName, nameRef, serverRooms, fetchRooms, loading, error, doJoin, joinCode, setJoinCode, liveStats, onBack, onCreate, TEAMS, GOLD, CYAN }) {
+  const [sport, setSport] = useState('All');
+  const [activeTab, setActiveTab] = useState('live');
+
+  // Split rooms into live (in-progress or full) and waiting
+  const liveRooms    = serverRooms.filter(r => r.status === 'active' || r.players >= 10);
+  const waitingRooms = serverRooms.filter(r => r.status !== 'active' && r.players < 10);
+  const displayRooms = activeTab === 'live' ? liveRooms : waitingRooms;
+
+  const sports = [
+    { id: 'All', label: 'All' },
+    { id: 'Cricket', label: '🏏 Cricket' },
+    { id: 'Football', label: '⚽ Football' },
+  ];
+
+  return (
+    <div className="rb-shell" style={{ position: 'relative', zIndex: 5 }}>
+      {/* ── Header ── */}
+      <div className="rb-header">
+        <div className="rb-header-row">
+          <button className="rb-back-btn" onClick={onBack}>←</button>
+          <div className="rb-title-block">
+            <div className="rb-title">Live Auction Rooms</div>
+            <div className="rb-subtitle">{liveStats.rooms > 0 ? `${liveStats.rooms} rooms available` : 'No rooms active'}</div>
+          </div>
+          <button className="rb-icon-btn" onClick={fetchRooms} title="Refresh">↻</button>
+          <button className="rb-create-btn" onClick={onCreate}>
+            <span>⚡</span> Create
+          </button>
+        </div>
+        {/* Sport pills */}
+        <div className="rb-sport-pills">
+          {sports.map(s => (
+            <button key={s.id} className={`rb-sport-pill${sport === s.id ? ' active' : ''}`} onClick={() => setSport(s.id)}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Tabs ── */}
+      <div className="rb-tabs">
+        <button className={`rb-tab live-tab${activeTab === 'live' ? ' active' : ''}`} onClick={() => setActiveTab('live')}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: activeTab === 'live' ? '#ef4444' : '#333', display: 'inline-block', animation: activeTab === 'live' ? 'pulse .8s infinite' : 'none' }} />
+          Live Auctions
+          <span className="rb-tab-count">{liveRooms.length}</span>
+        </button>
+        <button className={`rb-tab${activeTab === 'waiting' ? ' active' : ''}`} onClick={() => setActiveTab('waiting')}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Waiting for Players
+          <span className="rb-tab-count">{waitingRooms.length}</span>
+        </button>
+      </div>
+
+      {/* ── Name input ── */}
+      <div className="rb-name-box">
+        <label className="rb-name-label">Your Name</label>
+        <input
+          ref={nameRef}
+          className="rb-name-input"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Enter your name to join"
+          maxLength={20}
+        />
+        {error && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 6, letterSpacing: .5 }}>{error}</div>}
+      </div>
+
+      {/* ── Rooms list ── */}
+      <div className="rb-rooms-list">
+        {displayRooms.length === 0 ? (
+          <div className="rb-empty">
+            {activeTab === 'live' ? '🏏 No live auctions right now' : '⏳ No rooms waiting for players'}
+            <div style={{ fontSize: 12, marginTop: 8, color: '#333' }}>Create one to get started!</div>
+          </div>
+        ) : (
+          displayRooms.map((room, i) => {
+            const isFull   = room.players >= 10;
+            const isActive = room.status === 'active' || isFull;
+            // Build team bubble list: taken teams + empty slots
+            const takenTeams  = room.teamIds || [];
+            const available   = ALL_TEAM_IDS.filter(t => !takenTeams.includes(t));
+            const availCount  = Math.max(0, 10 - (room.players || 0));
+
+            return (
+              <div key={i} className="rb-room-card" style={{ animation: `fadeUp .3s ease ${i * 0.05}s both` }}>
+                {/* Card header row */}
+                <div className="rb-room-card-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <div className={`rb-status-badge ${isActive ? 'live' : 'waiting'}`}>
+                      <span className={`rb-status-dot ${isActive ? 'live' : 'waiting'}`} />
+                      {isActive ? 'IN PROGRESS' : 'WAITING'}
+                    </div>
+                    <span className="rb-room-code">{room.code}</span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div className="rb-team-count">{room.players || 0}<span>/{10}</span></div>
+                    <div className="rb-team-label">TEAMS</div>
+                  </div>
+                </div>
+
+                {/* Room name */}
+                <div className="rb-room-name">{room.name || 'Mega Auction'}</div>
+                <div className="rb-room-desc">
+                  {isActive ? 'Auction in progress - spectate only' : `${availCount} team${availCount !== 1 ? 's' : ''} available`}
+                </div>
+
+                {/* Team bubbles */}
+                <div className="rb-team-bubbles">
+                  {ALL_TEAM_IDS.map(tid => {
+                    const taken  = takenTeams.includes(tid);
+                    const color  = TEAM_COLORS[tid] || '#555';
+                    return (
+                      <div key={tid} className="rb-team-bubble" style={{
+                        background: taken ? color : '#1a1a1a',
+                        color: taken ? '#000' : '#444',
+                        border: taken ? 'none' : '1px solid #2a2a2a',
+                        opacity: taken ? 1 : 0.5,
+                      }}>
+                        {tid}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Action button */}
+                {isActive ? (
+                  <button
+                    className="rb-spectate-btn"
+                    onClick={() => doJoin(room.code)}
+                    disabled={loading || !name.trim()}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    Spectate
+                  </button>
+                ) : (
+                  <button
+                    className="rb-join-btn"
+                    onClick={() => doJoin(room.code)}
+                    disabled={loading || !name.trim()}
+                  >
+                    → Join Game
+                  </button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
@@ -416,14 +667,16 @@ function RoomContent() {
         {['p1','p2','p3','p4','p5'].map(c => <div key={c} className={`particle ${c}`} />)}
       </div>
 
-      {/* ── Navbar ── */}
-      <nav className="rp-nav">
-        <button className="rp-back" onClick={() => {
-          if (phase === 'lobby' || phase === 'join' || phase === 'create-form') setPhase('home');
-          else router.push('/');
-        }}>← Back</button>
-        <div className="rp-brand">IPL <span>AUCTION ONLINE</span></div>
-      </nav>
+      {/* ── Navbar — hidden in join phase (BrowseRooms has its own header) ── */}
+      {phase !== 'join' && (
+        <nav className="rp-nav">
+          <button className="rp-back" onClick={() => {
+            if (phase === 'lobby' || phase === 'create-form') setPhase('home');
+            else router.push('/');
+          }}>← Back</button>
+          <div className="rp-brand">IPL <span>AUCTION ONLINE</span></div>
+        </nav>
+      )}
 
       {/* ══════════ HOME ══════════ */}
       {phase === 'home' && (
@@ -537,66 +790,26 @@ function RoomContent() {
         </div>
       )}
 
-      {/* ══════════ JOIN ══════════ */}
+      {/* ══════════ JOIN — Browse Live Auction Rooms ══════════ */}
       {phase === 'join' && (
-        <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 24px 40px', position:'relative', zIndex:5 }}>
-          <div style={{ width:'100%', maxWidth:480, animation:'fadeUp .35s ease both' }}>
-            <span className="rp-eyebrow">Join Room</span>
-            <h1 className="rp-h1" style={{ fontSize:'clamp(2rem,7vw,3.8rem)' }}>ENTER THE<br /><span style={{ color:CYAN }}>AUCTION FLOOR</span></h1>
-
-            <label className="rp-label">Your Name</label>
-            <input
-              ref={nameRef}
-              className="rp-input"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. Rahul"
-              maxLength={20}
-            />
-
-            <label className="rp-label">Room Code</label>
-            <div className="rp-join-row">
-              <input
-                className="rp-input code-input"
-                value={joinCode}
-                onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="ABCD12"
-                maxLength={6}
-                onKeyDown={e => e.key === 'Enter' && doJoin(joinCode)}
-              />
-              <button className="rp-btn cyan-btn" onClick={() => doJoin(joinCode)} disabled={loading}>
-                {loading ? '…' : 'JOIN'}
-              </button>
-            </div>
-
-            {error && <div className="rp-error">{error}</div>}
-
-            {serverRooms.length > 0 && (
-              <div style={{ marginTop:28 }}>
-                <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, letterSpacing:3, color:'#888', textTransform:'uppercase', marginBottom:12, borderBottom:'1px solid #111', paddingBottom:8 }}>ALL ACTIVE PUBLIC ROOMS</div>
-                <div style={{ maxHeight: 240, overflowY: 'auto', paddingRight: 4 }} className="squad-scroller">
-                  {serverRooms.map((r, i) => (
-                    <div key={i} className="rp-room-item" style={{ marginBottom: 10 }}>
-                      <div>
-                        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#eee' }}>{r.name}</div>
-                        <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#94A3B8', marginTop:2 }}>Host: {r.host} · {r.players}/10</div>
-                      </div>
-                      <button className="rp-room-join-btn" onClick={() => doJoin(r.code)} disabled={loading}>JOIN</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <button 
-              className="room-back-btn" 
-              onClick={() => setPhase('home')}
-              style={{ marginTop: 30, width: '100%', background: 'transparent', border: '1px solid #222', color: '#888', padding: '12px', borderRadius: 6, fontFamily: "'Barlow Condensed'", cursor: 'pointer' }}
-            >
-              ← BACK TO HOME
-            </button>
-          </div>
-        </div>
+        <BrowseRooms
+          name={name}
+          setName={setName}
+          nameRef={nameRef}
+          serverRooms={serverRooms}
+          fetchRooms={fetchRooms}
+          loading={loading}
+          error={error}
+          doJoin={doJoin}
+          joinCode={joinCode}
+          setJoinCode={setJoinCode}
+          liveStats={liveStats}
+          onBack={() => setPhase('home')}
+          onCreate={() => setPhase('create-form')}
+          TEAMS={TEAMS}
+          GOLD={GOLD}
+          CYAN={CYAN}
+        />
       )}
 
       {/* ══════════ LOBBY ══════════ */}

@@ -153,8 +153,10 @@ function finishCurrent(room) {
         gs.purses[bidder] = +(gs.purses[bidder] - price).toFixed(2);
         gs.squads[bidder] = [...gs.squads[bidder], { ...player, soldFor: price }];
         gs.auctionLog = [{ player, bidder, price, sold: true }, ...gs.auctionLog];
+        pushSystemMessage(room, `${player.name} SOLD to ${TEAMS.find(t=>t.id===bidder)?.short || bidder} for ${fmt(price)}`);
     } else {
         gs.auctionLog = [{ player, bidder: null, price: 0, sold: false }, ...gs.auctionLog];
+        pushSystemMessage(room, `${player.name} was UNSOLD`);
     }
 
     io.to(room.code).emit('game-state', getClientState(room));
@@ -202,6 +204,18 @@ function saveFinishedGame(room, gs) {
         topBuy: gs.auctionLog.filter(l => l.sold).sort((a, b) => b.price - a.price)[0] || null
     });
     if (finishedGames.length > 20) finishedGames.pop();
+}
+
+function pushSystemMessage(room, text) {
+    if (!room.chatLog) room.chatLog = [];
+    room.chatLog.push({
+        id: Math.random().toString(36).substr(2, 9),
+        type: 'system',
+        text,
+        timestamp: Date.now()
+    });
+    if (room.chatLog.length > 200) room.chatLog.shift();
+    io.to(room.code).emit('chat-update', room.chatLog);
 }
 
 function startGameTick(room) {
@@ -265,6 +279,7 @@ io.on('connection', (socket) => {
             gameState: null,
             timerInterval: null,
             started: false,
+            chatLog: [],
         };
         rooms.set(code, room);
         socket.join(code);
@@ -303,6 +318,7 @@ io.on('connection', (socket) => {
 
             const state = getLobbyState(room);
             io.to(code).emit('lobby-update', state);
+            pushSystemMessage(room, `${playerName} rejoined`);
             return cb({
                 ok: true,
                 code,
@@ -338,6 +354,7 @@ io.on('connection', (socket) => {
                 
                 const state = getLobbyState(room);
                 io.to(code).emit('lobby-update', state);
+                pushSystemMessage(room, `${playerName || 'Player'} joined`);
                 return cb({
                     ok: true,
                     code,
@@ -366,6 +383,7 @@ io.on('connection', (socket) => {
 
                 const state = getLobbyState(room);
                 io.to(code).emit('lobby-update', state);
+                pushSystemMessage(room, `${playerName || 'Spectator'} joined as spectator`);
                 return cb({
                     ok: true,
                     code,
@@ -417,6 +435,7 @@ io.on('connection', (socket) => {
 
         const state = getLobbyState(room);
         io.to(code).emit('lobby-update', state);
+        pushSystemMessage(room, `${playerName || 'Player'} joined`);
         cb({ ok: true, code, players: state.players, roomStatus: room.status, hostId: room.hostId, auctionMode: room.auctionMode, isSpectator: false });
 
         if (!room.isPrivate) broadcastRoomList();
@@ -508,6 +527,26 @@ io.on('connection', (socket) => {
         io.to(currentRoom).emit('game-state', getClientState(room));
     });
 
+    // ── Chat ──
+    socket.on('send-chat', (payload) => {
+        if (!currentRoom || !currentPlayerId) return;
+        const room = rooms.get(currentRoom);
+        if (!room) return;
+        const player = room.players[currentPlayerId];
+        if (!room.chatLog) room.chatLog = [];
+        room.chatLog.push({
+            id: Math.random().toString(36).substr(2, 9),
+            type: payload.isGif ? 'gif' : 'text',
+            text: payload.text,
+            senderId: currentPlayerId,
+            senderName: player?.name || "Unknown",
+            senderTeam: player?.teamId || null,
+            timestamp: Date.now()
+        });
+        if (room.chatLog.length > 200) room.chatLog.shift();
+        io.to(currentRoom).emit('chat-update', room.chatLog);
+    });
+
     // ── Get Rooms (socket) ──
     socket.on('get-rooms', (cb) => {
         const activeRooms = [];
@@ -558,6 +597,8 @@ io.on('connection', (socket) => {
         gs.currentBidder = teamId;
         gs.timer = gs.timerDuration || 10;
         gs.bidLog = [{ teamId, bid: nb, playerName: player.name }, ...gs.bidLog].slice(0, 7);
+
+        pushSystemMessage(room, `${player.name} (${TEAMS.find(t=>t.id===teamId)?.short || teamId}) bidded ${fmt(nb)}`);
 
         // Broadcast immediately — no setTimeout, no debounce
         io.to(currentRoom).emit('game-state', getClientState(room));
@@ -624,6 +665,7 @@ io.on('connection', (socket) => {
 
         const player = room.players[currentPlayerId];
         player.offline = true;
+        pushSystemMessage(room, `${player.name} went offline`);
 
         const activePlayers = Object.values(room.players).filter(p => !p.offline);
 

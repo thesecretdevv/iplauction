@@ -124,6 +124,7 @@ export function GameProvider({ children }) {
   const [showStats, setShowStats] = useState(false);
   const [multiGS, setMultiGS] = useState(null);
   const [isSpectator, setIsSpectator] = useState(false);
+  const [chatLog, setChatLog] = useState([]);
 
   const [playerId] = useState(() => {
     if (typeof window === 'undefined') return uuidv4();
@@ -240,7 +241,10 @@ export function GameProvider({ children }) {
     const off5 = on("timer-tick", ({ timer }) => {
       setMultiGS(prev => prev ? { ...prev, timer } : prev);
     });
-    return () => { off1(); off2(); off3(); off4(); off5(); };
+    const off6 = on("chat-update", (logs) => {
+      setChatLog(logs);
+    });
+    return () => { off1(); off2(); off3(); off4(); off5(); off6(); };
   }, [playMode, on, router]);
 
   // Unified Audio & Animation side-effects
@@ -491,7 +495,7 @@ export function GameProvider({ children }) {
     myTeamId, setMyTeamId, showSquad, setShowSquad,
     viewingTeam, setViewingTeam, showStats, setShowStats,
     multiGS, setMultiGS, playerId, g, effectiveMyTeamId,
-    isSpectator, setIsSpectator,
+    isSpectator, setIsSpectator, chatLog, setChatLog,
     // Socket
     emit, on,
     // Actions

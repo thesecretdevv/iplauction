@@ -438,3 +438,18 @@
 
 @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
 .marquee-anim { animation:marquee 20s linear infinite; }
+
+.l-mobile-marquee { display: none; }
+@media (max-width: 860px) {
+  .l-desktop-marquee { display: none; }
+  .l-mobile-marquee { display: block; }
+}
+
+/* Hide scrollbar for mobile marquee */
+.l-mobile-marquee > div::-webkit-scrollbar {
+  display: none;
+}
+.l-mobile-marquee > div {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
