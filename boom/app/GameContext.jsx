@@ -163,7 +163,7 @@ export function GameProvider({ children }) {
             router.push(buildUrl('/results', { room: savedRoom, mode: res.auctionMode }));
           } else if (pathname === '/room') {
              // If they were at home and chose a public room, stay on appropriate phase
-             setAMode(res.auctionMode || 'mega');
+             setAuctionMode(res.auctionMode || 'mega');
           }
         } else {
           localStorage.removeItem("ipl_room_code");
@@ -212,13 +212,7 @@ export function GameProvider({ children }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (playMode === "single" && g.current) {
-      // Map pathname back to old screen name for localStorage compat
-      const screenMap = { "/": "home", "/mode": "modeSelect", "/play-mode": "playMode", "/team-select": "teamSelect", "/auction": "auction", "/results": "results" };
-      localStorage.setItem("ipl_play_mode", "single");
-      localStorage.setItem("ipl_single_gs", JSON.stringify(g.current));
-      localStorage.setItem("ipl_single_screen", screenMap[pathname] || "home");
-      localStorage.setItem("ipl_auction_mode", auctionMode);
-      localStorage.setItem("ipl_my_team_id", myTeamId);
+      syncSingleGS();
     }
   }, [playMode, pathname, auctionMode, myTeamId, multiGS]);
 
@@ -255,6 +249,19 @@ export function GameProvider({ children }) {
   const gs = playMode === "multi" ? multiGS : g.current;
   const isMulti = playMode === "multi";
 
+  const effectiveMyTeamId = useMemo(() => {
+    if (!isMulti) return g.current?.myTeamId || myTeamId;
+    // 1. Try lobby players list (synced from server)
+    const fromLobby = lobbyPlayers.find(p => p.id === playerId)?.teamId;
+    if (fromLobby) return fromLobby;
+    // 2. Fallback to manually selected myTeamId
+    if (myTeamId) return myTeamId;
+    // 3. Late joiner: find first team not already taken by active players in lobby
+    const taken = new Set(lobbyPlayers.map(p => p.teamId).filter(Boolean));
+    const available = (TEAMS || []).find(t => !taken.has(t.id));
+    return available?.id || (TEAMS && TEAMS[0]?.id) || null;
+  }, [isMulti, lobbyPlayers, multiGS, playerId, myTeamId, g.current?.myTeamId]);
+
   useEffect(() => {
     const currentGS = isMulti ? multiGS : g.current;
     if (!currentGS) return;
@@ -289,6 +296,9 @@ export function GameProvider({ children }) {
       const screenMap = { "/": "home", "/mode": "modeSelect", "/play-mode": "playMode", "/team-select": "teamSelect", "/auction": "auction", "/results": "results" };
       localStorage.setItem("ipl_single_gs", JSON.stringify(g.current));
       localStorage.setItem("ipl_single_screen", screenMap[pathname] || "auction");
+      localStorage.setItem("ipl_auction_mode", auctionMode);
+      localStorage.setItem("ipl_my_team_id", myTeamId);
+      localStorage.setItem("ipl_play_mode", "single");
     }
   }
 
@@ -336,22 +346,6 @@ export function GameProvider({ children }) {
   }
   tickRef.current = tick;
 
-  // If multi-player, derive team ID from lobbyPlayers or assign an available team if joining late
-  const effectiveMyTeamId = (() => {
-    if (!isMulti) return g.current?.myTeamId || myTeamId;
-    // 1. Try lobby players
-    const fromLobby = lobbyPlayers.find(p => p.name === myName)?.teamId;
-    if (fromLobby) return fromLobby;
-    // 2. Fallback to existing manual myTeamId
-    if (myTeamId) return myTeamId;
-    // 3. Late joiner mid-game: assign first available team not taken by existing lobbyPlayers
-    if (multiGS) {
-      const takenTeams = new Set(lobbyPlayers.map(p => p.teamId).filter(Boolean));
-      const availableTeam = TEAMS.find(t => !takenTeams.has(t.id));
-      if (availableTeam) return availableTeam.id;
-    }
-    return TEAMS[0].id; // Ultimate fallback
-  })();
 
   function humanBid() {
     if (playMode === "multi") {

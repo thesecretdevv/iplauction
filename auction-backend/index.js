@@ -144,7 +144,7 @@ async function persistRoom(room) {
         // Save room with 24-hour expiry
         await redis.set(`room:${room.code}`, JSON.stringify(data), { ex: 3600 * 24 });
         
-        // Track in public index if not private and not finished
+        // Track in public index
         if (!data.isPrivate && data.status !== 'finished') {
             await addToPublicIndex(room.code);
         } else {
