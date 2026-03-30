@@ -19,13 +19,23 @@ export function useSocket() {
         });
 
         sock.current.on('connect', () => console.log('[Socket] Connected:', sock.current.id));
-        sock.current.on('disconnect', reason => console.warn('[Socket] Disconnected:', reason));
+        sock.current.on('disconnect', reason => {
+            if (reason === 'io client disconnect') {
+                console.log('[Socket] Disconnected:', reason);
+                return;
+            }
+            console.warn('[Socket] Disconnected:', reason);
+        });
         sock.current.on('connect_error', err => console.warn('[Socket] Error:', err.message));
 
         return () => { sock.current?.disconnect(); };
     }, []);
 
     const emit = useCallback((ev, data, cb) => {
+        if (typeof data === 'function' && cb === undefined) {
+            sock.current?.emit(ev, data);
+            return;
+        }
         sock.current?.emit(ev, data, cb);
     }, []);
 

@@ -33,6 +33,8 @@ export const metadata = {
   },
   icons: {
     icon: '/assets/favicon.png',
+    shortcut: '/favicon.ico',
+    apple: '/assets/favicon.png',
   },
 };
 

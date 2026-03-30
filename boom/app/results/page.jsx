@@ -52,7 +52,7 @@ export default function ResultsPage() {
     );
   }
 
-  const mode = isMulti ? lobbyMode : auctionMode;
+  const mode = (isMulti ? lobbyMode : auctionMode) || gs?.auctionMode || 'mega';
   return <Results gs={gs} myTeamId={effectiveMyTeamId} onRestart={handleRestart} mode={mode} />;
 }
 

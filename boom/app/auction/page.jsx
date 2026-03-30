@@ -105,6 +105,12 @@ function AuctionContent() {
   }
 
   const upcomingPlayers = gs.playerQueue.slice(gs.currentIdx + 1);
+  const currentMode = (isMulti ? lobbyMode : auctionMode) || gs.auctionMode || 'mega';
+  const resultsQuery = new URLSearchParams();
+  if (currentMode) resultsQuery.set('mode', String(currentMode).toUpperCase());
+  if (isMulti && roomCode) resultsQuery.set('room', roomCode);
+  if (!isMulti && effectiveMyTeamId) resultsQuery.set('team', effectiveMyTeamId);
+  const resultsHref = resultsQuery.toString() ? `/results?${resultsQuery.toString()}` : '/results';
   const groupedUpcoming = upcomingPlayers.reduce((acc, p) => {
     const sName = p.setName || "Other";
     if (!acc[sName]) acc[sName] = [];
@@ -199,10 +205,9 @@ function AuctionContent() {
     );
   }
 
-  if (gs.phase === 'finished') { router.push('/results'); return null; }
+  if (gs.phase === 'finished') { router.push(resultsHref); return null; }
 
   const player      = gs.playerQueue[gs.currentIdx];
-  const currentMode = isMulti ? lobbyMode : auctionMode;
   const pRecord     = ALL_PLAYERS.find(p => p.name.toLowerCase() === player.name.toLowerCase());
   const photoUrl    = pRecord?.photo_url || null;
   const stats       = pRecord?.stats || {};

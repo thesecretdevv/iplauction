@@ -149,10 +149,16 @@ const globalStyles = `
   .rb-sport-pill:not(.active) { background: #1a1a1a; color: #888; }
   .rb-sport-pill:not(.active):hover { border-color: #333; color: #ccc; }
 
-  .rb-tabs { display: flex; border-bottom: 1px solid #1a1a1a; margin: 0 0 12px; }
-  .rb-tab { flex: 1; padding: 10px 8px; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .5px; cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
-  .rb-tab.active { color: #fff; border-bottom-color: ${GOLD}; }
-  .rb-tab:not(.active) { color: #555; }
+  .rb-tabs { display: flex; gap: 10px; margin: 0 0 12px; }
+  .rb-tab {
+    flex: 1; padding: 14px 12px; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .5px;
+    cursor: pointer; transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: #111; border: 1px solid #242424; border-bottom: 2px solid transparent; color: #777;
+    border-radius: 12px 12px 0 0; appearance: none; -webkit-appearance: none; box-shadow: none;
+  }
+  .rb-tab.active { color: #fff; border-color: #3a3214; border-bottom-color: ${GOLD}; background: linear-gradient(180deg, #19150a 0%, #111 100%); }
+  .rb-tab.live-tab.active { border-color: #3a1818; border-bottom-color: #ef4444; background: linear-gradient(180deg, #1a1010 0%, #111 100%); }
+  .rb-tab:not(.active) { color: #666; }
   .rb-tab-count { background: #222; color: #888; font-size: 11px; padding: 1px 6px; border-radius: 10px; }
   .rb-tab.active .rb-tab-count { background: ${GOLD}22; color: ${GOLD}; }
   .rb-tab.active.live-tab .rb-tab-count { background: #ef444422; color: #ef4444; }
@@ -206,7 +212,7 @@ const globalStyles = `
   }
   .rb-spectate-btn:hover { border-color: #555; color: #ccc; }
 
-  .rb-empty { text-align: center; padding: 60px 20px; color: #444; font-size: 14px; letter-spacing: 1px; }
+  .rb-empty { text-align: center; padding: 60px 20px; color: #666; font-size: 14px; letter-spacing: 1px; }
 
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
   @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
@@ -460,7 +466,7 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, fetchRooms, loading,
                         className="rb-join-btn" 
                         onClick={() => doJoin(room.code)}
                         style={{ width: 'auto', padding: '10px 24px', borderRadius: 8, background: isActive ? '#22D3EE15' : GOLD, color: isActive ? '#22D3EE' : '#000', border: isActive ? '1px solid #22D3EE40' : 'none' }}>
-                        {isActive ? 'SPECTATE' : 'JOIN LOBBY'}
+                        {isActive ? 'JOIN LIVE ROOM' : 'JOIN LOBBY'}
                       </button>
                     </div>
                   </div>
@@ -484,7 +490,7 @@ function RoomContent() {
     emit, on, playerId,
     roomCode, setRoomCode, lobbyPlayers, setLobbyPlayers,
     isHost, setIsHost, myName, setMyName, setPlayMode,
-    lobbyMode, setLobbyMode, multiGS, setMultiGS, startMultiAuction,
+    lobbyMode, setLobbyMode, multiGS, setMultiGS, startMultiAuction, setIsSpectator,
   } = useGame();
 
   const [phase,       setPhase]       = useState('home');
@@ -520,13 +526,14 @@ function RoomContent() {
 
   // ── Auto-focus name input ──
   useEffect(() => {
-    if (phase === 'join' || phase === 'create-form') nameRef.current?.focus();
+    if (phase === 'join' || phase === 'join-code' || phase === 'create-form') nameRef.current?.focus();
   }, [phase]);
 
   // ── URL action param ──
   useEffect(() => {
     if (action === 'create') setPhase('create-form');
-    if (action === 'join')   setPhase('join');
+    if (action === 'join' || action === 'join-code') setPhase('join-code');
+    if (action === 'browse') setPhase('join');
   }, [action]);
 
   // ── Fetch public rooms ──
@@ -582,6 +589,7 @@ function RoomContent() {
       setMyName(name.trim());
       setLobbyPlayers(res.players || []);
       setPlayMode('multi');
+      setIsSpectator(false);
       setLobbyMode(aMode);
       emit('set-auction-mode', { mode: aMode });
       setPhase('lobby');
@@ -595,7 +603,10 @@ function RoomContent() {
     setLoading(true); setError('');
     emit('join-room', { code, playerName: name.trim(), playerId }, (res) => {
       setLoading(false);
-      if (!res?.ok) { setError(res?.error || 'Room not found'); return; }
+      if (!res?.ok) {
+        setError(res?.error === 'Room not found' ? 'Room not found or already expired.' : (res?.error || 'Room not found'));
+        return;
+      }
       if (typeof window !== 'undefined') {
         localStorage.setItem('ipl_room_code',   code);
         localStorage.setItem('ipl_player_name', name.trim());
@@ -609,17 +620,18 @@ function RoomContent() {
       setMyName(name.trim());
       setLobbyPlayers(res.players || []);
       setPlayMode('multi');
+      setIsSpectator(!!res.isSpectator);
       if (res.auctionMode) { setLobbyMode(res.auctionMode); setAMode(res.auctionMode); }
       if (res.roomStatus === 'active') {
         setMultiGS(res.gameState);
         const myP = (res.players || []).find(p => p.id === playerId);
         if (res.isSpectator || (myP && myP.teamId)) {
-          router.push(`/auction?room=${code}${res.isSpectator ? '&spectator=1' : ''}`);
+          router.push(`/auction?room=${code}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}${res.isSpectator ? '&spectator=1' : ''}`);
         } else {
           setPhase('lobby'); // Participant but no team -> pick one first
         }
       } else if (res.roomStatus === 'finished') {
-        setMultiGS(res.gameState); router.push(`/results?room=${code}`);
+        setMultiGS(res.gameState); router.push(`/results?room=${code}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}`);
       } else { setPhase('lobby'); }
     });
   };

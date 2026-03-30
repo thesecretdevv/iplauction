@@ -49,6 +49,12 @@ const TEAMS = [
     { id: "LSG", name: "Lucknow Super Giants", short: "LSG", color: "#81D4FA" },
 ];
 
+function isRoomOver(room) {
+    return room?.status === 'finished'
+        || room?.gameState?.phase === 'finished'
+        || room?.gameState?.phase === 'selection';
+}
+
 // ─── Room & History Storage ─────────────────────────────────────────────────
 const rooms = new Map();
 const finishedGames = [];
@@ -71,7 +77,7 @@ app.get('/api/rooms', async (req, res) => {
         // Hydrate each code
         for (const code of publicCodes) {
             const r = await getRoom(code);
-            if (r && !r.isPrivate && r.status !== 'finished') {
+            if (r && !r.isPrivate && !isRoomOver(r)) {
                 activeRooms.push({
                     code: r.code,
                     name: r.name,
@@ -95,13 +101,13 @@ app.get('/api/rooms', async (req, res) => {
 });
 
 // GET /api/rooms/:code — room details
-app.get('/api/rooms/:code', (req, res) => {
-    const room = rooms.get(req.params.code?.toUpperCase());
+app.get('/api/rooms/:code', async (req, res) => {
+    const room = await getRoom(req.params.code?.toUpperCase());
     if (!room) return res.status(404).json({ error: 'Room not found' });
     res.json({
         code: room.code,
         name: room.name,
-        status: room.status,
+        status: isRoomOver(room) ? 'finished' : room.status,
         mode: room.auctionMode,
         playerCount: Object.values(room.players).filter(p => !p.isSpectator).length,
     });
@@ -139,13 +145,15 @@ async function persistRoom(room) {
             players: room.players,
             gameState: room.gameState,
             started: room.started || false,
+            finishedAt: room.finishedAt || null,
+            endReason: room.endReason || null,
             updatedAt: Date.now()
         };
         // Save room with 24-hour expiry
         await redis.set(`room:${room.code}`, JSON.stringify(data), { ex: 3600 * 24 });
         
         // Track in public index
-        if (!data.isPrivate && data.status !== 'finished') {
+        if (!data.isPrivate && !isRoomOver(data)) {
             await addToPublicIndex(room.code);
         } else {
             await removeFromPublicIndex(room.code);
@@ -166,9 +174,13 @@ async function getRoom(code) {
                     ...rData,
                     timerInterval: null 
                 };
+                if (isRoomOver(room)) {
+                    room.status = 'finished';
+                    if (room.gameState) room.gameState.phase = 'finished';
+                }
                 rooms.set(ucCode, room);
                 console.log(`[REDIS] Restored Room: ${ucCode}`);
-                if (room.status === 'active' && room.gameState && !room.timerInterval) {
+                if (room.status === 'active' && room.gameState && !room.timerInterval && !isRoomOver(room)) {
                    startGameTick(room); 
                 }
             }
@@ -217,6 +229,7 @@ function getClientState(room) {
         selections: gs.selections,
         bidLog: gs.bidLog,
         auctionLog: gs.auctionLog.slice(0, 20),
+        auctionMode: room.auctionMode || 'mega',
         totalPlayers: gs.playerQueue.length,
     };
 }
@@ -258,15 +271,8 @@ function advanceToNext(room) {
 
     const nextIdx = gs.currentIdx + 1;
     if (nextIdx >= gs.playerQueue.length) {
-        gs.phase = "selection";
-        room.status = "active";
-
-        if (!room.isPrivate) {
-            saveFinishedGame(room, gs);
-        }
-
+        finalizeRoom(room, { reason: 'completed' });
         io.to(room.code).emit('game-over', getClientState(room));
-        clearInterval(room.timerInterval);
         return;
     }
 
@@ -283,6 +289,8 @@ function advanceToNext(room) {
 }
 
 function saveFinishedGame(room, gs) {
+    const existingIdx = finishedGames.findIndex(game => game.id === room.code);
+    if (existingIdx !== -1) finishedGames.splice(existingIdx, 1);
     finishedGames.unshift({
         id: room.code,
         name: room.name,
@@ -293,6 +301,37 @@ function saveFinishedGame(room, gs) {
         topBuy: gs.auctionLog.filter(l => l.sold).sort((a, b) => b.price - a.price)[0] || null
     });
     if (finishedGames.length > 20) finishedGames.pop();
+}
+
+function finalizeRoom(room, { reason = 'completed' } = {}) {
+    const gs = room.gameState;
+    if (!gs) return false;
+
+    if (!gs.playingXI) {
+        gs.playingXI = Object.fromEntries(TEAMS.map(t => [t.id, []]));
+    }
+    if (!gs.selections) {
+        gs.selections = Object.fromEntries(TEAMS.map(t => [t.id, false]));
+    }
+
+    TEAMS.forEach(t => {
+        if (!Array.isArray(gs.playingXI[t.id])) gs.playingXI[t.id] = [];
+        gs.selections[t.id] = true;
+    });
+
+    gs.phase = "finished";
+    room.status = "finished";
+    room.finishedAt = room.finishedAt || Date.now();
+    room.endReason = room.endReason || reason;
+
+    if (!room.isPrivate) saveFinishedGame(room, gs);
+
+    if (room.timerInterval) {
+        clearInterval(room.timerInterval);
+        room.timerInterval = null;
+    }
+
+    return true;
 }
 
 function pushSystemMessage(room, text) {
@@ -398,6 +437,9 @@ io.on('connection', (socket) => {
 
         // ── Rejoin ──
         if (room.players[playerId]) {
+            if (isRoomOver(room)) {
+                finalizeRoom(room, { reason: room.endReason || 'completed' });
+            }
             room.players[playerId].socketId = socket.id;
             room.players[playerId].offline = false;
             room.players[playerId].name = playerName || room.players[playerId].name;
@@ -415,11 +457,29 @@ io.on('connection', (socket) => {
                 ok: true,
                 code,
                 players: state.players,
-                roomStatus: room.status,
+                roomStatus: isRoomOver(room) ? 'finished' : room.status,
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
                 isSpectator: room.players[playerId].isSpectator,
                 gameState: room.status !== 'lobby' ? getClientState(room) : null
+            });
+        }
+
+        if (isRoomOver(room)) {
+            finalizeRoom(room, { reason: room.endReason || 'completed' });
+            socket.join(code);
+            currentRoom = code;
+            currentPlayerId = playerId;
+            await persistRoom(room);
+            return cb?.({
+                ok: true,
+                code,
+                players: Object.values(room.players).map(p => ({ ...p, socketId: undefined })),
+                roomStatus: 'finished',
+                hostId: room.hostId,
+                auctionMode: room.auctionMode,
+                isSpectator: true,
+                gameState: getClientState(room)
             });
         }
 
@@ -489,23 +549,6 @@ io.on('connection', (socket) => {
                     gameState: getClientState(room)
                 });
             }
-        }
-
-        // ── Room finished: spectator ──
-        if (room.status === 'finished') {
-            socket.join(code);
-            currentRoom = code;
-            currentPlayerId = playerId;
-            return cb?.({
-                ok: true,
-                code,
-                players: Object.values(room.players).map(p => ({ ...p, socketId: undefined })),
-                roomStatus: 'finished',
-                hostId: room.hostId,
-                auctionMode: room.auctionMode,
-                isSpectator: true,
-                gameState: getClientState(room)
-            });
         }
 
         // ── Full room fallback ──
@@ -612,8 +655,9 @@ io.on('connection', (socket) => {
         if (!currentRoom || !currentPlayerId) return;
         const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
-        room.gameState.currentIdx = room.gameState.playerQueue.length - 1;
-        advanceToNext(room);
+        pushSystemMessage(room, `Auction ended early by ${room.players[currentPlayerId]?.name || 'the host'}`);
+        finalizeRoom(room, { reason: 'host-ended-early' });
+        io.to(currentRoom).emit('game-over', getClientState(room));
         await persistRoom(room);
         if (!room.isPrivate) broadcastRoomList();
     });
@@ -658,7 +702,7 @@ io.on('connection', (socket) => {
             
             for (const code of publicCodes) {
                 const r = await getRoom(code);
-                if (r && !r.isPrivate && r.status !== 'finished') {
+                if (r && !r.isPrivate && !isRoomOver(r)) {
                     activeRooms.push({
                         code: r.code,
                         name: r.name,
@@ -757,13 +801,8 @@ io.on('connection', (socket) => {
                 }
             });
 
-            gs.phase = "finished";
-            room.status = "finished";
-
-            if (!room.isPrivate) saveFinishedGame(room, gs);
-
+            finalizeRoom(room, { reason: 'completed' });
             io.to(currentRoom).emit('game-over', getClientState(room));
-            if (room.timerInterval) clearInterval(room.timerInterval);
             if (!room.isPrivate) broadcastRoomList();
             await persistRoom(room);
         } else {
@@ -788,8 +827,12 @@ io.on('connection', (socket) => {
         const activePlayers = Object.values(room.players).filter(p => !p.offline);
 
         if (activePlayers.length === 0) {
-            // Immediate cleanup if nobody is left
             if (room.timerInterval) clearInterval(room.timerInterval);
+            if (isRoomOver(room)) {
+                rooms.delete(currentRoom.toUpperCase());
+                console.log(`[ROOM] ${currentRoom} unloaded from memory and kept in Redis for replay`);
+                return;
+            }
             await removeRoom(currentRoom);
             if (!room.isPrivate) broadcastRoomList();
             return;

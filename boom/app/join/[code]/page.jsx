@@ -16,7 +16,7 @@ export default function JoinPage() {
   const {
     emit, playerId, setRoomCode, setLobbyPlayers,
     setIsHost, setMyName, setPlayMode, setMultiGS,
-    setLobbyMode
+    setLobbyMode, setIsSpectator
   } = useGame();
 
   const handleJoin = () => {
@@ -37,6 +37,7 @@ export default function JoinPage() {
         setLobbyPlayers(res.players);
         setPlayMode("multi");
         setIsHost(res.hostId === playerId);
+        setIsSpectator(!!res.isSpectator);
         if (res.auctionMode) setLobbyMode(res.auctionMode);
 
         if (res.roomStatus === "active") {
@@ -49,7 +50,7 @@ export default function JoinPage() {
           router.push(`/lobby/${code}${res.auctionMode ? `?mode=${res.auctionMode}` : ''}`);
         }
       } else {
-        setError(res.error || "Failed to join room");
+        setError(res.error === 'Room not found' ? 'Room not found or already expired.' : (res.error || "Failed to join room"));
       }
     });
   };

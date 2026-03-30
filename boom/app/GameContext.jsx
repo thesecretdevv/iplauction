@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useRef, useReducer, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useReducer, useCallback, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { MEGA_SETS } from '../src/megaPlayers';
@@ -151,10 +151,11 @@ export function GameProvider({ children }) {
       setMyName(savedName);
       setPlayMode("multi");
       
-      emit("join-room", { code: savedRoom, playerName: savedName, playerId }, (res) => {
+        emit("join-room", { code: savedRoom, playerName: savedName, playerId }, (res) => {
         if (res.ok) {
           setLobbyPlayers(res.players);
           setIsHost(res.hostId === playerId);
+          setIsSpectator(!!res.isSpectator);
           if (res.auctionMode) setLobbyMode(res.auctionMode);
           if (res.roomStatus === "active") {
             setMultiGS(res.gameState);
@@ -418,6 +419,7 @@ export function GameProvider({ children }) {
       setMyName(name);
       setLobbyPlayers(res.players);
       setPlayMode("multi");
+      setIsSpectator(false);
       setIsPrivateRoom(isPrivate);
       router.push(buildUrl(`/lobby/${res.code}`, { public: !isPrivate }));
     });
