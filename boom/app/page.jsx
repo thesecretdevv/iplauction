@@ -108,6 +108,7 @@ export default function LandingPage() {
 
         <div className="l-nav-actions">
           <button className="l-nav-login" onClick={() => router.push('/room?action=create')}>Create Room</button>
+          <button className="l-nav-login" onClick={() => router.push('/room?action=browse')}>Live Auctions</button>
           <button className="l-btn-gold" onClick={() => router.push('/room?action=join-code')}>Join Room</button>
         </div>
       </nav>
@@ -150,6 +151,13 @@ export default function LandingPage() {
 
           <div className="l-ctas">
             <button className="l-btn-primary" onClick={() => router.push('/room?action=create')}>Play Now — Free</button>
+            <button className="l-btn-secondary" onClick={() => router.push('/room?action=browse')}>
+              Live Auction Rooms
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
             <button className="l-btn-secondary" onClick={() => router.push('/room?action=join-code')}>
               Join a Room
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
