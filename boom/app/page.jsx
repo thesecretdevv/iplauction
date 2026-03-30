@@ -101,8 +101,13 @@ export default function LandingPage() {
         <div className="l-nav-logo font-bebas">IPL <span style={{ color: '#E8B84B' }}>AUCTION ONLINE</span></div>
 
         <div className="l-nav-links">
-          {['Auction', 'Teams', 'Players'].map(l => (
-            <a key={l} href={l === 'Auction' ? '/room' : `/${l.toLowerCase()}`} className="l-nav-link">{l}</a>
+          {[
+            { label: 'Auction', href: '/room' },
+            { label: 'Teams', href: '/teams' },
+            { label: 'Players', href: '/players' },
+            { label: 'How to Play', href: '/how-to-play' },
+          ].map((link) => (
+            <a key={link.label} href={link.href} className="l-nav-link">{link.label}</a>
           ))}
         </div>
 
@@ -269,8 +274,13 @@ export default function LandingPage() {
               <p className="l-footer-tagline">The free online IPL auction game.</p>
             </div>
             <div className="l-footer-links">
-              {['Privacy', 'Terms', 'Contact', 'API'].map(l => (
-                <a key={l} href="#" className="l-footer-link">{l}</a>
+              {[
+                { label: 'How to Play', href: '/how-to-play' },
+                { label: 'Players', href: '/players' },
+                { label: 'Teams', href: '/teams' },
+                { label: 'Live Rooms', href: '/room?action=browse' },
+              ].map((link) => (
+                <a key={link.label} href={link.href} className="l-footer-link">{link.label}</a>
               ))}
             </div>
           </div>
