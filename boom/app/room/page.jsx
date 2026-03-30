@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useGame } from '../GameContext';
+import AppDialog from '../components/AppDialog';
 
 const GOLD  = '#E8B84B';
 const CYAN  = '#22D3EE';
@@ -505,7 +506,9 @@ function RoomContent() {
   const [serverRooms, setServerRooms] = useState([]);
   const [recentRooms, setRecentRooms] = useState([]);
   const [liveStats,   setLiveStats]   = useState({ rooms: 0, players: 0 });
+  const [dialog,      setDialog]      = useState(null);
   const nameRef = useRef(null);
+  const closeDialog = useCallback(() => setDialog(null), []);
 
   // ── Restore name from localStorage ──
   useEffect(() => {
@@ -649,7 +652,27 @@ function RoomContent() {
 
   const handleStart = () => {
     if (!aMode) { setError('Select MEGA or MINI first'); return; }
-    startMultiAuction();
+    const activePlayers = lobbyPlayers.filter(p => !p.isSpectator && !p.offline);
+    if (activePlayers.length < 2) {
+      setDialog({
+        title: 'More Players Needed',
+        message: 'At least 2 active players must join the room before the auction can start.',
+        tone: 'info',
+        actions: [{ label: 'OK', onClick: closeDialog }],
+      });
+      return;
+    }
+
+    startMultiAuction({
+      onError: (message) => {
+        setDialog({
+          title: 'Cannot Start Auction',
+          message,
+          tone: 'info',
+          actions: [{ label: 'OK', onClick: closeDialog }],
+        });
+      },
+    });
   };
 
   const shareUrl  = typeof window !== 'undefined' ? `${window.location.origin}/join/${roomCode}` : '';
@@ -664,6 +687,14 @@ function RoomContent() {
   return (
     <>
       <style>{globalStyles}</style>
+      <AppDialog
+        isOpen={!!dialog}
+        title={dialog?.title}
+        message={dialog?.message}
+        tone={dialog?.tone}
+        actions={dialog?.actions || []}
+        onClose={closeDialog}
+      />
 
       {/* Particles */}
       <div className="rp-particles">

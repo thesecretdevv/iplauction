@@ -463,11 +463,17 @@ export function GameProvider({ children }) {
     });
   }
 
-  function startMultiAuction() {
+  function startMultiAuction(options = {}) {
     const queue = buildQueue(lobbyMode || "mega");
-    stopIplTheme(2000);
     emit("start-game", { playerQueue: queue }, (res) => {
-      if (!res?.ok) alert(res?.error || "Cannot start");
+      if (!res?.ok) {
+        const message = res?.error || "Cannot start";
+        if (options.onError) options.onError(message);
+        else alert(message);
+        return;
+      }
+      stopIplTheme(2000);
+      if (options.onSuccess) options.onSuccess(res);
     });
   }
 

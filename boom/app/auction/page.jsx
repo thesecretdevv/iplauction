@@ -1,15 +1,24 @@
 'use client';
 
-import { useState, useRef, useCallback, Suspense, memo, useEffect } from 'react';
+import { useState, useRef, useCallback, useMemo, Suspense, memo, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useGame, fmt, nextBid } from '../GameContext';
 import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from '../../src/MultiScreens';
 import { StatsModal } from '../../src/StatsModal';
 import { SquadModal } from '../../src/SquadModal';
-import { getPlayerRating } from '../data/playerRatings';
 import ALL_PLAYERS from '../data/Players.json';
+import AppDialog from '../components/AppDialog';
 
 const kohliImg = '/assets/Kohli.avif';
+const CYAN = '#22D3EE';
+const PLAYER_PHOTOS = ALL_PLAYERS.reduce((acc, player) => {
+  acc[player.name.toLowerCase()] = player.photo_url || player.image_url || null;
+  return acc;
+}, {});
+
+function getPlayerPhoto(name) {
+  return PLAYER_PHOTOS[(name || '').toLowerCase()] || null;
+}
 
 const StatRow = ({ label, val }) => (
   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -68,6 +77,73 @@ function TimerBar({ timer, maxTimer = 30, isPaused }) {
   );
 }
 
+const UpcomingModal = memo(function UpcomingModal({ isOpen, onClose, upcomingPlayers, groupedUpcoming }) {
+  if (!isOpen) return null;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", backdropFilter: "blur(12px)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Barlow Condensed', sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 900, background: "#0a0a0c", border: `1px solid ${GOLD}44`, borderRadius: 16, display: "flex", flexDirection: "column", maxHeight: "92vh", boxShadow: "0 0 50px rgba(0,0,0,1)" }}>
+        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, color: GOLD, letterSpacing: 2 }}>UPCOMING PLAYERS</div>
+            <div style={{ color: "#555", fontSize: 11, letterSpacing: 1, marginTop: 2 }}>POOLED BY CATEGORY · {upcomingPlayers.length} LEFT</div>
+          </div>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#666", fontSize: 24, cursor: "pointer", padding: 4 }}>✕</button>
+        </div>
+        <div className="squad-scroller" style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
+          {Object.entries(groupedUpcoming).length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: '#444' }}>No players remaining in the auction.</div>
+          ) : (
+            Object.entries(groupedUpcoming).map(([cat, players]) => (
+              <div key={cat} style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 16, color: "#fff", letterSpacing: 2 }}>{cat.toUpperCase()}</div>
+                  <div style={{ color: CYAN, fontSize: 10, background: `${CYAN}15`, padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>{players.length}</div>
+                  <div style={{ flex: 1, height: 1, background: `linear-gradient(to right, ${BORDER}, transparent)` }} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+                  {players.map((player, i) => {
+                    const photoUrl = getPlayerPhoto(player.name);
+                    return (
+                      <div
+                        key={`${cat}-${player.name}-${i}`}
+                        style={{ background: "#0d0d10", border: `1px solid ${BORDER}`, borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}
+                      >
+                        <div style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: `1px solid ${ROLE_C[player.role]}55`, background: `${ROLE_C[player.role]}12`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {photoUrl ? (
+                            <img src={photoUrl} alt={player.name} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }} />
+                          ) : (
+                            <span style={{ fontSize: 16 }}>{ROLE_EMOJI[player.role]}</span>
+                          )}
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#e0e0e0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={player.name}>
+                            {player.name}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                            <span style={{ fontSize: 10, color: ROLE_C[player.role], letterSpacing: 1, fontFamily: "'Barlow Condensed'", fontWeight: 700 }}>
+                              {player.role.toUpperCase()}
+                            </span>
+                            {player.overseas && (
+                              <span style={{ fontSize: 9, background: "#6366f120", color: "#818cf8", padding: "1px 5px", borderRadius: 999, letterSpacing: 1, fontWeight: 700 }}>
+                                OS
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 function AuctionContent() {
   const router = useRouter();
   const {
@@ -88,11 +164,32 @@ function AuctionContent() {
   const [showHamburger, setShowHamburger] = useState(false);
   const [hamburgerTab, setHamburgerTab] = useState('upcoming'); // 'upcoming'|'sold'|'unsold'|'leaderboard'
   const [expandedTeam, setExpandedTeam] = useState(null);
+  const [dialog, setDialog] = useState(null);
 
   const handleBid = useCallback(() => {
     playBidClick();
     humanBid();
   }, [humanBid]);
+  const closeUpcomingModal = useCallback(() => setShowUpcoming(false), []);
+  const closeDialog = useCallback(() => setDialog(null), []);
+  const openEndAuctionDialog = useCallback(() => {
+    setDialog({
+      title: 'End Auction?',
+      message: 'This will end the auction for everyone in the room and take all players to the results screen.',
+      tone: 'danger',
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onClick: closeDialog },
+        {
+          label: 'End Auction',
+          variant: 'danger',
+          onClick: () => {
+            closeDialog();
+            emit('end-game');
+          },
+        },
+      ],
+    });
+  }, [closeDialog, emit]);
 
   if (!gs) {
     return (
@@ -104,83 +201,30 @@ function AuctionContent() {
     );
   }
 
-  const upcomingPlayers = gs.playerQueue.slice(gs.currentIdx + 1);
+  const upcomingPlayers = useMemo(
+    () => gs.playerQueue.slice(gs.currentIdx + 1),
+    [gs.playerQueue, gs.currentIdx]
+  );
   const currentMode = (isMulti ? lobbyMode : auctionMode) || gs.auctionMode || 'mega';
   const resultsQuery = new URLSearchParams();
   if (currentMode) resultsQuery.set('mode', String(currentMode).toUpperCase());
   if (isMulti && roomCode) resultsQuery.set('room', roomCode);
   if (!isMulti && effectiveMyTeamId) resultsQuery.set('team', effectiveMyTeamId);
   const resultsHref = resultsQuery.toString() ? `/results?${resultsQuery.toString()}` : '/results';
-  const groupedUpcoming = upcomingPlayers.reduce((acc, p) => {
-    const sName = p.setName || "Other";
-    if (!acc[sName]) acc[sName] = [];
-    acc[sName].push(p);
-    return acc;
-  }, {});
+  const groupedUpcoming = useMemo(() => {
+    const groups = upcomingPlayers.reduce((acc, player) => {
+      const setName = player.setName || "Other";
+      if (!acc[setName]) acc[setName] = [];
+      acc[setName].push(player);
+      return acc;
+    }, {});
 
-  Object.keys(groupedUpcoming).forEach(cat => {
-    groupedUpcoming[cat].sort((a, b) => a.name.localeCompare(b.name));
-  });
+    Object.keys(groups).forEach(category => {
+      groups[category].sort((a, b) => a.name.localeCompare(b.name));
+    });
 
-  const CYAN = '#22D3EE';
-
-  const UpcomingModal = memo(({ showUpcoming, setShowUpcoming, upcomingPlayers, groupedUpcoming }) => {
-    if (!showUpcoming) return null;
-    return (
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.92)", backdropFilter: "blur(12px)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Barlow Condensed', sans-serif" }}>
-        <div style={{ width: "100%", maxWidth: 900, background: "#0a0a0c", border: `1px solid ${GOLD}44`, borderRadius: 16, display: "flex", flexDirection: "column", maxHeight: "92vh", animation: "fadeUp 0.3s ease", boxShadow: "0 0 50px rgba(0,0,0,1)" }}>
-          <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, color: GOLD, letterSpacing: 2 }}>UPCOMING PLAYERS</div>
-              <div style={{ color: "#555", fontSize: 11, letterSpacing: 1, marginTop: 2 }}>POOLED BY CATEGORY · {upcomingPlayers.length} LEFT</div>
-            </div>
-            <button onClick={() => setShowUpcoming(false)} style={{ background: "transparent", border: "none", color: "#666", fontSize: 24, cursor: "pointer", padding: 4 }}>✕</button>
-          </div>
-          <div className="squad-scroller" style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
-            {Object.entries(groupedUpcoming).length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#444' }}>No players remaining in the auction.</div>
-            ) : (
-              Object.entries(groupedUpcoming).map(([cat, players]) => (
-                <div key={cat} style={{ marginBottom: 24 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                    <div style={{ fontFamily: "'Bebas Neue'", fontSize: 16, color: "#fff", letterSpacing: 2 }}>{cat.toUpperCase()}</div>
-                    <div style={{ color: CYAN, fontSize: 10, background: `${CYAN}15`, padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>{players.length}</div>
-                    <div style={{ flex: 1, height: 1, background: `linear-gradient(to right, ${BORDER}, transparent)` }} />
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 10 }}>
-                    {players.map((p, i) => {
-                      const pRec = ALL_PLAYERS.find(ap => ap.name === p.name);
-                      const photoUrl = pRec?.photo_url;
-                      return (
-                        <div key={i} style={{ background: "#0d0d10", border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden', display: "flex", flexDirection: "column", alignItems: "center", transition: "transform 0.2s" }}
-                          onMouseOver={e => e.currentTarget.style.borderColor = ROLE_C[p.role]}
-                          onMouseOut={e => e.currentTarget.style.borderColor = BORDER}
-                        >
-                           <div style={{ width: '100%', height: 100, background: '#050505', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', position: 'relative' }}>
-                             {photoUrl ? (
-                               <img src={photoUrl} alt={p.name} style={{ height: '95%', objectFit: 'contain', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))' }} />
-                             ) : (
-                               <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontSize: 36 }}>
-                                 {ROLE_EMOJI[p.role]}
-                               </div>
-                             )}
-                           </div>
-                           <div style={{ padding: '8px', textAlign: 'center', width: '100%', background: '#0a0a0c', borderTop: `1px solid #111` }}>
-                             <div style={{ fontSize: 13, fontWeight: 700, color: "#e0e0e0", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.name}>{p.name}</div>
-                             <div style={{ fontSize: 9, color: ROLE_C[p.role], letterSpacing: 1, marginTop: 4, fontFamily: "'Barlow Condensed'", fontWeight: 700 }}>{p.role.toUpperCase()}</div>
-                           </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  });
+    return groups;
+  }, [upcomingPlayers]);
 
   if (gs.phase === 'selection') {
     const isMini = currentMode?.toLowerCase() === 'mini';
@@ -211,7 +255,6 @@ function AuctionContent() {
   const pRecord     = ALL_PLAYERS.find(p => p.name.toLowerCase() === player.name.toLowerCase());
   const photoUrl    = pRecord?.photo_url || null;
   const stats       = pRecord?.stats || {};
-  const rating      = getPlayerRating(player.name, currentMode);
   const myTeam      = TEAMS.find(t => t.id === effectiveMyTeamId);
   const bidderTeam  = gs.currentBidder ? TEAMS.find(t => t.id === gs.currentBidder) : null;
   const osCount     = (gs.squads[effectiveMyTeamId] || []).filter(p => p.overseas).length;
@@ -471,6 +514,8 @@ function AuctionContent() {
           transition:all .18s; }
         .ac-host-icon:hover { border-color:#555; color:#fff; }
         .ac-host-icon.red { border-color:#ef444440; color:#ef4444; }
+        .ac-host-btn-text { display:none; }
+        .ac-host-btn-icon { display:inline-flex; align-items:center; justify-content:center; line-height:1; }
         /* Hamburger */
         .ac-hamburger { background:transparent; border:1px solid #2a2a2a; color:#888;
           width:32px; height:32px; border-radius:6px; font-size:16px; cursor:pointer;
@@ -490,6 +535,24 @@ function AuctionContent() {
            .ac-top-badge-sm { font-size: 13px; padding: 6px 12px; border-radius: 6px; letter-spacing: 2px; }
            .ac-top-live-sm { font-size: 13px; padding: 6px 12px; border-radius: 6px; letter-spacing: 2px; }
         }
+        @media(max-width: 860px) {
+          .ac-host-icon {
+            width: auto;
+            min-width: 58px;
+            height: 32px;
+            padding: 0 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            background: #111318;
+          }
+          .ac-host-icon.red {
+            background: rgba(239,68,68,0.08);
+          }
+          .ac-host-btn-text { display: inline; }
+          .ac-host-btn-icon { display: none; }
+        }
       `}</style>
 
       <SquadModal 
@@ -503,10 +566,18 @@ function AuctionContent() {
       />
       <StatsModal  isOpen={showStats} onClose={() => setShowStats(false)} gs={multiGS || g.current} TEAMS={TEAMS} myTeamId={myTeamId} />
       <UpcomingModal
-        showUpcoming={showUpcoming}
-        setShowUpcoming={setShowUpcoming}
+        isOpen={showUpcoming}
+        onClose={closeUpcomingModal}
         upcomingPlayers={upcomingPlayers}
         groupedUpcoming={groupedUpcoming}
+      />
+      <AppDialog
+        isOpen={!!dialog}
+        title={dialog?.title}
+        message={dialog?.message}
+        tone={dialog?.tone}
+        actions={dialog?.actions || []}
+        onClose={closeDialog}
       />
 
       {/* ── TIMER PROGRESS BAR (top, full width) ── */}
@@ -552,11 +623,13 @@ function AuctionContent() {
           <div style={{ display:'flex', gap:4, flexShrink:0 }}>
             <button className="ac-host-icon" title={gs.isPaused ? 'Resume' : 'Pause'}
               onClick={() => gs.isPaused ? emit('resume-game') : emit('pause-game')}>
-              {gs.isPaused ? '▶' : '⏸'}
+              <span className="ac-host-btn-icon">{gs.isPaused ? '▶' : '⏸'}</span>
+              <span className="ac-host-btn-text">{gs.isPaused ? 'RESUME' : 'PAUSE'}</span>
             </button>
             <button className="ac-host-icon red" title="End auction"
-              onClick={() => { if(window.confirm('End auction early?')) emit('end-game'); }}>
-              ⏹
+              onClick={openEndAuctionDialog}>
+              <span className="ac-host-btn-icon">⏹</span>
+              <span className="ac-host-btn-text">END</span>
             </button>
           </div>
         )}
@@ -590,10 +663,6 @@ function AuctionContent() {
               }
             </div>
             
-            <div style={{ background: GOLD, color: '#000', fontSize: 13, fontWeight: 900, padding: '2px 8px', borderRadius: 12, display: 'inline-block', marginBottom: 8, letterSpacing: 1 }}>
-               RATING: {rating}
-            </div>
-
             <div style={{ fontFamily:"'Bebas Neue'", fontSize:24, color:'#fff', letterSpacing:2, lineHeight:1.1, marginBottom:4 }}>{player.name.toUpperCase()}</div>
             <div style={{ color:ROLE_C[player.role], fontSize:11, fontWeight:700, letterSpacing:3, marginBottom:16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
               <span>{ROLE_L[player.role]} · {player.overseas ? 'OVERSEAS' : 'INDIAN'}</span>
@@ -672,12 +741,7 @@ function AuctionContent() {
                     }
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                      <div className="ac-player-name">{player.name.toUpperCase()}</div>
-                      <div style={{ background: GOLD, color: '#000', fontSize: 9, fontWeight: 900, padding: '1px 5px', borderRadius: 6, letterSpacing: 1, flexShrink: 0, marginLeft: 6 }}>
-                        {rating}
-                      </div>
-                    </div>
+                    <div className="ac-player-name">{player.name.toUpperCase()}</div>
                     <div className="ac-player-meta" style={{ color:ROLE_C[player.role], display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <span style={{ fontSize: 10, background: `${ROLE_C[player.role]}20`, color: ROLE_C[player.role], padding: '1px 5px', borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>{ROLE_L[player.role]}</span>
                       {player.overseas && <span style={{ fontSize: 9, background: '#6366f120', color: '#818cf8', padding: '1px 5px', borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>OS</span>}
@@ -919,7 +983,7 @@ function AuctionContent() {
                             color:gs.isPaused?'#22c55e':'#888', borderRadius:10, fontFamily:"'Bebas Neue'", fontSize:15, letterSpacing:1, cursor:'pointer' }}>
                           {gs.isPaused ? '▶ RESUME' : '⏸ PAUSE'}
                         </button>
-                        <button onClick={() => { if(window.confirm('End auction early?')) emit('end-game'); }}
+                        <button onClick={openEndAuctionDialog}
                           style={{ flex:1, padding:'13px', background:'#ef444414', border:'1px solid #ef444440',
                             color:'#ef4444', borderRadius:10, fontFamily:"'Bebas Neue'", fontSize:15, letterSpacing:1, cursor:'pointer' }}>
                           ⏹ END

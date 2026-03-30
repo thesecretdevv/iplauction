@@ -617,6 +617,9 @@ io.on('connection', (socket) => {
 
         // Only check non-spectator players for team selection
         const activePlayers = Object.values(room.players).filter(p => !p.isSpectator && !p.offline);
+        if (activePlayers.length < 2) {
+            return cb?.({ ok: false, error: 'At least 2 active players must join before starting the auction' });
+        }
         const noTeam = activePlayers.find(p => !p.teamId);
         if (noTeam) return cb?.({ ok: false, error: `${noTeam.name} hasn't selected a team` });
 
