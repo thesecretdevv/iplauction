@@ -30,6 +30,49 @@ export default function ResultsPage() {
   const router = useRouter();
   const { gs, isMulti, effectiveMyTeamId, handleRestart, lobbyMode, auctionMode } = useGame();
   const [showLoading, setShowLoading] = useState(true);
+  const [archivedGs, setArchivedGs] = useState(null);
+  const [archivedMode, setArchivedMode] = useState(null);
+  const [archivedRoomCode, setArchivedRoomCode] = useState(null);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    if (gs || typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const room = params.get('room');
+    const mode = params.get('mode');
+    if (!room) {
+      setLoadError('Results not found.');
+      setShowLoading(false);
+      return;
+    }
+
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://bidwicket.onrender.com";
+    let cancelled = false;
+
+    fetch(`${backendUrl}/api/completed-rooms/${encodeURIComponent(room)}`, { cache: 'no-store' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Completed room not found');
+        return res.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setArchivedGs(data.gameState || null);
+        setArchivedMode(data.mode || mode || null);
+        setArchivedRoomCode(data.code || room);
+        setLoadError('');
+        setShowLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoadError('This completed room is no longer available.');
+        setShowLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [gs]);
 
   useEffect(() => {
     if (gs) {
@@ -38,12 +81,15 @@ export default function ResultsPage() {
     }
   }, [gs]);
 
-  if (!gs || showLoading) {
+  const resolvedGs = gs || archivedGs;
+  const isArchivedView = !gs && !!archivedGs;
+
+  if (showLoading) {
     return (
       <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24 }}>
         <div className="loading-spinner" style={{ width: 60, height: 60, border: `4px solid ${GOLD}22`, borderTopColor: GOLD, borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
         <div style={{ color: GOLD, fontFamily: "'Bebas Neue'", fontSize: 32, letterSpacing: 6, textAlign: 'center' }}>
-          {gs ? 'CALCULATING FINAL SQUADS...' : 'LOADING RESULTS...'}
+          {resolvedGs ? 'CALCULATING FINAL SQUADS...' : 'LOADING RESULTS...'}
         </div>
         <style>{`
           @keyframes spin { to { transform: rotate(360deg); } }
@@ -52,14 +98,32 @@ export default function ResultsPage() {
     );
   }
 
-  const mode = (isMulti ? lobbyMode : auctionMode) || gs?.auctionMode || 'mega';
-  return <Results gs={gs} myTeamId={effectiveMyTeamId} onRestart={handleRestart} mode={mode} />;
+  if (!resolvedGs) {
+    return (
+      <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, padding: 24, textAlign: 'center' }}>
+        <div style={{ color: GOLD, fontFamily: "'Bebas Neue'", fontSize: 28, letterSpacing: 4 }}>RESULTS UNAVAILABLE</div>
+        <div style={{ color: '#777', fontSize: 13, letterSpacing: 1 }}>{loadError || 'We could not load that result snapshot.'}</div>
+        <button
+          onClick={() => router.push('/room?action=browse')}
+          style={{ background: `linear-gradient(135deg,${GOLD},#9a7610)`, border: 'none', borderRadius: 6, padding: '10px 20px', color: '#000', fontWeight: 900, cursor: 'pointer', fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}
+        >
+          BACK TO ROOMS
+        </button>
+      </div>
+    );
+  }
+
+  const mode = isArchivedView
+    ? archivedMode || resolvedGs?.auctionMode || 'mega'
+    : (isMulti ? lobbyMode : auctionMode) || resolvedGs?.auctionMode || 'mega';
+  const restartHandler = isArchivedView ? () => router.push('/room?action=browse') : handleRestart;
+  return <Results gs={resolvedGs} myTeamId={effectiveMyTeamId} onRestart={restartHandler} mode={mode} isArchived={isArchivedView} archivedRoomCode={archivedRoomCode} />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Results
 // ─────────────────────────────────────────────────────────────────────────────
-function Results({ gs, myTeamId: mti, onRestart, mode }) {
+function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archivedRoomCode = null }) {
   const [activeId, setActiveId] = useState(mti || TEAMS[0].id);
   const [tab, setTab] = useState('squad');   // 'squad' | 'leaderboard'
   const team = TEAMS.find(t => t.id === activeId);
@@ -153,12 +217,14 @@ function Results({ gs, myTeamId: mti, onRestart, mode }) {
       <div style={{ background: '#08090f', borderBottom: `1px solid ${BORDER}`, padding: 'clamp(14px,2vh,22px) clamp(16px,4vw,48px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div style={{ fontFamily: "'Bebas Neue'", fontSize: 'clamp(24px,4vw,42px)', color: GOLD, letterSpacing: 6, lineHeight: 1 }}>IPL AUCTION COMPLETE</div>
-          <div style={{ color: '#555', fontSize: 11, letterSpacing: 3, marginTop: 3 }}>{soldCount} SOLD · {unsoldCount} UNSOLD · {(mode || 'N/A').toUpperCase()} AUCTION</div>
+          <div style={{ color: '#555', fontSize: 11, letterSpacing: 3, marginTop: 3 }}>
+            {soldCount} SOLD · {unsoldCount} UNSOLD · {(mode || 'N/A').toUpperCase()} AUCTION{isArchived && archivedRoomCode ? ` · ROOM ${archivedRoomCode}` : ''}
+          </div>
         </div>
         <button
           onClick={onRestart}
           style={{ background: `linear-gradient(135deg,${GOLD},#9a7610)`, border: 'none', borderRadius: 6, padding: '10px 24px', color: '#000', fontWeight: 900, cursor: 'pointer', fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'" }}
-        >PLAY AGAIN</button>
+        >{isArchived ? 'BACK TO ROOMS' : 'PLAY AGAIN'}</button>
       </div>
 
       {/* ── Tabs ── */}

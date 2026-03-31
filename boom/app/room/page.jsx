@@ -344,13 +344,18 @@ const TEAM_COLORS = {
 };
 const ALL_TEAM_IDS = ['MI','CSK','RCB','KKR','DC','PBKS','RR','SRH','GT','LSG'];
 
-function BrowseRooms({ name, setName, nameRef, serverRooms, fetchRooms, loading, error, doJoin, joinCode, setJoinCode, liveStats, onBack, onCreate, TEAMS, GOLD, CYAN }) {
+function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetchRooms, loading, error, doJoin, onViewCompleted, liveStats, onBack, onCreate, TEAMS, GOLD, CYAN }) {
   const [activeTab, setActiveTab] = useState('waiting'); // Show joinable rooms first!
 
   // Filter logic
   const liveRooms    = serverRooms.filter(r => r.status === 'active');
   const waitingRooms = serverRooms.filter(r => r.status === 'lobby');
-  const displayRooms = activeTab === 'live' ? liveRooms : waitingRooms;
+  const archivedRooms = completedRooms || [];
+  const displayRooms = activeTab === 'live'
+    ? liveRooms
+    : activeTab === 'completed'
+      ? archivedRooms
+      : waitingRooms;
 
   return (
     <div className="rb-shell" style={{ position: 'relative', zIndex: 5, animation: 'fadeIn .4s ease' }}>
@@ -388,6 +393,12 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, fetchRooms, loading,
             <span style={{ fontFamily: "'Bebas Neue'", fontSize: 18, letterSpacing: 1 }}>IN PROGRESS</span>
             <span className="rb-tab-count" style={{ marginLeft: 6, background: '#ef444422', color: '#ef4444' }}>{liveRooms.length}</span>
           </button>
+          <button className={`rb-tab${activeTab === 'completed' ? ' active' : ''}`} 
+            onClick={() => setActiveTab('completed')}
+            style={{ paddingBottom: 14 }}>
+            <span style={{ fontFamily: "'Bebas Neue'", fontSize: 18, letterSpacing: 1 }}>COMPLETED ROOMS</span>
+            <span className="rb-tab-count" style={{ marginLeft: 6, background: '#22c55e22', color: '#22c55e' }}>{archivedRooms.length}</span>
+          </button>
         </div>
       </div>
 
@@ -412,21 +423,24 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, fetchRooms, loading,
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
           {displayRooms.length === 0 ? (
             <div className="rb-empty" style={{ padding: '80px 20px', border: '1px dashed #222', borderRadius: 20 }}>
-               <div style={{ fontSize: 40, marginBottom: 16 }}>{activeTab === 'live' ? '🍿' : '🏟️'}</div>
+               <div style={{ fontSize: 40, marginBottom: 16 }}>{activeTab === 'live' ? '🍿' : activeTab === 'completed' ? '🏁' : '🏟️'}</div>
                <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, letterSpacing: 2, color: '#444' }}>
-                {activeTab === 'live' ? 'NO LIVE MATCHES' : 'NO PUBLIC LOBBIES'}
+                {activeTab === 'live' ? 'NO LIVE MATCHES' : activeTab === 'completed' ? 'NO COMPLETED ROOMS YET' : 'NO PUBLIC LOBBIES'}
                </div>
                <div style={{ fontSize: 11, color: '#222', marginTop: 8, letterSpacing: 2 }}>
-                BE THE FIRST TO START THE EXCITEMENT
+                {activeTab === 'completed' ? 'FINISHED PUBLIC AUCTIONS STAY HERE FOR 48 HOURS' : 'BE THE FIRST TO START THE EXCITEMENT'}
                </div>
-               <button className="rp-btn" onClick={onCreate} style={{ maxWidth: 200, margin: '24px auto 0', height: 44, fontSize: 16 }}>
-                CREATE LOBBY
-               </button>
+               {activeTab !== 'completed' && (
+                 <button className="rp-btn" onClick={onCreate} style={{ maxWidth: 200, margin: '24px auto 0', height: 44, fontSize: 16 }}>
+                  CREATE LOBBY
+                 </button>
+               )}
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
               {displayRooms.map((room, i) => {
                 const isActive = room.status === 'active';
+                const isCompleted = room.status === 'finished';
                 const teamCount = room.players || 0;
                 
                 return (
@@ -448,7 +462,8 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, fetchRooms, loading,
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                           <span className={`rb-status-dot ${isActive ? 'live' : 'waiting'}`} />
                           <div className="rb-room-code" style={{ fontSize: 12, color: GOLD, background: `${GOLD}11`, padding: '2px 8px', borderRadius: 4 }}>{room.code}</div>
-                          <div style={{ fontSize: 9, color: '#444', letterSpacing: 1, textTransform: 'uppercase' }}>{(room.mode || 'MEGA').toUpperCase()}</div>
+                        <div style={{ fontSize: 9, color: '#444', letterSpacing: 1, textTransform: 'uppercase' }}>{(room.mode || 'MEGA').toUpperCase()}</div>
+                        {isCompleted && <div style={{ fontSize: 9, color: '#22c55e', letterSpacing: 1, textTransform: 'uppercase' }}>RESULTS READY</div>}
                         </div>
                         <div className="rb-room-name" style={{ fontSize: 28, letterSpacing: 1 }}>{room.name || 'Mega Auction'}</div>
                       </div>
@@ -461,13 +476,16 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, fetchRooms, loading,
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
                        <div style={{ fontSize: 11, color: '#555', letterSpacing: 1 }}>
-                          Hosted by <span style={{ color: '#888', fontWeight: 700 }}>{room.host}</span>
+                          {isCompleted
+                            ? <>Finished {room.finishedAt ? new Date(room.finishedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'recently'}</>
+                            : <>Hosted by <span style={{ color: '#888', fontWeight: 700 }}>{room.host}</span></>
+                          }
                        </div>
                        <button 
                         className="rb-join-btn" 
-                        onClick={() => doJoin(room.code)}
-                        style={{ width: 'auto', padding: '10px 24px', borderRadius: 8, background: isActive ? '#22D3EE15' : GOLD, color: isActive ? '#22D3EE' : '#000', border: isActive ? '1px solid #22D3EE40' : 'none' }}>
-                        {isActive ? 'JOIN LIVE ROOM' : 'JOIN LOBBY'}
+                        onClick={() => isCompleted ? onViewCompleted(room) : doJoin(room.code)}
+                        style={{ width: 'auto', padding: '10px 24px', borderRadius: 8, background: isCompleted ? '#22c55e18' : isActive ? '#22D3EE15' : GOLD, color: isCompleted ? '#22c55e' : isActive ? '#22D3EE' : '#000', border: isCompleted ? '1px solid #22c55e40' : isActive ? '1px solid #22D3EE40' : 'none' }}>
+                        {isCompleted ? 'VIEW RESULTS' : isActive ? 'JOIN LIVE ROOM' : 'JOIN LOBBY'}
                       </button>
                     </div>
                   </div>
@@ -504,6 +522,7 @@ function RoomContent() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [aMode,       setAMode]       = useState('mega');
   const [serverRooms, setServerRooms] = useState([]);
+  const [completedRooms, setCompletedRooms] = useState([]);
   const [recentRooms, setRecentRooms] = useState([]);
   const [liveStats,   setLiveStats]   = useState({ rooms: 0, players: 0 });
   const [dialog,      setDialog]      = useState(null);
@@ -543,10 +562,9 @@ function RoomContent() {
   const fetchRooms = useCallback(() => {
     emit('get-rooms', (data) => {
       console.log("[SOCKET] Received Rooms:", data);
-      if (data?.active) {
-        setServerRooms(data.active);
-        setLiveStats({ rooms: data.totalRooms || 0, players: data.totalPlayers || 0 });
-      }
+      setServerRooms(data?.active || []);
+      setCompletedRooms(data?.completed || []);
+      setLiveStats({ rooms: data?.totalRooms || 0, players: data?.totalPlayers || 0 });
     });
   }, [emit]);
 
@@ -572,6 +590,14 @@ function RoomContent() {
       setRecentRooms(recents);
     } catch(e) {}
   };
+
+  const viewCompletedRoom = useCallback((room) => {
+    if (!room?.code) return;
+    const params = new URLSearchParams({ room: room.code });
+    if (room.mode) params.set('mode', room.mode);
+    params.set('completed', '1');
+    router.push(`/results?${params.toString()}`);
+  }, [router]);
 
   // ── Handlers ──
   const handleCreate = () => {
@@ -876,12 +902,12 @@ function RoomContent() {
           setName={setName}
           nameRef={nameRef}
           serverRooms={serverRooms}
+          completedRooms={completedRooms}
           fetchRooms={fetchRooms}
           loading={loading}
           error={error}
           doJoin={doJoin}
-          joinCode={joinCode}
-          setJoinCode={setJoinCode}
+          onViewCompleted={viewCompletedRoom}
           liveStats={liveStats}
           onBack={() => setPhase('home')}
           onCreate={() => setPhase('create-form')}

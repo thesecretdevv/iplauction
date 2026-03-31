@@ -55,6 +55,9 @@ function isRoomOver(room) {
         || room?.gameState?.phase === 'selection';
 }
 
+const FINISHED_ROOM_TTL_SECONDS = 60 * 60 * 48;
+const FINISHED_ROOM_SET_KEY = 'finished_public_rooms';
+
 // ─── Room & History Storage ─────────────────────────────────────────────────
 const rooms = new Map();
 const finishedGames = [];
@@ -93,11 +96,30 @@ app.get('/api/rooms', async (req, res) => {
         }
 
         const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
-        res.json({ active: activeRooms, totalRooms: activeRooms.length, totalPlayers });
+        const completedRooms = (await getFinishedRooms()).map(room => ({
+            code: room.code,
+            name: room.name,
+            host: room.host,
+            players: room.players,
+            spectators: room.spectators,
+            status: 'finished',
+            mode: room.mode,
+            finishedAt: room.finishedAt,
+            totalSold: room.totalSold,
+            topBuy: room.topBuy || null
+        }));
+        res.json({ active: activeRooms, completed: completedRooms, totalRooms: activeRooms.length, totalPlayers });
     } catch (e) {
         console.error("[REST] Room Fetch Error:", e);
         res.status(500).json({ error: "Failed to fetch rooms" });
     }
+});
+
+app.get('/api/completed-rooms/:code', async (req, res) => {
+    const snapshot = await getFinishedRoomSnapshot(req.params.code?.toUpperCase());
+    if (!snapshot) return res.status(404).json({ error: 'Completed room not found' });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(snapshot);
 });
 
 // GET /api/rooms/:code — room details
@@ -122,6 +144,12 @@ async function addToPublicIndex(code) {
 async function removeFromPublicIndex(code) {
     try { await redis.srem('public_rooms', code); } catch(e) {}
 }
+async function addToFinishedIndex(code) {
+    try { await redis.sadd(FINISHED_ROOM_SET_KEY, code); } catch(e) {}
+}
+async function removeFromFinishedIndex(code) {
+    try { await redis.srem(FINISHED_ROOM_SET_KEY, code); } catch(e) {}
+}
 
 async function removeRoom(code) {
     if (!code) return;
@@ -129,6 +157,40 @@ async function removeRoom(code) {
     await redis.del(`room:${code.toUpperCase()}`);
     await removeFromPublicIndex(code.toUpperCase());
     console.log(`[ROOM] ${code} fully removed from memory and Redis`);
+}
+
+async function getFinishedRoomSnapshot(code) {
+    if (!code) return null;
+    try {
+        const data = await redis.get(`finished_room:${code.toUpperCase()}`);
+        if (!data) return null;
+        return typeof data === 'string' ? JSON.parse(data) : data;
+    } catch (e) {
+        console.error("[REDIS] Finished room load error:", e);
+        return null;
+    }
+}
+
+async function getFinishedRooms() {
+    try {
+        const codes = await redis.smembers(FINISHED_ROOM_SET_KEY);
+        const snapshots = [];
+
+        for (const code of codes) {
+            const snapshot = await getFinishedRoomSnapshot(code);
+            if (!snapshot) {
+                await removeFromFinishedIndex(code);
+                continue;
+            }
+            snapshots.push(snapshot);
+        }
+
+        snapshots.sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
+        return snapshots;
+    } catch (e) {
+        console.error("[REDIS] Finished rooms fetch error:", e);
+        return [];
+    }
 }
 
 async function persistRoom(room) {
@@ -296,11 +358,36 @@ function saveFinishedGame(room, gs) {
         name: room.name,
         mode: room.auctionMode,
         date: new Date().toISOString(),
+        finishedAt: room.finishedAt || Date.now(),
         host: room.players[room.hostId]?.name || "Unknown",
+        players: Object.values(room.players || {}).filter(p => !p.isSpectator).length,
+        spectators: Object.values(room.players || {}).filter(p => p.isSpectator).length,
         totalSold: gs.auctionLog.filter(l => l.sold).length,
         topBuy: gs.auctionLog.filter(l => l.sold).sort((a, b) => b.price - a.price)[0] || null
     });
     if (finishedGames.length > 20) finishedGames.pop();
+
+    const roomCode = room.code?.toUpperCase();
+    if (!roomCode) return;
+
+    const snapshot = {
+        code: roomCode,
+        name: room.name,
+        host: room.players[room.hostId]?.name || "Unknown",
+        mode: room.auctionMode || 'mega',
+        status: 'finished',
+        finishedAt: room.finishedAt || Date.now(),
+        endReason: room.endReason || 'completed',
+        players: Object.values(room.players || {}).filter(p => !p.isSpectator).length,
+        spectators: Object.values(room.players || {}).filter(p => p.isSpectator).length,
+        totalSold: gs.auctionLog.filter(l => l.sold).length,
+        topBuy: gs.auctionLog.filter(l => l.sold).sort((a, b) => b.price - a.price)[0] || null,
+        gameState: gs
+    };
+
+    redis.set(`finished_room:${roomCode}`, JSON.stringify(snapshot), { ex: FINISHED_ROOM_TTL_SECONDS })
+        .then(() => addToFinishedIndex(roomCode))
+        .catch(e => console.error("[REDIS] Finished room save error:", e));
 }
 
 function finalizeRoom(room, { reason = 'completed' } = {}) {
@@ -720,8 +807,20 @@ io.on('connection', (socket) => {
             }
             
             const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
-            cb?.({ active: activeRooms, totalRooms: activeRooms.length, totalPlayers });
-        } catch(e) { console.error("[SOCKET] Room Fetch Error:", e); cb?.({ active: [] }); }
+            const completedRooms = (await getFinishedRooms()).map(room => ({
+                code: room.code,
+                name: room.name,
+                host: room.host,
+                players: room.players,
+                spectators: room.spectators,
+                status: 'finished',
+                mode: room.mode,
+                finishedAt: room.finishedAt,
+                totalSold: room.totalSold,
+                topBuy: room.topBuy || null
+            }));
+            cb?.({ active: activeRooms, completed: completedRooms, totalRooms: activeRooms.length, totalPlayers });
+        } catch(e) { console.error("[SOCKET] Room Fetch Error:", e); cb?.({ active: [], completed: [] }); }
     });
 
     // ── Place Bid ── (optimized for minimum latency)
