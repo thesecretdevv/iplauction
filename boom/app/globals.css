@@ -1,11 +1,16 @@
 /* Base reset — keep minimal so landing.css takes full control */
 *, *::before, *::after { box-sizing: border-box; }
 
+html,
 body {
   margin: 0;
   padding: 0;
   min-width: 320px;
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
+  background: #080808;
+  overflow-x: hidden;
 }
 
 a {

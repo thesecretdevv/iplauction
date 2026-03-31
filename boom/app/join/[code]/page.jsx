@@ -42,7 +42,7 @@ export default function JoinPage() {
 
         if (res.roomStatus === "active") {
           setMultiGS(res.gameState);
-          router.push(`/auction?room=${code}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}`);
+          router.push(`/auction?room=${code}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}${res.isSpectator ? '&spectator=1' : ''}`);
         } else if (res.roomStatus === "finished") {
           setMultiGS(res.gameState);
           router.push(`/results?room=${code}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}`);

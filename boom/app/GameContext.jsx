@@ -279,17 +279,27 @@ export function GameProvider({ children }) {
 
   // Confetti for sold
   useEffect(() => {
-    if (gs?.phase === "sold") {
-      const duration = 2000;
-      const end = Date.now() + duration;
-      const frame = () => {
-        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0, y: 0.9 }, colors: ['#D4AF37', '#ffffff', '#22D3EE'] });
-        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1, y: 0.9 }, colors: ['#D4AF37', '#ffffff', '#22D3EE'] });
-        if (Date.now() < end) requestAnimationFrame(frame);
-      };
-      frame();
-    }
-  }, [gs?.phase, gs?.currentIdx]);
+    if (pathname !== '/auction' || gs?.phase !== "sold") return;
+
+    const duration = 2000;
+    const end = Date.now() + duration;
+    let frameId = null;
+    let active = true;
+
+    const frame = () => {
+      if (!active) return;
+      confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0, y: 0.9 }, colors: ['#D4AF37', '#ffffff', '#22D3EE'] });
+      confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1, y: 0.9 }, colors: ['#D4AF37', '#ffffff', '#22D3EE'] });
+      if (Date.now() < end) frameId = requestAnimationFrame(frame);
+    };
+
+    frame();
+
+    return () => {
+      active = false;
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, [gs?.phase, gs?.currentIdx, pathname]);
 
   function syncSingleGS() {
     if (typeof window === 'undefined') return;

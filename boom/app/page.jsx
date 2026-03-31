@@ -175,12 +175,12 @@ export default function LandingPage() {
 
         {/* Right – Hero Image */}
         <div className="l-hero-right">
-          <div style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', animationDelay: '0.4s' }} className="anim-hide-init hero-reveal">
+          <div className="l-hero-art-wrap anim-hide-init hero-reveal" style={{ animationDelay: '0.4s' }}>
             {/* Ambient Gold Glow Behind Players */}
-            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '80%', height: '80%', background: '#E8B84B', borderRadius: '50%', filter: 'blur(120px)', opacity: 0.15, pointerEvents: 'none' }}></div>
+            <div className="l-hero-glow" />
 
             {/* Hero Players Image */}
-            <img src="/assets/Hero_players.png" alt="" fetchPriority="high" style={{ position: 'relative', zIndex: 10, width: '130%', maxWidth: '850px', objectFit: 'contain', filter: 'drop-shadow(0 10px 40px rgba(232,184,75,0.15))', transform: 'translateX(-15%)' }} />
+            <img className="l-hero-players" src="/assets/Hero_players.png" alt="" fetchPriority="high" />
           </div>
         </div>
       </section>

@@ -491,7 +491,7 @@ function RoomContent() {
     emit, on, playerId,
     roomCode, setRoomCode, lobbyPlayers, setLobbyPlayers,
     isHost, setIsHost, myName, setMyName, setPlayMode,
-    lobbyMode, setLobbyMode, multiGS, setMultiGS, startMultiAuction, setIsSpectator,
+    lobbyMode, setLobbyMode, multiGS, setMultiGS, startMultiAuction, isSpectator, setIsSpectator,
   } = useGame();
 
   const [phase,       setPhase]       = useState('home');

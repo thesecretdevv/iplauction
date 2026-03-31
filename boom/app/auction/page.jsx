@@ -159,12 +159,14 @@ function AuctionContent() {
 
   const [showTeams, setShowTeams]       = useState(false);
   const [showUpcoming, setShowUpcoming] = useState(false);
-  const [mobileTab, setMobileTab]       = useState('teams');   // 'teams' | 'settings'
+  const [mobileTab, setMobileTab]       = useState('chat');    // 'chat' | 'teams' | 'settings'
   const [copied, setCopied]             = useState(false);
   const [showHamburger, setShowHamburger] = useState(false);
   const [hamburgerTab, setHamburgerTab] = useState('upcoming'); // 'upcoming'|'sold'|'unsold'|'leaderboard'
   const [expandedTeam, setExpandedTeam] = useState(null);
   const [dialog, setDialog] = useState(null);
+  const playerQueue = gs?.playerQueue ?? [];
+  const currentIdx = gs?.currentIdx ?? -1;
 
   const handleBid = useCallback(() => {
     playBidClick();
@@ -191,21 +193,11 @@ function AuctionContent() {
     });
   }, [closeDialog, emit]);
 
-  if (!gs) {
-    return (
-      <div style={{ height: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-        <div style={{ width: 40, height: 40, border: `3px solid ${GOLD}20`, borderTopColor: GOLD, borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, color: GOLD, letterSpacing: 3 }}>CONNECTING TO ARENA...</div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
   const upcomingPlayers = useMemo(
-    () => gs.playerQueue.slice(gs.currentIdx + 1),
-    [gs.playerQueue, gs.currentIdx]
+    () => playerQueue.slice(currentIdx + 1),
+    [playerQueue, currentIdx]
   );
-  const currentMode = (isMulti ? lobbyMode : auctionMode) || gs.auctionMode || 'mega';
+  const currentMode = (isMulti ? lobbyMode : auctionMode) || gs?.auctionMode || 'mega';
   const resultsQuery = new URLSearchParams();
   if (currentMode) resultsQuery.set('mode', String(currentMode).toUpperCase());
   if (isMulti && roomCode) resultsQuery.set('room', roomCode);
@@ -225,6 +217,16 @@ function AuctionContent() {
 
     return groups;
   }, [upcomingPlayers]);
+
+  if (!gs) {
+    return (
+      <div style={{ height: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+        <div style={{ width: 40, height: 40, border: `3px solid ${GOLD}20`, borderTopColor: GOLD, borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, color: GOLD, letterSpacing: 3 }}>CONNECTING TO ARENA...</div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   if (gs.phase === 'selection') {
     const isMini = currentMode?.toLowerCase() === 'mini';
@@ -276,7 +278,7 @@ function AuctionContent() {
   const sortedTeams = [...TEAMS].sort((a, b) => (gs.purses[b.id] || 0) - (gs.purses[a.id] || 0));
 
   return (
-    <div className="ac-app-root" style={{ fontFamily: "'Barlow Condensed', sans-serif", background: BG, color: '#fff', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', WebkitTapHighlightColor: 'transparent' }}>
+    <div className="ac-app-root" style={{ fontFamily: "'Barlow Condensed', sans-serif", background: BG, color: '#fff', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', overscrollBehavior: 'none', WebkitTapHighlightColor: 'transparent' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;600;700&family=Rajdhani:wght@500;600;700&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -348,6 +350,7 @@ function AuctionContent() {
           flex:1; overflow-y:auto; overflow-x:hidden;
           display:flex; flex-direction:column; align-items:center;
           padding:12px 14px 4px; width:100%;
+          overscroll-behavior: contain;
         }
 
         /* Player compact pill on mobile */
@@ -447,7 +450,7 @@ function AuctionContent() {
         .ac-mob-tab.active { color:#fff; border-bottom-color:${GOLD}; }
 
         /* Tab content area — scrollable */
-        .ac-tab-content { width:100%; max-width:480px; padding:8px 0 20px; }
+        .ac-tab-content { width:100%; max-width:480px; padding:8px 0 20px; overscroll-behavior: contain; }
         @media(min-width:861px){ .ac-tab-content { display:none !important; } }
 
         /* Team row in tab */
@@ -473,7 +476,7 @@ function AuctionContent() {
           display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
         }
         @media(max-width:860px) { .ac-right { display:none; } }
-        .ac-right-row { display:flex; flex-direction:column; overflow-y:auto; flex:1; }
+        .ac-right-row { display:flex; flex-direction:column; overflow-y:auto; flex:1; overscroll-behavior: contain; }
         .ac-team-row { padding:8px 12px; border-bottom:1px solid ${BORDER}; cursor:pointer; transition:background .15s; }
         .ac-team-row:active { background:rgba(255,255,255,.04); }
 
@@ -496,7 +499,7 @@ function AuctionContent() {
           border-bottom:2px solid transparent; color:#555; transition:all .2s;
         }
         .ac-sheet-tab.active { color:#fff; border-bottom-color:${GOLD}; }
-        .ac-sheet-body { flex:1; overflow-y:auto; padding:12px 14px 16px; }
+        .ac-sheet-body { flex:1; overflow-y:auto; padding:12px 14px 16px; overscroll-behavior: contain; }
 
         /* ── BOTTOM TICKER ── */
         .ac-ticker { border-top:1px solid ${BORDER}; padding:6px 12px; display:flex;
@@ -869,7 +872,7 @@ function AuctionContent() {
 
               {/* ── MOBILE TABS ── */}
               <div className="ac-mob-tabs">
-                {[['teams','Teams'],['settings','Settings'],['chat','Chat']].map(([id,label]) => (
+                {[['chat','Chat'],['teams','Teams'],['settings','Settings']].map(([id,label]) => (
                   <div key={id} className={`ac-mob-tab${mobileTab===id?' active':''}`}
                     onClick={() => setMobileTab(id)}>{label}</div>
                 ))}
@@ -993,7 +996,7 @@ function AuctionContent() {
                   </div>
                 )}
                 {mobileTab === 'chat' && (
-                  <div style={{ height: 400 }}>
+                  <div style={{ height: 'clamp(320px, 46dvh, 440px)' }}>
                     <ChatBox chatLog={chatLog} emit={emit} currentRoom={roomCode} isSpectator={isSpectatorMode} />
                   </div>
                 )}
@@ -1288,10 +1291,15 @@ export default function AuctionPage() {
 function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
   const [msg, setMsg] = useState("");
   const endRef = useRef(null);
+  const inputPlaceholder = isSpectator ? 'Watching live chat...' : 'Message...';
+  const visibleMessages = useMemo(
+    () => (chatLog || []).filter(message => message?.type === 'text' || message?.type === 'gif'),
+    [chatLog]
+  );
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatLog]);
+  }, [visibleMessages]);
 
   const send = (e) => {
     e.preventDefault();
@@ -1302,13 +1310,20 @@ function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
   };
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'#0a0a0c', overflow:'hidden' }}>
-      <div style={{ flex:1, overflowY:'auto', padding:10, display:'flex', flexDirection:'column', gap:8 }}>
-        {chatLog?.map(m => (
-          <div key={m.id} style={{ fontSize:13, background: m.type === 'system' ? 'transparent' : '#1a1a20', padding: m.type === 'system' ? 0 : '8px 12px', borderRadius:8, alignSelf: m.type === 'system' ? 'center' : 'flex-start', border: m.type === 'system' ? 'none' : '1px solid #282830' }}>
-            {m.type === 'system' ? (
-               <span style={{ fontSize:10, color:'#888', fontStyle:'italic' }}>{m.text}</span>
-            ) : m.type === 'gif' ? (
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'linear-gradient(180deg, #0a0a0c 0%, #090b10 100%)', border:'1px solid #171a22', borderRadius:14, overflow:'hidden', boxShadow:'inset 0 1px 0 rgba(255,255,255,0.02)' }}>
+      <div style={{ flex:1, overflowY:'auto', padding:12, display:'flex', flexDirection:'column', gap:8, overscrollBehavior: 'contain' }}>
+        {visibleMessages.length === 0 && (
+          <div style={{ flex: 1, display: 'flex', flexDirection:'column', alignItems: 'center', justifyContent: 'center', color: '#4b5563', gap: 10, textAlign:'center', padding:'24px 18px' }}>
+            <div style={{ width: 52, height: 52, borderRadius:'50%', border:'1px solid #1f2430', background:'rgba(34,211,238,0.05)', display:'flex', alignItems:'center', justifyContent:'center', color:'#22D3EE', fontSize:20 }}>
+              💬
+            </div>
+            <div style={{ fontSize: 12, letterSpacing: 1 }}>No chat messages yet</div>
+            <div style={{ fontSize: 10, color:'#394150', letterSpacing: 1.5, textTransform:'uppercase' }}>Start the conversation</div>
+          </div>
+        )}
+        {visibleMessages.map(m => (
+          <div key={m.id} style={{ fontSize:13, background:'#1a1a20', padding:'8px 12px', borderRadius:8, alignSelf:'flex-start', border:'1px solid #282830' }}>
+            {m.type === 'gif' ? (
                <div>
                  <div style={{ fontSize:10, color:'#22D3EE', marginBottom:4, fontWeight:600 }}>{m.senderName}</div>
                  <img src={m.text} style={{ maxWidth:'100%', borderRadius:6 }} alt="GIF" />
@@ -1323,10 +1338,10 @@ function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
         ))}
         <div ref={endRef} />
       </div>
-      <form onSubmit={send} style={{ display:'flex', borderTop:'1px solid #1a1a1a', padding:8, gap:6, background:'#080808' }}>
-        <input value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Message..." 
-          style={{ flex:1, background:'#111', border:'1px solid #222', color:'#fff', padding:'8px 10px', borderRadius:6, fontSize:13, outline:'none', minWidth:0 }} />
-        <button type="submit" disabled={!msg.trim()} style={{ background:'#22D3EE', color:'#000', border:'none', padding:'0 14px', borderRadius:6, fontWeight:700, cursor:msg.trim()?'pointer':'not-allowed', opacity:msg.trim()?1:0.5 }}>✓</button>
+      <form onSubmit={send} style={{ display:'flex', borderTop:'1px solid #1a1a1a', padding:10, gap:8, background:'#080808' }}>
+        <input value={msg} onChange={e=>setMsg(e.target.value)} placeholder={inputPlaceholder}
+          style={{ flex:1, background:'#111', border:'1px solid #222833', color:'#fff', padding:'10px 12px', borderRadius:10, fontSize:13, outline:'none', minWidth:0, boxShadow:'inset 0 1px 0 rgba(255,255,255,0.02)' }} />
+        <button type="submit" disabled={!msg.trim()} style={{ background:'#22D3EE', color:'#000', border:'none', minWidth:58, padding:'0 14px', borderRadius:10, fontWeight:800, cursor:msg.trim()?'pointer':'not-allowed', opacity:msg.trim()?1:0.5, boxShadow:'0 8px 22px rgba(34,211,238,0.22)' }}>✓</button>
       </form>
     </div>
   );
