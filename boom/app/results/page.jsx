@@ -6,6 +6,7 @@ import { useGame, fmt } from '../GameContext';
 import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from '../../src/MultiScreens';
 import { calculateLeaderboard, selectPlayingXI, getPlayerRating } from '../data/playerRatings';
 import ALL_PLAYERS from '../data/Players.json';
+import { getBackendUrl } from '../lib/backendUrl';
 
 // ── Medal helpers ──────────────────────────────────────────────────────────
 const MEDAL = ['Gold', 'Silver', 'Bronze'];
@@ -25,6 +26,31 @@ const TEAM_LOGOS = {
   GT:   '/assets/GT.png',
   LSG:  '/assets/LSG.png',
 };
+
+function buildLeaderboardResults(gs, mode, teams) {
+  const teamsPayload = teams.map((team) => {
+    const squad = gs.squads?.[team.id] || [];
+    const rawXI = gs.playingXI?.[team.id] || [];
+
+    let xi;
+    if (rawXI.length >= 1 && rawXI.length <= 11) {
+      xi = rawXI.map((player) => (typeof player === 'string' ? player : player.name));
+    } else if (squad.length > 0) {
+      xi = selectPlayingXI(squad, mode).map((player) => player.name);
+    } else {
+      xi = [];
+    }
+
+    return {
+      teamId: team.id,
+      teamName: team.name,
+      squad,
+      playingXI: xi,
+    };
+  });
+
+  return calculateLeaderboard(teamsPayload, mode);
+}
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -47,10 +73,9 @@ export default function ResultsPage() {
       return;
     }
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://bidwicket.onrender.com";
     let cancelled = false;
 
-    fetch(`${backendUrl}/api/completed-rooms/${encodeURIComponent(room)}`, { cache: 'no-store' })
+    fetch(`${getBackendUrl()}/api/completed-rooms/${encodeURIComponent(room)}`, { cache: 'no-store' })
       .then(async (res) => {
         if (!res.ok) throw new Error('Completed room not found');
         return res.json();
@@ -116,7 +141,12 @@ export default function ResultsPage() {
   const mode = isArchivedView
     ? archivedMode || resolvedGs?.auctionMode || 'mega'
     : (isMulti ? lobbyMode : auctionMode) || resolvedGs?.auctionMode || 'mega';
-  const restartHandler = isArchivedView ? () => router.push('/room?action=browse') : handleRestart;
+  const isRivalsReplay = (resolvedGs?.roomType === 'rivals' || String(mode || '').toLowerCase() === 'rivals') && !isArchivedView;
+  const restartHandler = isArchivedView
+    ? () => router.push('/room?action=browse')
+    : isRivalsReplay
+      ? () => handleRestart('/room?action=rivals&autoFind=1')
+      : handleRestart;
   return <Results gs={resolvedGs} myTeamId={effectiveMyTeamId} onRestart={restartHandler} mode={mode} isArchived={isArchivedView} archivedRoomCode={archivedRoomCode} />;
 }
 
@@ -124,12 +154,23 @@ export default function ResultsPage() {
 // Results
 // ─────────────────────────────────────────────────────────────────────────────
 function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archivedRoomCode = null }) {
-  const [activeId, setActiveId] = useState(mti || TEAMS[0].id);
+  const activeTeamIds = gs?.activeTeamIds?.length ? gs.activeTeamIds : TEAMS.map((team) => team.id);
+  const displayTeams = TEAMS.filter((team) => activeTeamIds.includes(team.id));
+  const isRivals = gs?.roomType === 'rivals' || String(mode || '').toLowerCase() === 'rivals';
+  const rankings = buildLeaderboardResults(gs, mode, displayTeams);
+  const [activeId, setActiveId] = useState(() => (mti && activeTeamIds.includes(mti) ? mti : displayTeams[0]?.id || TEAMS[0].id));
   const [tab, setTab] = useState('squad');   // 'squad' | 'leaderboard'
-  const team = TEAMS.find(t => t.id === activeId);
+  const team = displayTeams.find(t => t.id === activeId) || displayTeams[0];
+
+  useEffect(() => {
+    if (activeTeamIds.includes(activeId)) return;
+    setActiveId((mti && activeTeamIds.includes(mti) ? mti : displayTeams[0]?.id) || TEAMS[0].id);
+  }, [activeId, activeTeamIds, displayTeams, mti]);
 
   const soldCount   = (gs.auctionLog || []).filter(l =>  l.sold).length;
   const unsoldCount = (gs.auctionLog || []).filter(l => !l.sold).length;
+  const rivalsWinner = isRivals ? rankings[0] : null;
+  const rivalsRunner = isRivals ? rankings[1] : null;
 
   // For the active team: decide what to display
   const rawXI    = gs.playingXI?.[activeId] || [];
@@ -220,6 +261,12 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
           <div style={{ color: '#555', fontSize: 11, letterSpacing: 3, marginTop: 3 }}>
             {soldCount} SOLD · {unsoldCount} UNSOLD · {(mode || 'N/A').toUpperCase()} AUCTION{isArchived && archivedRoomCode ? ` · ROOM ${archivedRoomCode}` : ''}
           </div>
+          {isRivals && rivalsWinner && (
+            <div style={{ color: '#cbd5e1', fontSize: 12, letterSpacing: 1.5, marginTop: 8 }}>
+              WINNER: <span style={{ color: TEAM_LOGOS[rivalsWinner.teamId] ? (displayTeams.find(t => t.id === rivalsWinner.teamId)?.color || GOLD) : GOLD, fontWeight: 700 }}>{rivalsWinner.teamName}</span>
+              {rivalsRunner ? <span style={{ color: '#64748b' }}> over {rivalsRunner.teamName}</span> : null}
+            </div>
+          )}
         </div>
         <button
           onClick={onRestart}
@@ -241,6 +288,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
         {tab === 'squad' && (
           <SquadTab
             gs={gs} mti={mti} mode={mode}
+            teams={displayTeams}
             activeId={activeId} setActiveId={setActiveId}
             team={team} displayList={displayList} playingXI={playingXI} fullSquad={fullSquad}
             spent={spent} soldCount={soldCount} unsoldCount={unsoldCount}
@@ -249,7 +297,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
             shareText={shareText} shareWhatsApp={shareWhatsApp} downloadSheet={downloadSheet}
           />
         )}
-        {tab === 'leaderboard' && <LeaderboardTab gs={gs} mode={mode} mti={mti} />}
+        {tab === 'leaderboard' && <LeaderboardTab gs={gs} mode={mode} mti={mti} teams={displayTeams} isRivals={isRivals} />}
       </div>
 
       <div style={{ padding: '0 40px 40px', textAlign: 'center' }}>
@@ -265,7 +313,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
 // ─────────────────────────────────────────────────────────────────────────────
 // Squad Tab
 // ─────────────────────────────────────────────────────────────────────────────
-function SquadTab({ gs, mti, mode, activeId, setActiveId, team, displayList, playingXI, fullSquad, spent, soldCount, unsoldCount, teamTotalRating, teamAvgRating, isDisqualified, shareText, shareWhatsApp, downloadSheet }) {
+function SquadTab({ gs, mti, mode, teams, activeId, setActiveId, team, displayList, playingXI, fullSquad, spent, soldCount, unsoldCount, teamTotalRating, teamAvgRating, isDisqualified, shareText, shareWhatsApp, downloadSheet }) {
   return (
     <div style={{ maxWidth: 1600, margin: '0 auto' }}>
       {/* Disqualified Alert */}
@@ -280,7 +328,7 @@ function SquadTab({ gs, mti, mode, activeId, setActiveId, team, displayList, pla
       )}
       {/* ── Team selector ── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
-        {TEAMS.map(t => (
+        {teams.map(t => (
           <button key={t.id} className="res-team-pill"
             onClick={() => setActiveId(t.id)}
             style={{ background: activeId === t.id ? t.color : 'transparent', border: `1px solid ${t.color}`, color: activeId === t.id ? '#000' : t.color }}>
@@ -375,44 +423,22 @@ function SquadTab({ gs, mti, mode, activeId, setActiveId, team, displayList, pla
 // ─────────────────────────────────────────────────────────────────────────────
 // Leaderboard Tab
 // ─────────────────────────────────────────────────────────────────────────────
-function LeaderboardTab({ gs, mode, mti }) {
+function LeaderboardTab({ gs, mode, mti, teams, isRivals }) {
   const [rankings, setRankings] = useState([]);
   const [expanded, setExpanded] = useState({});
 
   useEffect(() => {
-    const teamsPayload = TEAMS.map(t => {
-      const squad = gs.squads?.[t.id] || [];
-      const rawXI = gs.playingXI?.[t.id] || [];
-
-      // If the submitted XI has between 1–11 players, use it; otherwise auto-select
-      let xi;
-      if (rawXI.length >= 1 && rawXI.length <= 11) {
-        xi = rawXI.map(p => (typeof p === 'string' ? p : p.name));
-      } else if (squad.length > 0) {
-        xi = selectPlayingXI(squad, mode).map(p => p.name);
-      } else {
-        xi = [];
-      }
-
-      return {
-        teamId:    t.id,
-        teamName:  t.name,
-        squad,
-        playingXI: xi,
-      };
-    });
-
-    const results = calculateLeaderboard(teamsPayload, mode);
+    const results = buildLeaderboardResults(gs, mode, teams);
     setRankings(results);
     // Auto-expand top 3
     if (results.length > 0) {
       const top3 = Object.fromEntries(results.slice(0, 3).map(r => [r.teamId, true]));
       setExpanded(top3);
     }
-  }, [gs, mode]);
+  }, [gs, mode, teams]);
 
   const toggle = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
-  const tc     = (id) => TEAMS.find(t => t.id === id)?.color || '#888';
+  const tc     = (id) => teams.find(t => t.id === id)?.color || '#888';
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto' }}>
@@ -433,7 +459,7 @@ function LeaderboardTab({ gs, mode, mti }) {
         <span style={{ color: '#333' }}>Rating scale: 90–100 Elite · 80–89 Excellent · 70–79 Good · 60–69 Average · 50–59 Below Avg · &lt;50 Reserve</span>
       </div>
 
-      <div style={{ fontFamily: "'Bebas Neue'", fontSize: 14, color: '#333', letterSpacing: 4, marginBottom: 10 }}>ALL TEAM RANKINGS — CLICK TO EXPAND XI</div>
+      <div style={{ fontFamily: "'Bebas Neue'", fontSize: 14, color: '#333', letterSpacing: 4, marginBottom: 10 }}>{isRivals ? 'RIVALS SHOWDOWN — CLICK TO EXPAND XI' : 'ALL TEAM RANKINGS — CLICK TO EXPAND XI'}</div>
 
       {rankings.length === 0 && (
         <div style={{ color: '#555', textAlign: 'center', padding: 40, fontSize: 14, letterSpacing: 2 }}>Calculating leaderboard…</div>

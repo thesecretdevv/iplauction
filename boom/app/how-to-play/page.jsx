@@ -77,7 +77,7 @@ const steps = [
 const rules = [
   'Each franchise starts with a fixed purse of ₹120 Cr.',
   'A player is sold to the highest bidder when the timer expires.',
-  'The host can start a multiplayer auction only when at least 2 active players are in the room.',
+  'The host can start a multiplayer auction with 1 active player, but the app shows a warning until more bidders join.',
   'Spectators can watch the auction but do not bid and do not count toward start requirements.',
   'Player ratings are intentionally hidden during the live auction to make bidding more strategic and realistic.',
   'Ratings are revealed later in Results and Leaderboard views.',
@@ -151,7 +151,7 @@ const faqs = [
   },
   {
     q: 'How many players are needed to start a multiplayer room?',
-    a: 'At least 2 active non-spectator players must be in the room before the host can start the auction.',
+    a: 'A host can start with 1 active non-spectator player, though the app warns when only one bidder is present.',
   },
   {
     q: 'What happens on the results page?',

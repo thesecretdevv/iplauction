@@ -11,6 +11,9 @@ import AppDialog from '../components/AppDialog';
 
 const kohliImg = '/assets/Kohli.avif';
 const CYAN = '#22D3EE';
+const RIVALS_MAX_SQUAD_SIZE = 13;
+const RIVALS_MAX_OVERSEAS = 5;
+const DEFAULT_PURSE = 120;
 const PLAYER_PHOTOS = ALL_PLAYERS.reduce((acc, player) => {
   acc[player.name.toLowerCase()] = player.photo_url || player.image_url || null;
   return acc;
@@ -49,6 +52,16 @@ function playBidClick() {
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.12);
   } catch (_) {}
+}
+
+function formatCountdown(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return 'Live now';
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  return `${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
 }
 
 // ── Timer progress bar component ─────────────────────────────────────────────
@@ -151,11 +164,15 @@ function AuctionContent() {
     showSquad, setShowSquad, showStats, setShowStats,
     viewingTeam, setViewingTeam, emit, isHost, multiGS, g,
     lobbyPlayers, myName, myTeamId, roomCode,
-    lobbyMode, auctionMode, isSpectator, chatLog
+    lobbyMode, auctionMode, isSpectator, chatLog,
+    playerId, setRoomCode, setLobbyPlayers, setIsHost, setMyName,
+    setPlayMode, setMultiGS, setLobbyMode, setIsSpectator, setRoomMeta
   } = useGame();
 
   const searchParams = useSearchParams();
   const isSpectatorMode = isSpectator || searchParams.get('spectator') === '1';
+  const roomFromQuery = searchParams.get('room');
+  const recoveryAttemptedRef = useRef(false);
 
   const [showTeams, setShowTeams]       = useState(false);
   const [showUpcoming, setShowUpcoming] = useState(false);
@@ -164,6 +181,7 @@ function AuctionContent() {
   const [showHamburger, setShowHamburger] = useState(false);
   const [hamburgerTab, setHamburgerTab] = useState('upcoming'); // 'upcoming'|'sold'|'unsold'|'leaderboard'
   const [expandedTeam, setExpandedTeam] = useState(null);
+  const [showDesktopSettings, setShowDesktopSettings] = useState(false);
   const [dialog, setDialog] = useState(null);
   const playerQueue = gs?.playerQueue ?? [];
   const currentIdx = gs?.currentIdx ?? -1;
@@ -174,6 +192,7 @@ function AuctionContent() {
   }, [humanBid]);
   const closeUpcomingModal = useCallback(() => setShowUpcoming(false), []);
   const closeDialog = useCallback(() => setDialog(null), []);
+  const closeDesktopSettings = useCallback(() => setShowDesktopSettings(false), []);
   const openEndAuctionDialog = useCallback(() => {
     setDialog({
       title: 'End Auction?',
@@ -192,6 +211,13 @@ function AuctionContent() {
       ],
     });
   }, [closeDialog, emit]);
+  const handleTimerDurationChange = useCallback((duration) => {
+    emit('set-timer-duration', { duration });
+  }, [emit]);
+  const handleHostPauseToggle = useCallback(() => {
+    emit(gs?.isPaused ? 'resume-game' : 'pause-game');
+  }, [emit, gs?.isPaused]);
+  const timerOptions = [5, 10, 15, 20, 25];
 
   const upcomingPlayers = useMemo(
     () => playerQueue.slice(currentIdx + 1),
@@ -200,7 +226,7 @@ function AuctionContent() {
   const currentMode = (isMulti ? lobbyMode : auctionMode) || gs?.auctionMode || 'mega';
   const resultsQuery = new URLSearchParams();
   if (currentMode) resultsQuery.set('mode', String(currentMode).toUpperCase());
-  if (isMulti && roomCode) resultsQuery.set('room', roomCode);
+  if (isMulti && (roomCode || gs?.roomCode)) resultsQuery.set('room', roomCode || gs?.roomCode);
   if (!isMulti && effectiveMyTeamId) resultsQuery.set('team', effectiveMyTeamId);
   const resultsHref = resultsQuery.toString() ? `/results?${resultsQuery.toString()}` : '/results';
   const groupedUpcoming = useMemo(() => {
@@ -218,11 +244,74 @@ function AuctionContent() {
     return groups;
   }, [upcomingPlayers]);
 
+  useEffect(() => {
+    if (gs?.phase !== 'finished') return;
+    router.replace(resultsHref);
+  }, [gs?.phase, resultsHref, router]);
+
+  useEffect(() => {
+    if (gs || !roomFromQuery || recoveryAttemptedRef.current) return;
+    if (typeof window === 'undefined') return;
+
+    const savedName = localStorage.getItem('ipl_player_name');
+    if (!savedName || !playerId) return;
+
+    recoveryAttemptedRef.current = true;
+    setPlayMode('multi');
+
+    emit('join-room', { code: roomFromQuery, playerName: savedName, playerId }, (res) => {
+      if (!res?.ok) {
+        recoveryAttemptedRef.current = false;
+        return;
+      }
+
+      setRoomCode(res.code || roomFromQuery);
+      setMyName(savedName);
+      setLobbyPlayers(res.players || []);
+      setIsHost(res.hostId === playerId);
+      setIsSpectator(!!res.isSpectator);
+      if (res.auctionMode) setLobbyMode(res.auctionMode);
+      setRoomMeta({
+        roomType: res.roomType || 'standard',
+        activeTeamIds: res.activeTeamIds || null,
+        rivalsMatch: res.rivalsMatch || null,
+        roomName: res.roomName || null,
+      });
+
+      if (res.roomStatus === 'active' && res.gameState) {
+        setMultiGS(res.gameState);
+      } else if (res.roomStatus === 'finished') {
+        setMultiGS(res.gameState);
+        router.replace(`/results?room=${res.code || roomFromQuery}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}`);
+      } else {
+        router.replace(`/room?room=${res.code || roomFromQuery}`);
+      }
+    });
+  }, [
+    emit,
+    gs,
+    playerId,
+    roomFromQuery,
+    router,
+    setIsHost,
+    setIsSpectator,
+    setLobbyMode,
+    setLobbyPlayers,
+    setMultiGS,
+    setMyName,
+    setPlayMode,
+    setRoomCode,
+    setRoomMeta,
+  ]);
+
   if (!gs) {
     return (
       <div style={{ height: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
         <div style={{ width: 40, height: 40, border: `3px solid ${GOLD}20`, borderTopColor: GOLD, borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, color: GOLD, letterSpacing: 3 }}>CONNECTING TO ARENA...</div>
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, color: GOLD, letterSpacing: 3 }}>SYNCING AUCTION ARENA...</div>
+        <div style={{ color: '#666', fontSize: 12, letterSpacing: 1.5 }}>
+          {roomFromQuery ? `Room ${roomFromQuery}` : 'Rebuilding live auction state'}
+        </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
@@ -251,20 +340,25 @@ function AuctionContent() {
     );
   }
 
-  if (gs.phase === 'finished') { router.push(resultsHref); return null; }
+  if (gs.phase === 'finished') { return null; }
 
   const player      = gs.playerQueue[gs.currentIdx];
   const pRecord     = ALL_PLAYERS.find(p => p.name.toLowerCase() === player.name.toLowerCase());
   const photoUrl    = pRecord?.photo_url || null;
   const stats       = pRecord?.stats || {};
+  const activeTeamIds = gs?.activeTeamIds?.length ? gs.activeTeamIds : TEAMS.map(t => t.id);
+  const displayTeams = TEAMS.filter(t => activeTeamIds.includes(t.id));
+  const isRivals    = gs?.roomType === 'rivals' || currentMode?.toLowerCase() === 'rivals';
+  const rivalsMatch = gs?.rivalsMatch || null;
+  const rivalsCountdown = rivalsMatch?.startAt ? formatCountdown(new Date(rivalsMatch.startAt).getTime() - Date.now()) : null;
   const myTeam      = TEAMS.find(t => t.id === effectiveMyTeamId);
   const bidderTeam  = gs.currentBidder ? TEAMS.find(t => t.id === gs.currentBidder) : null;
   const osCount     = (gs.squads[effectiveMyTeamId] || []).filter(p => p.overseas).length;
   
   // Dynamic limits based on mode
   const isMini      = gs.auctionMode?.toLowerCase() === 'mini';
-  const maxSquadSize= isMini ? 11 : ((gs.playerQueue?.length || 0) <= 200 ? 15 : 25);
-  const maxOverseas = isMini ? 4 : 8;
+  const maxSquadSize= isRivals ? RIVALS_MAX_SQUAD_SIZE : (isMini ? 11 : ((gs.playerQueue?.length || 0) <= 200 ? 15 : 25));
+  const maxOverseas = isRivals ? RIVALS_MAX_OVERSEAS : (isMini ? 4 : 8);
 
   const canBid      = gs.phase === 'bidding'
     && gs.currentBidder !== effectiveMyTeamId
@@ -274,8 +368,9 @@ function AuctionContent() {
   const iLeading    = gs.currentBidder === effectiveMyTeamId;
   const nextPrice   = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
   const isTimerLow  = !gs.isPaused && gs.timer <= 5;
+  const configuredTimer = gs.timerDuration || 10;
 
-  const sortedTeams = [...TEAMS].sort((a, b) => (gs.purses[b.id] || 0) - (gs.purses[a.id] || 0));
+  const sortedTeams = [...displayTeams].sort((a, b) => (gs.purses[b.id] || 0) - (gs.purses[a.id] || 0));
 
   return (
     <div className="ac-app-root" style={{ fontFamily: "'Barlow Condensed', sans-serif", background: BG, color: '#fff', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', overscrollBehavior: 'none', WebkitTapHighlightColor: 'transparent' }}>
@@ -295,15 +390,37 @@ function AuctionContent() {
 
         /* ── TOP BAR ── */
         .ac-top {
-          display: flex; align-items: center;
-          gap: 6px; padding: 0 10px; height: 48px; flex-shrink: 0;
-          background: #09090c; border-bottom: 1px solid ${BORDER};
-          position: relative; z-index: 50;
+          background: #09090c;
+          border-bottom: 1px solid ${BORDER};
+          position: relative;
+          z-index: 50;
+          flex-shrink: 0;
         }
-
+        .ac-top-main {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-height: 48px;
+          padding: 0 10px;
+        }
+        .ac-top-left {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+        }
+        .ac-top-right {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-shrink: 0;
+        }
         .ac-top-brand { font-family:'Bebas Neue',sans-serif; font-size: 16px; color:${GOLD}; letter-spacing:2px; white-space:nowrap; flex-shrink:0; }
         .ac-top-badge-sm { background:${GOLD}18; border:1px solid ${GOLD}30; padding:2px 6px; font-size:9px; color:${GOLD}; font-weight:600; letter-spacing:1px; white-space:nowrap; border-radius:3px; }
         .ac-top-live-sm  { background:#22D3EE18; border:1px solid #22D3EE30; padding:2px 5px; font-size:9px; color:#22D3EE; letter-spacing:1px; white-space:nowrap; border-radius:3px; }
+        .ac-mobile-host-bar { display: none; }
 
         /* Responsive timer — big display */
         .ac-timer-box {
@@ -351,6 +468,7 @@ function AuctionContent() {
           display:flex; flex-direction:column; align-items:center;
           padding:12px 14px 4px; width:100%;
           overscroll-behavior: contain;
+          overflow-anchor: none;
         }
 
         /* Player compact pill on mobile */
@@ -358,6 +476,8 @@ function AuctionContent() {
           width:100%; max-width:480px; display:flex; align-items:center; gap:10px;
           background:#0f0f12; border:1px solid ${BORDER}; padding:10px 12px; margin-bottom:8px;
           animation: fadeUp .3s ease both; border-radius: 10px;
+          min-height: 72px;
+          flex-shrink: 0;
         }
         .ac-player-avatar {
           width:48px; height:48px; border-radius:50%; overflow:hidden; flex-shrink:0;
@@ -370,6 +490,12 @@ function AuctionContent() {
         .ac-bid-area {
           width:100%; max-width:480px; text-align:center; padding:0 0 6px;
           animation: fadeUp .3s ease .05s both;
+          min-height: 146px;
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:flex-start;
+          flex-shrink:0;
         }
         .ac-bid-label { font-size:9px; letter-spacing:4px; color:#333; text-transform:uppercase; margin-bottom:2px; }
         .ac-bid-amount {
@@ -380,10 +506,19 @@ function AuctionContent() {
         .ac-leading-pill {
           display:inline-flex; align-items:center; gap:8px; margin-top:4px;
           border-radius:20px; padding:4px 12px;
+          min-height: 30px;
         }
 
         /* Bid log */
-        .ac-bid-log { width:100%; max-width:480px; }
+        .ac-bid-log {
+          width:100%;
+          max-width:480px;
+          min-height: 118px;
+          display:flex;
+          flex-direction:column;
+          justify-content:flex-start;
+          flex-shrink:0;
+        }
         .ac-log-row { display:flex; justify-content:space-between; align-items:center;
           padding:5px 8px; border-radius:4px; margin-bottom:2px; }
 
@@ -399,6 +534,7 @@ function AuctionContent() {
           width:100%; max-width:480px;
           display:flex; align-items:center; gap:8px;
           margin:10px 0 8px;
+          flex-shrink:0;
         }
         .ac-purse-label {
           font-size:11px; color:#888; white-space:nowrap; flex-shrink:0;
@@ -439,6 +575,7 @@ function AuctionContent() {
         .ac-mob-tabs {
           width:100%; max-width:480px; display:flex;
           border-bottom:1px solid #1a1a1a; margin-bottom:4px;
+          flex-shrink:0;
         }
         @media(min-width:861px){ .ac-mob-tabs { display:none !important; } }
         .ac-mob-tab {
@@ -450,7 +587,7 @@ function AuctionContent() {
         .ac-mob-tab.active { color:#fff; border-bottom-color:${GOLD}; }
 
         /* Tab content area — scrollable */
-        .ac-tab-content { width:100%; max-width:480px; padding:8px 0 20px; overscroll-behavior: contain; }
+        .ac-tab-content { width:100%; max-width:480px; padding:8px 0 20px; overscroll-behavior: contain; flex-shrink:0; }
         @media(min-width:861px){ .ac-tab-content { display:none !important; } }
 
         /* Team row in tab */
@@ -510,15 +647,75 @@ function AuctionContent() {
           background:#ffffff04; padding:3px 10px; border-radius:4px; border:1px solid ${BORDER}; }
         @media(max-width:860px){ .ac-ticker { display:none; } }
 
-        /* Host icon buttons (always visible on mobile) */
-        .ac-host-icon { background:transparent; border:1px solid #2a2a2a; color:#888;
-          width:32px; height:32px; border-radius:6px; font-size:14px; cursor:pointer;
-          display:flex; align-items:center; justify-content:center; flex-shrink:0;
-          transition:all .18s; }
-        .ac-host-icon:hover { border-color:#555; color:#fff; }
-        .ac-host-icon.red { border-color:#ef444440; color:#ef4444; }
-        .ac-host-btn-text { display:none; }
-        .ac-host-btn-icon { display:inline-flex; align-items:center; justify-content:center; line-height:1; }
+        .ac-host-controls { display:none; }
+        .ac-host-action {
+          height:36px;
+          padding:0 14px;
+          border-radius:10px;
+          border:1px solid #2a2a2a;
+          background:#111318;
+          color:#d1d5db;
+          font-family:'Bebas Neue',sans-serif;
+          font-size:14px;
+          letter-spacing:1.5px;
+          cursor:pointer;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          white-space:nowrap;
+          transition:all .18s;
+        }
+        .ac-host-action:hover { border-color:#555; color:#fff; }
+        .ac-host-action.active {
+          border-color:#22c55e55;
+          color:#22c55e;
+          background:rgba(34,197,94,0.08);
+        }
+        .ac-host-action.danger {
+          border-color:#ef444440;
+          color:#ef4444;
+          background:rgba(239,68,68,0.08);
+        }
+        .ac-host-action.danger:hover { border-color:#ef4444; }
+        .ac-settings-btn {
+          width:36px;
+          height:36px;
+          border-radius:10px;
+          border:1px solid #2a2a2a;
+          background:#111318;
+          color:#aaa;
+          font-size:16px;
+          cursor:pointer;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          flex-shrink:0;
+          transition:all .18s;
+        }
+        .ac-settings-btn:hover,
+        .ac-settings-btn.active {
+          border-color:${GOLD}55;
+          color:${GOLD};
+          background:${GOLD}14;
+        }
+        .ac-desktop-settings-backdrop {
+          position:fixed;
+          inset:0;
+          background:transparent;
+          z-index:55;
+        }
+        .ac-desktop-settings {
+          position:absolute;
+          top:calc(100% + 10px);
+          right:12px;
+          width:min(320px, calc(100vw - 24px));
+          padding:16px;
+          background:#0b0c10;
+          border:1px solid ${BORDER};
+          border-radius:16px;
+          box-shadow:0 24px 60px rgba(0,0,0,0.55);
+          z-index:60;
+        }
         /* Hamburger */
         .ac-hamburger { background:transparent; border:1px solid #2a2a2a; color:#888;
           width:32px; height:32px; border-radius:6px; font-size:16px; cursor:pointer;
@@ -531,30 +728,55 @@ function AuctionContent() {
            .ac-desktop-only { display: inline-flex !important; }
            .ac-mobile-only { display: none !important; }
            .ac-hamburger { display: none !important; }
+           .ac-host-controls { display:flex; align-items:center; gap:8px; }
+           .ac-top-main { padding: 0 24px; min-height: 56px; gap: 12px; }
+           .ac-desktop-settings { right: 24px; }
 
            /* Desktop Navbar Enhancements */
-           .ac-top { padding: 0 24px; height: 56px; gap: 12px; }
            .ac-top-brand { font-size: 20px; letter-spacing: 3px; margin-right: 8px; }
            .ac-top-badge-sm { font-size: 13px; padding: 6px 12px; border-radius: 6px; letter-spacing: 2px; }
            .ac-top-live-sm { font-size: 13px; padding: 6px 12px; border-radius: 6px; letter-spacing: 2px; }
         }
         @media(max-width: 860px) {
-          .ac-host-icon {
-            width: auto;
-            min-width: 58px;
-            height: 32px;
-            padding: 0 10px;
-            border-radius: 999px;
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-            background: #111318;
+          .ac-top-main {
+            padding: 8px 10px;
           }
-          .ac-host-icon.red {
-            background: rgba(239,68,68,0.08);
+          .ac-mobile-host-bar {
+            display:flex;
+            gap:8px;
+            padding:0 10px 10px;
           }
-          .ac-host-btn-text { display: inline; }
-          .ac-host-btn-icon { display: none; }
+          .ac-host-action {
+            flex:1;
+            height:34px;
+            padding:0 12px;
+            border-radius:999px;
+            font-size:12px;
+            letter-spacing:1.2px;
+          }
+          .ac-scroll {
+            padding: 10px 12px 12px;
+          }
+          .ac-bid-area {
+            min-height: 154px;
+          }
+          .ac-bid-log {
+            min-height: 110px;
+          }
+          .ac-bid-row,
+          .ac-mob-tabs {
+            position: sticky;
+            bottom: 0;
+            z-index: 5;
+            background: ${BG};
+          }
+          .ac-bid-row {
+            padding-top: 8px;
+            margin-bottom: 0;
+          }
+          .ac-mob-tabs {
+            padding-top: 6px;
+          }
         }
       `}</style>
 
@@ -563,11 +785,11 @@ function AuctionContent() {
         onClose={() => { setShowSquad(false); setViewingTeam(null); }} 
         squads={gs.squads} 
         myTeamId={viewingTeam || effectiveMyTeamId} 
-        TEAMS={TEAMS}
+        TEAMS={displayTeams}
         maxSquad={maxSquadSize}
         maxOverseas={maxOverseas}
       />
-      <StatsModal  isOpen={showStats} onClose={() => setShowStats(false)} gs={multiGS || g.current} TEAMS={TEAMS} myTeamId={myTeamId} />
+      <StatsModal  isOpen={showStats} onClose={() => setShowStats(false)} gs={multiGS || g.current} TEAMS={displayTeams} myTeamId={myTeamId} />
       <UpcomingModal
         isOpen={showUpcoming}
         onClose={closeUpcomingModal}
@@ -588,68 +810,165 @@ function AuctionContent() {
 
       {/* ── TOP BAR ── */}
       <div className="ac-top">
-        {/* Left: brand + badges */}
-        <div style={{ display:'flex', alignItems:'center', gap:5, flex:1, minWidth:0, overflow:'hidden' }}>
-          {isMulti && roomCode ? (
-            <div className="ac-top-brand" onClick={() => {
-              navigator.clipboard.writeText(roomCode);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            }} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }} title="Click to copy room code">
-              {copied ? <span style={{ color: '#22c55e', fontSize: 13, transform: 'translateY(1px)' }}>COPIED!</span> : roomCode}
-            </div>
-          ) : (
-            <div className="ac-top-brand">IPL</div>
-          )}
-          <div className="ac-top-badge-sm">{gs.currentSetName}</div>
-          {isMulti && <div className="ac-top-live-sm">LIVE</div>}
-          
-          {/* Desktop Connected Teams */}
-          {isMulti && (
-            <div className="ac-desktop-only" style={{ marginLeft: 6, background: '#111', border: `1px solid ${BORDER}`, color: '#aaa', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 6 }}>
-              <span style={{ fontSize: 8 }}>🟢</span>
-              <span style={{ fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'", fontWeight: 700 }}>
-                {lobbyPlayers?.filter(p => !p.isSpectator && p.teamId).length || 0} / 10 TEAMS
+        <div className="ac-top-main">
+          <div className="ac-top-left">
+            {isMulti && roomCode ? (
+              <div className="ac-top-brand" onClick={() => {
+                navigator.clipboard.writeText(roomCode);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }} title="Click to copy room code">
+                {copied ? <span style={{ color: '#22c55e', fontSize: 13, transform: 'translateY(1px)' }}>COPIED!</span> : roomCode}
+              </div>
+            ) : (
+              <div className="ac-top-brand">IPL</div>
+            )}
+            <div className="ac-top-badge-sm">{gs.currentSetName}</div>
+            {isMulti && <div className="ac-top-live-sm">LIVE</div>}
+            
+            {isMulti && (
+              <div className="ac-desktop-only" style={{ marginLeft: 6, background: '#111', border: `1px solid ${BORDER}`, color: '#aaa', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 6 }}>
+                <span style={{ fontSize: 8 }}>🟢</span>
+                <span style={{ fontSize: 13, letterSpacing: 2, fontFamily: "'Barlow Condensed'", fontWeight: 700 }}>
+                  {lobbyPlayers?.filter(p => !p.isSpectator && p.teamId).length || 0} / {displayTeams.length} {isRivals ? 'RIVALS' : 'TEAMS'}
+                </span>
+              </div>
+            )}
+            
+            <button className="ac-top-btn ac-desktop-only" onClick={() => setShowUpcoming(true)} style={{ marginLeft: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>UPCOMING PLAYERS</span>
+              <span style={{ background: 'rgba(34,211,238,0.2)', padding: '2px 6px', borderRadius: 4, fontSize: 9 }}>{upcomingPlayers.length}</span>
+            </button>
+          </div>
+
+          <div className="ac-top-right">
+            {isMulti && isHost && (
+              <>
+                <button
+                  className={`ac-settings-btn ac-desktop-only${showDesktopSettings ? ' active' : ''}`}
+                  title="Auction settings"
+                  onClick={() => setShowDesktopSettings(prev => !prev)}
+                >
+                  ⚙
+                </button>
+                <div className="ac-host-controls">
+                  <button
+                    className={`ac-host-action${gs.isPaused ? ' active' : ''}`}
+                    onClick={handleHostPauseToggle}
+                  >
+                    {gs.isPaused ? 'RESUME' : 'PAUSE'}
+                  </button>
+                  <button className="ac-host-action danger" onClick={openEndAuctionDialog}>
+                    END AUCTION
+                  </button>
+                </div>
+              </>
+            )}
+
+            <div className={`ac-timer-box${isTimerLow ? ' low' : ''}`}
+              style={{ color: gs.isPaused ? '#555' : isTimerLow ? '#ef4444' : GOLD }}>
+              <span style={{ fontSize:22, lineHeight:1, letterSpacing:1,
+                animation: isTimerLow && !gs.isPaused ? 'tPulse .5s infinite' : 'none' }}>
+                {gs.isPaused ? '⏸' : String(gs.timer).padStart(2,'0')}
               </span>
+              <span style={{ fontSize:8, letterSpacing:2, color:'#555', fontFamily:"'Barlow Condensed'", fontWeight:700, marginTop:1 }}>SEC</span>
             </div>
-          )}
-          
-          {/* Desktop Upcoming Button */}
-          <button className="ac-top-btn ac-desktop-only" onClick={() => setShowUpcoming(true)} style={{ marginLeft: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>UPCOMING PLAYERS</span>
-            <span style={{ background: 'rgba(34,211,238,0.2)', padding: '2px 6px', borderRadius: 4, fontSize: 9 }}>{upcomingPlayers.length}</span>
-          </button>
+
+            <button className="ac-hamburger" onClick={() => setShowHamburger(true)}>
+              ☰
+            </button>
+          </div>
         </div>
 
-        {/* Host icons — always visible on mobile */}
+        {isRivals && rivalsMatch && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '0 12px 10px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <img src={`/assets/${rivalsMatch.homeTeam}.png`} style={{ width: 26, height: 26, objectFit: 'contain' }} alt="" />
+              <span style={{ color: '#cbd5e1', fontSize: 12, letterSpacing: 1.5, fontWeight: 700 }}>
+                {rivalsMatch.homeTeam} VS {rivalsMatch.awayTeam}
+              </span>
+              <img src={`/assets/${rivalsMatch.awayTeam}.png`} style={{ width: 26, height: 26, objectFit: 'contain' }} alt="" />
+              {rivalsMatch.isHighProfile && (
+                <span style={{ background: 'rgba(232,184,75,0.14)', border: `1px solid ${GOLD}40`, color: GOLD, fontSize: 10, fontWeight: 800, letterSpacing: 1.2, padding: '3px 8px', borderRadius: 999 }}>
+                  MARQUEE FIXTURE
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#94a3b8', fontSize: 11, letterSpacing: 1 }}>
+              <span>{rivalsMatch.venue}</span>
+              <span style={{ color: '#334155' }}>•</span>
+              <span style={{ color: CYAN, fontWeight: 700 }}>MATCH START {rivalsCountdown}</span>
+            </div>
+          </div>
+        )}
+
         {isMulti && isHost && (
-          <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-            <button className="ac-host-icon" title={gs.isPaused ? 'Resume' : 'Pause'}
-              onClick={() => gs.isPaused ? emit('resume-game') : emit('pause-game')}>
-              <span className="ac-host-btn-icon">{gs.isPaused ? '▶' : '⏸'}</span>
-              <span className="ac-host-btn-text">{gs.isPaused ? 'RESUME' : 'PAUSE'}</span>
+          <div className="ac-mobile-host-bar">
+            <button
+              className={`ac-host-action${gs.isPaused ? ' active' : ''}`}
+              onClick={handleHostPauseToggle}
+            >
+              {gs.isPaused ? 'RESUME' : 'PAUSE'}
             </button>
-            <button className="ac-host-icon red" title="End auction"
-              onClick={openEndAuctionDialog}>
-              <span className="ac-host-btn-icon">⏹</span>
-              <span className="ac-host-btn-text">END</span>
+            <button className="ac-host-action danger" onClick={openEndAuctionDialog}>
+              END AUCTION
             </button>
           </div>
         )}
 
-        {/* Timer box */}
-        <div className={`ac-timer-box${isTimerLow ? ' low' : ''}`}
-          style={{ color: gs.isPaused ? '#555' : isTimerLow ? '#ef4444' : GOLD }}>
-          <span style={{ fontSize:22, lineHeight:1, letterSpacing:1,
-            animation: isTimerLow && !gs.isPaused ? 'tPulse .5s infinite' : 'none' }}>
-            {gs.isPaused ? '⏸' : String(gs.timer).padStart(2,'0')}
-          </span>
-          <span style={{ fontSize:8, letterSpacing:2, color:'#555', fontFamily:"'Barlow Condensed'", fontWeight:700, marginTop:1 }}>SEC</span>
-        </div>
+        {showDesktopSettings && isMulti && isHost && (
+          <>
+            <div className="ac-desktop-settings-backdrop" onClick={closeDesktopSettings} />
+            <div className="ac-desktop-settings">
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom:14 }}>
+                <div>
+                  <div style={{ fontFamily:"'Bebas Neue'", fontSize:22, color:GOLD, letterSpacing:2 }}>AUCTION SETTINGS</div>
+                  <div style={{ color:'#666', fontSize:11, letterSpacing:1.2, marginTop:2 }}>Host controls for the live room</div>
+                </div>
+                <button
+                  onClick={closeDesktopSettings}
+                  style={{ background:'transparent', border:'none', color:'#666', fontSize:20, cursor:'pointer', lineHeight:1 }}
+                >
+                  ✕
+                </button>
+              </div>
 
-        <button className="ac-hamburger" onClick={() => setShowHamburger(true)}>
-          ☰
-        </button>
+              <div style={{ background:'#0f0f12', border:'1px solid #1c1c1c', borderRadius:12, padding:'14px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom:10 }}>
+                  <div>
+                    <div style={{ color:'#ddd', fontSize:15, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}>⏱ Bid Timer</div>
+                    <div style={{ color:'#555', fontSize:11, marginTop:3 }}>Change the default countdown for every bid round.</div>
+                  </div>
+                  <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:24, letterSpacing:1 }}>{configuredTimer}s</div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(5, minmax(0, 1fr))', gap:8 }}>
+                  {timerOptions.map(t => (
+                    <button
+                      key={t}
+                      onClick={() => {
+                        handleTimerDurationChange(t);
+                        closeDesktopSettings();
+                      }}
+                      style={{
+                        padding:'10px 0',
+                        background: configuredTimer === t ? GOLD : '#18181b',
+                        color: configuredTimer === t ? '#000' : '#bbb',
+                        border:`1px solid ${configuredTimer === t ? GOLD : '#2a2a2a'}`,
+                        borderRadius:8,
+                        fontFamily:"'Barlow Condensed'",
+                        fontWeight:700,
+                        fontSize:14,
+                        cursor:'pointer',
+                      }}
+                    >
+                      {t}s
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── BODY ── */}
@@ -696,7 +1015,7 @@ function AuctionContent() {
               <div style={{ marginTop:16, textAlign:'left' }}>
                 <div style={{ fontFamily:"'Bebas Neue'", fontSize:13, color:'#444', letterSpacing:3, marginBottom:8 }}>BID LOG</div>
                 {gs.bidLog.map((b,i) => {
-                  const t = TEAMS.find(t => t.id === b.teamId);
+                  const t = displayTeams.find(t => t.id === b.teamId) || TEAMS.find(t => t.id === b.teamId);
                   return (
                     <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'4px 8px', borderRadius:4, background:i===0?`${t?.color}18`:'transparent', marginBottom:2, border:i===0?`1px solid ${t?.color}30`:'none' }}>
                       <span style={{ color:t?.color, fontWeight:700, fontSize:12 }}>{t?.short}</span>
@@ -748,6 +1067,7 @@ function AuctionContent() {
                     <div className="ac-player-meta" style={{ color:ROLE_C[player.role], display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <span style={{ fontSize: 10, background: `${ROLE_C[player.role]}20`, color: ROLE_C[player.role], padding: '1px 5px', borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>{ROLE_L[player.role]}</span>
                       {player.overseas && <span style={{ fontSize: 9, background: '#6366f120', color: '#818cf8', padding: '1px 5px', borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>OS</span>}
+                      {player.isWildcard && <span style={{ fontSize: 9, background: `${GOLD}18`, color: GOLD, padding: '1px 5px', borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>WILDCARD</span>}
                     </div>
                     <div style={{ fontSize:10, color:'#444', letterSpacing:.5, marginTop:2 }}>Base: {fmt(player.base)} · #{gs.currentIdx + 1}/{gs.playerQueue.length}</div>
                   </div>
@@ -794,7 +1114,7 @@ function AuctionContent() {
                             {canBid ? (
                               <span style={{ fontFamily:"'Bebas Neue'", fontSize:'1.8rem', letterSpacing:3 }}>BID {fmtIncrement(gs.currentBid, nextPrice)}</span>
                             ) : (
-                              <span style={{ fontFamily:"'Bebas Neue'", fontSize:'1.5rem', letterSpacing:2 }}>{player.overseas && osCount >= 8 ? 'MAX 8 OVERSEAS' : 'INSUFFICIENT FUNDS'}</span>
+                              <span style={{ fontFamily:"'Bebas Neue'", fontSize:'1.5rem', letterSpacing:2 }}>{player.overseas && osCount >= maxOverseas ? `MAX ${maxOverseas} OVERSEAS` : 'INSUFFICIENT FUNDS'}</span>
                             )}
                           </button>
                         )}
@@ -812,7 +1132,7 @@ function AuctionContent() {
                 {gs.bidLog.length > 0 && (
                   <div className="ac-bid-log">
                     {gs.bidLog.slice(0,4).map((b,i) => {
-                      const t = TEAMS.find(t => t.id === b.teamId);
+                      const t = displayTeams.find(t => t.id === b.teamId) || TEAMS.find(t => t.id === b.teamId);
                       return (
                         <div key={i} className="ac-log-row" style={{ background:i===0?`${t?.color}12`:'transparent', animation:i===0?'rowIn .2s ease':'none', opacity:Math.max(.1,1-i*.2) }}>
                           <div style={{ display:'flex', alignItems:'center', gap:7 }}>
@@ -861,7 +1181,7 @@ function AuctionContent() {
                       </>
                     ) : (
                       <span style={{ fontSize:'0.85rem', fontFamily:"'Bebas Neue'", letterSpacing:1 }}>
-                        {player.overseas && osCount >= 8 ? 'MAX 8 OVERSEAS' : 'CANNOT BID'}
+                        {player.overseas && osCount >= maxOverseas ? `MAX ${maxOverseas} OVERSEAS` : 'CANNOT BID'}
                       </span>
                     )}
                   </button>
@@ -886,7 +1206,7 @@ function AuctionContent() {
                   const isLead = team.id === gs.currentBidder;
                   const isMe   = team.id === effectiveMyTeamId;
                   const squad  = gs.squads[team.id] || [];
-                  const spent  = 120 - (gs.purses[team.id] || 0);
+                  const spent  = DEFAULT_PURSE - (gs.purses[team.id] || 0);
                   const isOpen = expandedTeam === team.id;
                   const byRole = squad.reduce((a,p) => { (a[p.role]=a[p.role]||[]).push(p); return a; }, {});
                   return (
@@ -944,14 +1264,14 @@ function AuctionContent() {
                           <div style={{ color:'#ddd', fontSize:14, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}>⏱ Bid Timer</div>
                           <div style={{ color:'#555', fontSize:10, marginTop:2 }}>Time allowed for each bid round</div>
                         </div>
-                        <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:20, letterSpacing:1 }}>{gs.timer}s</div>
+                        <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:20, letterSpacing:1 }}>{configuredTimer}s</div>
                       </div>
                       {isHost && (
                         <div style={{ display:'flex', gap:6 }}>
-                          {[5,10,15,20,25].map(t => (
-                            <button key={t} onClick={() => emit('set-timer', { duration: t })}
-                              style={{ flex:1, padding:'7px 0', background: gs.timerDuration===t ? GOLD : '#1a1a1a',
-                                color: gs.timerDuration===t ? '#000' : '#888', border:'none', borderRadius:6,
+                          {timerOptions.map(t => (
+                            <button key={t} onClick={() => handleTimerDurationChange(t)}
+                              style={{ flex:1, padding:'7px 0', background: configuredTimer===t ? GOLD : '#1a1a1a',
+                                color: configuredTimer===t ? '#000' : '#888', border:'none', borderRadius:6,
                                 fontFamily:"'Barlow Condensed'", fontWeight:700, fontSize:13, cursor:'pointer' }}>
                               {t}s
                             </button>
@@ -967,7 +1287,7 @@ function AuctionContent() {
                           <div style={{ color:'#555', fontSize:10, marginTop:2 }}>Cannot be changed after room creation</div>
                         </div>
                         <span style={{ background:`${GOLD}18`, border:`1px solid ${GOLD}40`, color:GOLD, fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:5, letterSpacing:.5 }}>
-                          {(isMulti ? lobbyMode : auctionMode) === 'mega' ? 'Mega Auction' : 'Mini Auction'}
+                          {isRivals ? 'Rivals Auction' : (isMulti ? lobbyMode : auctionMode) === 'mega' ? 'Mega Auction' : 'Mini Auction'}
                         </span>
                       </div>
                     </div>
@@ -978,21 +1298,6 @@ function AuctionContent() {
                         <span style={{ color:'#22c55e', fontFamily:"'Bebas Neue'", fontSize:20, letterSpacing:1 }}>₹120 Cr</span>
                       </div>
                     </div>
-                    {/* Host Controls */}
-                    {isHost && (
-                      <div style={{ marginTop:14, display:'flex', gap:8 }}>
-                        <button onClick={() => gs.isPaused ? emit('resume-game') : emit('pause-game')}
-                          style={{ flex:1, padding:'13px', background:gs.isPaused?'#22c55e18':'#1a1a1a', border:`1px solid ${gs.isPaused?'#22c55e40':'#2a2a2a'}`,
-                            color:gs.isPaused?'#22c55e':'#888', borderRadius:10, fontFamily:"'Bebas Neue'", fontSize:15, letterSpacing:1, cursor:'pointer' }}>
-                          {gs.isPaused ? '▶ RESUME' : '⏸ PAUSE'}
-                        </button>
-                        <button onClick={openEndAuctionDialog}
-                          style={{ flex:1, padding:'13px', background:'#ef444414', border:'1px solid #ef444440',
-                            color:'#ef4444', borderRadius:10, fontFamily:"'Bebas Neue'", fontSize:15, letterSpacing:1, cursor:'pointer' }}>
-                          ⏹ END
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
                 {mobileTab === 'chat' && (
@@ -1008,7 +1313,7 @@ function AuctionContent() {
 
         {/* RIGHT: teams */}
         <div className="ac-right">
-          <div style={{ padding:'6px 12px', fontSize:9, letterSpacing:3, color:'#444', borderBottom:`1px solid ${BORDER}`, flexShrink:0 }}>FRANCHISES</div>
+          <div style={{ padding:'6px 12px', fontSize:9, letterSpacing:3, color:'#444', borderBottom:`1px solid ${BORDER}`, flexShrink:0 }}>{isRivals ? 'RIVALS' : 'FRANCHISES'}</div>
           <div className="ac-right-row">
             {sortedTeams.map(team => {
               const isLead = team.id === gs.currentBidder, isMe = team.id === effectiveMyTeamId;
@@ -1051,7 +1356,7 @@ function AuctionContent() {
         <span style={{ fontSize:9, color:GOLD, letterSpacing:4, fontWeight:900, flexShrink:0 }}>SALES</span>
         <span style={{ fontSize:8, color:'#444', letterSpacing:1, marginLeft: 12, marginRight: 12, flexShrink:0, opacity: 0.8 }}>DATA: IPLT20.COM &amp; CRICAPI</span>
         {(gs.auctionLog||[]).slice(0,12).map((item,i) => {
-          const t = TEAMS.find(t => t.id === item.bidder);
+          const t = displayTeams.find(t => t.id === item.bidder);
           return (
             <div key={i} className="ac-ticker-item">
               <span>{item.player.name}</span>
@@ -1148,7 +1453,7 @@ function AuctionContent() {
                 return sold.length === 0
                   ? <div style={{ textAlign:'center', color:'#444', padding:32 }}>No players sold yet</div>
                   : sold.map((item,i) => {
-                    const t = TEAMS.find(t => t.id === item.bidder);
+                    const t = displayTeams.find(t => t.id === item.bidder);
                     return (
                       <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid #141414' }}>
                         <div>
@@ -1182,12 +1487,12 @@ function AuctionContent() {
 
               {/* LEADERBOARD */}
               {hamburgerTab === 'leaderboard' && (() => {
-                const board = [...TEAMS]
-                  .map(t => ({ team:t, topBid: Math.max(...((gs.auctionLog||[]).filter(x=>x.sold&&x.bidder===t.id).map(x=>x.price)), 0), spent: 120-(gs.purses[t.id]||0) }))
+                const board = [...displayTeams]
+                  .map(t => ({ team:t, topBid: Math.max(...((gs.auctionLog||[]).filter(x=>x.sold&&x.bidder===t.id).map(x=>x.price)), 0), spent: DEFAULT_PURSE-(gs.purses[t.id]||0) }))
                   .sort((a,b) => b.topBid - a.topBid);
                 return (
                   <div>
-                    <div style={{ fontSize:9, letterSpacing:3, color:'#555', marginBottom:12 }}>HIGHEST SINGLE BID · ALL TEAMS</div>
+                    <div style={{ fontSize:9, letterSpacing:3, color:'#555', marginBottom:12 }}>HIGHEST SINGLE BID · {isRivals ? 'TODAY’S RIVALS' : 'ALL TEAMS'}</div>
                     {board.map((row,i) => (
                       <div key={row.team.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:'1px solid #141414' }}>
                         <span style={{ color:'#333', fontSize:12, fontFamily:"'Bebas Neue'", width:18 }}>#{i+1}</span>

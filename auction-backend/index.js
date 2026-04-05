@@ -1,10 +1,34 @@
 import express from 'express';
 import { createServer } from 'http';
+import { createRequire } from 'module';
 import { Server } from 'socket.io';
 
 import { Redis } from '@upstash/redis';
+import {
+    buildRivalsMatchSnapshot,
+    buildRivalsPlayerPool,
+    IPL_2026_MATCHES,
+    RIVALS_MAX_OVERSEAS,
+    RIVALS_MAX_SQUAD_SIZE,
+    RIVALS_PURSE,
+    RIVALS_TIMER_SECONDS,
+} from '../shared/rivalsSchedule.mjs';
+
+const require = createRequire(import.meta.url);
+const ALL_PLAYERS = require('../boom/app/data/Players.json');
 
 const app = express();
+app.use((req, res, next) => {
+    const origin = req.headers.origin || '*';
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin');
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(204);
+    }
+    return next();
+});
 app.use(express.json());
 
 const redis = new Redis({
@@ -15,7 +39,7 @@ const redis = new Redis({
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
-        origin: "*",
+        origin: ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001", "https://bidwicket.onrender.com"],
         methods: ["GET", "POST"]
     },
     // Optimize for low latency
@@ -48,6 +72,80 @@ const TEAMS = [
     { id: "GT", name: "Gujarat Titans", short: "GT", color: "#4DD0E1" },
     { id: "LSG", name: "Lucknow Super Giants", short: "LSG", color: "#81D4FA" },
 ];
+
+const TEAM_IDS = TEAMS.map((team) => team.id);
+
+function getActiveTeamIds(room) {
+    return Array.isArray(room?.activeTeamIds) && room.activeTeamIds.length
+        ? room.activeTeamIds
+        : TEAM_IDS;
+}
+
+function getTeamLimit(room) {
+    return room?.roomType === 'rivals' ? getActiveTeamIds(room).length : TEAMS.length;
+}
+
+function getRoomPlayerLimit(room) {
+    return room?.roomType === 'rivals' ? 2 : 10;
+}
+
+function getVisiblePlayers(room) {
+    return Object.values(room?.players || {}).filter(player => !player.offline);
+}
+
+function getActivePlayers(room) {
+    return Object.values(room?.players || {}).filter(player => !player.isSpectator && !player.offline);
+}
+
+function getRoomParticipantSummary(room) {
+    return Object.values(room?.players || {})
+        .filter(player => !player.isSpectator)
+        .map(player => ({
+            id: player.id,
+            name: player.name,
+            teamId: player.teamId || null,
+            isHost: !!player.isHost,
+        }));
+}
+
+function getLobbyStatePayload(room) {
+    return {
+        players: Object.values(room.players).map(player => ({ ...player, socketId: undefined })),
+        auctionMode: room.auctionMode,
+        hostId: room.hostId,
+        roomType: room.roomType || 'standard',
+        activeTeamIds: getActiveTeamIds(room),
+        rivalsMatch: room.rivalsMatch || null,
+        roomName: room.name,
+    };
+}
+
+function getCurrentMatchStatus(matchKey, now = new Date()) {
+    return buildRivalsMatchSnapshot(matchKey, now);
+}
+
+async function findOpenRivalsRoom(matchKey) {
+    const publicCodes = await redis.smembers('public_rooms');
+    for (const code of publicCodes) {
+        const room = await getRoom(code);
+        if (!room || room.roomType !== 'rivals' || room.rivalsMatch?.key !== matchKey || isRoomOver(room)) continue;
+        if (getActivePlayers(room).length < getRoomPlayerLimit(room)) {
+            return room;
+        }
+    }
+    return null;
+}
+
+function startRivalsAuction(room) {
+    const playerQueue = buildRivalsPlayerPool(ALL_PLAYERS, room.rivalsMatch);
+    room.started = true;
+    room.status = 'active';
+    room.auctionMode = 'rivals';
+    room.gameState = createGameState(playerQueue, {
+        purse: RIVALS_PURSE,
+        timerDuration: RIVALS_TIMER_SECONDS,
+    });
+}
 
 function isRoomOver(room) {
     return room?.status === 'finished'
@@ -89,6 +187,9 @@ app.get('/api/rooms', async (req, res) => {
                     spectators: Object.values(r.players).filter(p => p.isSpectator && !p.offline).length,
                     status: r.status,
                     mode: r.auctionMode,
+                    roomType: r.roomType || 'standard',
+                    activeTeamIds: getActiveTeamIds(r),
+                    rivalsMatch: r.rivalsMatch || null,
                     // Useful for discovery:
                     currentPlayer: r.gameState?.playerQueue[r.gameState?.currentIdx]?.name || null
                 });
@@ -104,6 +205,10 @@ app.get('/api/rooms', async (req, res) => {
             spectators: room.spectators,
             status: 'finished',
             mode: room.mode,
+            roomType: room.roomType || 'standard',
+            activeTeamIds: room.activeTeamIds || TEAM_IDS,
+            rivalsMatch: room.rivalsMatch || null,
+            participants: room.participants || [],
             finishedAt: room.finishedAt,
             totalSold: room.totalSold,
             topBuy: room.topBuy || null
@@ -122,6 +227,20 @@ app.get('/api/completed-rooms/:code', async (req, res) => {
     res.json(snapshot);
 });
 
+app.get('/api/rivals/matches', async (req, res) => {
+    try {
+        res.setHeader('Cache-Control', 'no-store');
+        const now = new Date();
+        res.json({
+            now: now.toISOString(),
+            matches: IPL_2026_MATCHES.map(match => buildRivalsMatchSnapshot(match, now)),
+        });
+    } catch (e) {
+        console.error('[REST] Rivals matches fetch error:', e);
+        res.status(500).json({ error: 'Failed to fetch Rivals schedule' });
+    }
+});
+
 // GET /api/rooms/:code — room details
 app.get('/api/rooms/:code', async (req, res) => {
     const room = await getRoom(req.params.code?.toUpperCase());
@@ -131,6 +250,9 @@ app.get('/api/rooms/:code', async (req, res) => {
         name: room.name,
         status: isRoomOver(room) ? 'finished' : room.status,
         mode: room.auctionMode,
+        roomType: room.roomType || 'standard',
+        activeTeamIds: getActiveTeamIds(room),
+        rivalsMatch: room.rivalsMatch || null,
         playerCount: Object.values(room.players).filter(p => !p.isSpectator).length,
     });
 });
@@ -203,6 +325,9 @@ async function persistRoom(room) {
             status: room.status, 
             isPrivate: room.isPrivate || false,
             auctionMode: room.auctionMode || 'mega',
+            roomType: room.roomType || 'standard',
+            activeTeamIds: getActiveTeamIds(room),
+            rivalsMatch: room.rivalsMatch || null,
             chatLog: room.chatLog || [],
             players: room.players,
             gameState: room.gameState,
@@ -236,6 +361,9 @@ async function getRoom(code) {
                     ...rData,
                     timerInterval: null 
                 };
+                room.roomType = room.roomType || 'standard';
+                room.activeTeamIds = Array.isArray(room.activeTeamIds) && room.activeTeamIds.length ? room.activeTeamIds : TEAM_IDS;
+                room.rivalsMatch = room.rivalsMatch || null;
                 if (isRoomOver(room)) {
                     room.status = 'finished';
                     if (room.gameState) room.gameState.phase = 'finished';
@@ -252,17 +380,19 @@ async function getRoom(code) {
 }
 
 // ─── Game State helpers ──────────────────────────────────────────────────────
-function createGameState(playerQueue) {
+function createGameState(playerQueue, options = {}) {
+    const purse = options.purse || 120;
+    const timerDuration = options.timerDuration || 10;
     return {
         playerQueue,
         currentIdx: 0,
         currentBid: playerQueue[0]?.base || 2,
         currentBidder: null,
-        timer: 10,
-        timerDuration: 10,
+        timer: timerDuration,
+        timerDuration,
         phase: "bidding",
         currentSetName: playerQueue[0]?.setName || "",
-        purses: Object.fromEntries(TEAMS.map(t => [t.id, 120])),
+        purses: Object.fromEntries(TEAMS.map(t => [t.id, purse])),
         squads: Object.fromEntries(TEAMS.map(t => [t.id, []])),
         playingXI: Object.fromEntries(TEAMS.map(t => [t.id, []])),
         selections: Object.fromEntries(TEAMS.map(t => [t.id, false])),
@@ -293,15 +423,16 @@ function getClientState(room) {
         auctionLog: gs.auctionLog.slice(0, 20),
         auctionMode: room.auctionMode || 'mega',
         totalPlayers: gs.playerQueue.length,
+        roomCode: room.code,
+        roomType: room.roomType || 'standard',
+        activeTeamIds: getActiveTeamIds(room),
+        rivalsMatch: room.rivalsMatch || null,
+        roomName: room.name,
     };
 }
 
 function getLobbyState(room) {
-    return {
-        players: Object.values(room.players).map(p => ({ ...p, socketId: undefined })),
-        auctionMode: room.auctionMode,
-        hostId: room.hostId,
-    };
+    return getLobbyStatePayload(room);
 }
 
 function finishCurrent(room) {
@@ -357,6 +488,10 @@ function saveFinishedGame(room, gs) {
         id: room.code,
         name: room.name,
         mode: room.auctionMode,
+        roomType: room.roomType || 'standard',
+        activeTeamIds: getActiveTeamIds(room),
+        rivalsMatch: room.rivalsMatch || null,
+        participants: getRoomParticipantSummary(room),
         date: new Date().toISOString(),
         finishedAt: room.finishedAt || Date.now(),
         host: room.players[room.hostId]?.name || "Unknown",
@@ -375,6 +510,10 @@ function saveFinishedGame(room, gs) {
         name: room.name,
         host: room.players[room.hostId]?.name || "Unknown",
         mode: room.auctionMode || 'mega',
+        roomType: room.roomType || 'standard',
+        activeTeamIds: getActiveTeamIds(room),
+        rivalsMatch: room.rivalsMatch || null,
+        participants: getRoomParticipantSummary(room),
         status: 'finished',
         finishedAt: room.finishedAt || Date.now(),
         endReason: room.endReason || 'completed',
@@ -463,7 +602,7 @@ io.on('connection', (socket) => {
     let currentPlayerId = null;
 
     // ── Create Room ──
-    socket.on('create-room', async ({ playerName, isPrivate, roomName, playerId }, cb) => {
+    socket.on('create-room', async ({ playerName, isPrivate, roomName, playerId, roomType, matchKey }, cb) => {
         if (!playerId) return cb?.({ ok: false, error: 'Missing Player ID' });
 
         // Cancel any pending disconnect timer for this player
@@ -473,24 +612,45 @@ io.on('connection', (socket) => {
         }
 
         const code = genCode();
+        const isRivalsRoom = roomType === 'rivals';
+        let match = null;
+
+        if (isRivalsRoom) {
+            match = getCurrentMatchStatus(matchKey, new Date());
+            if (!match) return cb?.({ ok: false, error: 'Match not found' });
+            if (!match.status.isJoinable) {
+                const state = match.status.state;
+                const error = state === 'scheduled'
+                    ? 'This auction opens automatically on match day.'
+                    : state === 'locked'
+                        ? 'This auction is locked because the IPL match has already started.'
+                        : 'This auction has already closed.';
+                return cb?.({ ok: false, error });
+            }
+        }
+
+        const teamOrder = isRivalsRoom ? shuffle([match.homeTeam, match.awayTeam]) : TEAM_IDS;
         const room = {
             code,
-            name: roomName || `${playerName}'s Room`,
+            name: roomName || (isRivalsRoom ? `${match.homeTeam} vs ${match.awayTeam} Rivals` : `${playerName}'s Room`),
             isPrivate: !!isPrivate,
             status: 'lobby',
+            roomType: isRivalsRoom ? 'rivals' : 'standard',
+            activeTeamIds: teamOrder,
+            rivalsMatch: match,
             hostId: playerId,
             players: {
                 [playerId]: {
                     id: playerId,
                     socketId: socket.id,
-                    name: playerName || 'Player 1',
-                    teamId: null,
+                    name: playerName || (isRivalsRoom ? 'Rival 1' : 'Player 1'),
+                    teamId: isRivalsRoom ? teamOrder[0] : null,
                     isHost: true,
                     isSpectator: false,
                     offline: false
                 }
             },
-            auctionMode: null,
+            auctionMode: isRivalsRoom ? 'rivals' : null,
             gameState: null,
             timerInterval: null,
             started: false,
@@ -503,10 +663,156 @@ io.on('connection', (socket) => {
         console.log(`[ROOM] ${code} (${room.isPrivate ? 'PVT' : 'PUB'}) created by ${playerName}`);
 
         const state = getLobbyState(room);
-        cb?.({ ok: true, code, players: state.players });
+        cb?.({
+            ok: true,
+            code,
+            players: state.players,
+            roomType: room.roomType,
+            activeTeamIds: room.activeTeamIds,
+            rivalsMatch: room.rivalsMatch,
+        });
 
         await persistRoom(room);
         if (!room.isPrivate) broadcastRoomList();
+    });
+
+    // ── Rivals Matchmaking ──
+    socket.on('join-rivals-match', async ({ matchKey, playerName, playerId }, cb) => {
+        if (!playerId) return cb?.({ ok: false, error: 'Missing Player ID' });
+
+        const match = getCurrentMatchStatus(matchKey, new Date());
+        if (!match) return cb?.({ ok: false, error: 'Match not found' });
+        if (!match.status.isJoinable) {
+            const state = match.status.state;
+            const error = state === 'scheduled'
+                ? 'This auction opens automatically on match day.'
+                : state === 'locked'
+                    ? 'This auction is locked because the IPL match has already started.'
+                    : 'This auction has already closed.';
+            return cb?.({ ok: false, error });
+        }
+
+        if (disconnectTimers.has(playerId)) {
+            clearTimeout(disconnectTimers.get(playerId));
+            disconnectTimers.delete(playerId);
+        }
+
+        let room = await findOpenRivalsRoom(match.key);
+        let createdRoom = false;
+
+        if (!room) {
+            const code = genCode();
+            const teamOrder = shuffle([match.homeTeam, match.awayTeam]);
+            room = {
+                code,
+                name: `${match.homeTeam} vs ${match.awayTeam} Rivals`,
+                isPrivate: false,
+                status: 'lobby',
+                roomType: 'rivals',
+                activeTeamIds: teamOrder,
+                rivalsMatch: match,
+                hostId: playerId,
+                players: {
+                    [playerId]: {
+                        id: playerId,
+                        socketId: socket.id,
+                        name: playerName || 'Rival 1',
+                        teamId: teamOrder[0],
+                        isHost: true,
+                        isSpectator: false,
+                        offline: false,
+                    }
+                },
+                auctionMode: 'rivals',
+                gameState: null,
+                timerInterval: null,
+                started: false,
+                chatLog: [],
+            };
+            rooms.set(code, room);
+            createdRoom = true;
+        }
+
+        const roomCode = room.code;
+
+        if (room.players[playerId]) {
+            room.players[playerId].socketId = socket.id;
+            room.players[playerId].offline = false;
+            room.players[playerId].name = playerName || room.players[playerId].name;
+            socket.join(roomCode);
+            currentRoom = roomCode;
+            currentPlayerId = playerId;
+            const state = getLobbyState(room);
+            io.to(roomCode).emit('lobby-update', state);
+            await persistRoom(room);
+            if (!room.isPrivate) broadcastRoomList();
+            return cb?.({
+                ok: true,
+                code: roomCode,
+                players: state.players,
+                roomStatus: room.status,
+                hostId: room.hostId,
+                auctionMode: room.auctionMode,
+                roomType: room.roomType,
+                activeTeamIds: getActiveTeamIds(room),
+                rivalsMatch: room.rivalsMatch,
+                assignedTeamId: room.players[playerId].teamId || null,
+                isSpectator: !!room.players[playerId].isSpectator,
+                gameState: room.status === 'active' ? getClientState(room) : null,
+                createdRoom,
+            });
+        }
+
+        const activePlayers = getActivePlayers(room);
+        if (activePlayers.length >= getRoomPlayerLimit(room)) {
+            return cb?.({ ok: false, error: 'This Rivals auction already has two players.' });
+        }
+
+        const assignedTeamId = getActiveTeamIds(room).find(teamId => !activePlayers.some(player => player.teamId === teamId)) || getActiveTeamIds(room)[0];
+        room.players[playerId] = {
+            id: playerId,
+            socketId: socket.id,
+            name: playerName || `Rival ${activePlayers.length + 1}`,
+            teamId: assignedTeamId,
+            isHost: false,
+            isSpectator: false,
+            offline: false,
+        };
+
+        socket.join(roomCode);
+        currentRoom = roomCode;
+        currentPlayerId = playerId;
+
+        const state = getLobbyState(room);
+        io.to(roomCode).emit('lobby-update', state);
+        pushSystemMessage(room, `${playerName || 'Rival'} joined the duel`);
+
+        const joinedPlayers = getActivePlayers(room);
+        if (joinedPlayers.length >= getRoomPlayerLimit(room)) {
+            room.rivalsMatch = getCurrentMatchStatus(room.rivalsMatch?.key || match.key, new Date()) || room.rivalsMatch;
+            startRivalsAuction(room);
+            io.to(roomCode).emit('game-started', getClientState(room));
+            startGameTick(room);
+        }
+
+        await persistRoom(room);
+        broadcastRoomList();
+
+        cb?.({
+            ok: true,
+            code: roomCode,
+            players: state.players,
+            roomStatus: room.status,
+            hostId: room.hostId,
+            auctionMode: room.auctionMode,
+            roomType: room.roomType,
+            activeTeamIds: getActiveTeamIds(room),
+            rivalsMatch: room.rivalsMatch,
+            assignedTeamId,
+            isSpectator: false,
+            gameState: room.status === 'active' ? getClientState(room) : null,
+            createdRoom,
+        });
     });
 
     // ── Join Room ──
@@ -547,6 +853,9 @@ io.on('connection', (socket) => {
                 roomStatus: isRoomOver(room) ? 'finished' : room.status,
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
+                roomType: room.roomType || 'standard',
+                activeTeamIds: getActiveTeamIds(room),
+                rivalsMatch: room.rivalsMatch || null,
                 isSpectator: room.players[playerId].isSpectator,
                 gameState: room.status !== 'lobby' ? getClientState(room) : null
             });
@@ -565,6 +874,9 @@ io.on('connection', (socket) => {
                 roomStatus: 'finished',
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
+                roomType: room.roomType || 'standard',
+                activeTeamIds: getActiveTeamIds(room),
+                rivalsMatch: room.rivalsMatch || null,
                 isSpectator: true,
                 gameState: getClientState(room)
             });
@@ -572,6 +884,39 @@ io.on('connection', (socket) => {
 
         // ── Game active: check for slots ──
         if (room.started && room.status === 'active') {
+            if (room.roomType === 'rivals') {
+                room.players[playerId] = {
+                    id: playerId,
+                    socketId: socket.id,
+                    name: playerName || 'Spectator',
+                    teamId: null,
+                    isHost: false,
+                    isSpectator: true,
+                    offline: false,
+                };
+                socket.join(code);
+                currentRoom = code;
+                currentPlayerId = playerId;
+
+                const state = getLobbyState(room);
+                io.to(code).emit('lobby-update', state);
+                pushSystemMessage(room, `${playerName || 'Spectator'} joined as spectator`);
+                await persistRoom(room);
+                return cb?.({
+                    ok: true,
+                    code,
+                    players: state.players,
+                    roomStatus: room.status,
+                    hostId: room.hostId,
+                    auctionMode: room.auctionMode,
+                    roomType: room.roomType || 'standard',
+                    activeTeamIds: getActiveTeamIds(room),
+                    rivalsMatch: room.rivalsMatch || null,
+                    isSpectator: true,
+                    gameState: getClientState(room)
+                });
+            }
+
             const takenTeams = new Set(Object.values(room.players).map(p => p.teamId).filter(Boolean));
             const availableTeams = TEAMS.filter(t => !takenTeams.has(t.id));
             const activeHumanPlayers = Object.values(room.players).filter(p => !p.isSpectator && !p.offline);
@@ -602,6 +947,9 @@ io.on('connection', (socket) => {
                     roomStatus: room.status,
                     hostId: room.hostId,
                     auctionMode: room.auctionMode,
+                    roomType: room.roomType || 'standard',
+                    activeTeamIds: getActiveTeamIds(room),
+                    rivalsMatch: room.rivalsMatch || null,
                     isSpectator: false,
                     gameState: getClientState(room)
                 });
@@ -632,6 +980,9 @@ io.on('connection', (socket) => {
                     roomStatus: room.status,
                     hostId: room.hostId,
                     auctionMode: room.auctionMode,
+                    roomType: room.roomType || 'standard',
+                    activeTeamIds: getActiveTeamIds(room),
+                    rivalsMatch: room.rivalsMatch || null,
                     isSpectator: true,
                     gameState: getClientState(room)
                 });
@@ -639,8 +990,55 @@ io.on('connection', (socket) => {
         }
 
         // ── Full room fallback ──
-        const activePlayersCount = Object.values(room.players).filter(p => !p.isSpectator).length;
-        const isFull = activePlayersCount >= 10;
+        const activePlayersCount = getActivePlayers(room).length;
+        const isFull = activePlayersCount >= getRoomPlayerLimit(room);
+
+        if (room.roomType === 'rivals' && !isFull) {
+            const assignedTeamId = getActiveTeamIds(room).find(teamId =>
+                !Object.values(room.players).some(player => player.teamId === teamId && !player.offline && !player.isSpectator)
+            ) || getActiveTeamIds(room)[0];
+
+            room.players[playerId] = {
+                id: playerId,
+                socketId: socket.id,
+                name: playerName || `Rival ${Object.keys(room.players).length + 1}`,
+                teamId: assignedTeamId,
+                isHost: false,
+                isSpectator: false,
+                offline: false
+            };
+            socket.join(code);
+            currentRoom = code;
+            currentPlayerId = playerId;
+
+            const state = getLobbyState(room);
+            io.to(code).emit('lobby-update', state);
+            pushSystemMessage(room, `${playerName || 'Rival'} joined the duel`);
+
+            if (getActivePlayers(room).length >= getRoomPlayerLimit(room)) {
+                room.rivalsMatch = getCurrentMatchStatus(room.rivalsMatch?.key, new Date()) || room.rivalsMatch;
+                startRivalsAuction(room);
+                io.to(code).emit('game-started', getClientState(room));
+                startGameTick(room);
+            }
+
+            await persistRoom(room);
+            if (!room.isPrivate) broadcastRoomList();
+            return cb?.({
+                ok: true,
+                code,
+                players: state.players,
+                roomStatus: room.status,
+                hostId: room.hostId,
+                auctionMode: room.auctionMode,
+                roomType: room.roomType || 'standard',
+                activeTeamIds: getActiveTeamIds(room),
+                rivalsMatch: room.rivalsMatch || null,
+                assignedTeamId,
+                isSpectator: false,
+                gameState: room.status === 'active' ? getClientState(room) : null,
+            });
+        }
 
         // ── New Join ──
         room.players[playerId] = {
@@ -660,7 +1058,18 @@ io.on('connection', (socket) => {
         const state = getLobbyState(room);
         io.to(code).emit('lobby-update', state);
         pushSystemMessage(room, `${playerName || 'Player'} joined${isFull ? ' as spectator' : ''}`);
-        cb?.({ ok: true, code, players: state.players, roomStatus: room.status, hostId: room.hostId, auctionMode: room.auctionMode, isSpectator: isFull });
+        cb?.({
+            ok: true,
+            code,
+            players: state.players,
+            roomStatus: room.status,
+            hostId: room.hostId,
+            auctionMode: room.auctionMode,
+            roomType: room.roomType || 'standard',
+            activeTeamIds: getActiveTeamIds(room),
+            rivalsMatch: room.rivalsMatch || null,
+            isSpectator: isFull
+        });
 
         await persistRoom(room);
         if (!room.isPrivate) broadcastRoomList();
@@ -671,6 +1080,7 @@ io.on('connection', (socket) => {
         if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
         const room = await getRoom(currentRoom);
         if (!room) return cb?.({ ok: false });
+        if (room.roomType === 'rivals') return cb?.({ ok: false, error: 'Rivals teams are assigned automatically' });
 
         const player = room.players[currentPlayerId];
         if (!player || player.isSpectator) return cb?.({ ok: false, error: 'Spectators cannot select teams' });
@@ -690,6 +1100,7 @@ io.on('connection', (socket) => {
         if (!currentRoom || !currentPlayerId) return;
         const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId) return;
+        if (room.roomType === 'rivals') return;
         room.auctionMode = mode;
         const state = getLobbyState(room);
         io.to(currentRoom).emit('lobby-update', state);
@@ -701,11 +1112,12 @@ io.on('connection', (socket) => {
         if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
         const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId) return cb?.({ ok: false, error: 'Not host' });
+        if (room.roomType === 'rivals') return cb?.({ ok: false, error: 'Rivals auctions start automatically when both players join' });
 
         // Only check non-spectator players for team selection
         const activePlayers = Object.values(room.players).filter(p => !p.isSpectator && !p.offline);
-        if (activePlayers.length < 2) {
-            return cb?.({ ok: false, error: 'At least 2 active players must join before starting the auction' });
+        if (activePlayers.length < 1) {
+            return cb?.({ ok: false, error: 'At least 1 active player must join before starting the auction' });
         }
         const noTeam = activePlayers.find(p => !p.teamId);
         if (noTeam) return cb?.({ ok: false, error: `${noTeam.name} hasn't selected a team` });
@@ -801,6 +1213,9 @@ io.on('connection', (socket) => {
                         spectators: Object.values(r.players).filter(p => p.isSpectator && !p.offline).length,
                         status: r.status,
                         mode: r.auctionMode,
+                        roomType: r.roomType || 'standard',
+                        activeTeamIds: getActiveTeamIds(r),
+                        rivalsMatch: r.rivalsMatch || null,
                         currentPlayer: r.gameState?.playerQueue[r.gameState?.currentIdx]?.name || null
                     });
                 }
@@ -815,6 +1230,10 @@ io.on('connection', (socket) => {
                 spectators: room.spectators,
                 status: 'finished',
                 mode: room.mode,
+                roomType: room.roomType || 'standard',
+                activeTeamIds: room.activeTeamIds || TEAM_IDS,
+                rivalsMatch: room.rivalsMatch || null,
+                participants: room.participants || [],
                 finishedAt: room.finishedAt,
                 totalSold: room.totalSold,
                 topBuy: room.topBuy || null
@@ -842,8 +1261,9 @@ io.on('connection', (socket) => {
         if (gs.purses[teamId] < nb) return cb?.({ ok: false, error: 'Insufficient purse' });
 
         const isMini = room.auctionMode && room.auctionMode.toLowerCase() === 'mini';
-        const maxSquadSize = isMini ? 11 : ((gs.playerQueue?.length || 0) <= 200 ? 15 : 25);
-        const maxOverseas = isMini ? 4 : 8;
+        const isRivals = room.roomType === 'rivals' || room.auctionMode === 'rivals';
+        const maxSquadSize = isRivals ? RIVALS_MAX_SQUAD_SIZE : (isMini ? 11 : ((gs.playerQueue?.length || 0) <= 200 ? 15 : 25));
+        const maxOverseas = isRivals ? RIVALS_MAX_OVERSEAS : (isMini ? 4 : 8);
 
         if (gs.squads[teamId].length >= maxSquadSize) return cb?.({ ok: false, error: 'Squad full (' + maxSquadSize + ' max)' });
 

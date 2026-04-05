@@ -125,6 +125,7 @@ export function GameProvider({ children }) {
   const [multiGS, setMultiGS] = useState(null);
   const [isSpectator, setIsSpectator] = useState(false);
   const [chatLog, setChatLog] = useState([]);
+  const [roomMeta, setRoomMeta] = useState(null);
 
   const [playerId] = useState(() => {
     if (typeof window === 'undefined') return uuidv4();
@@ -157,8 +158,17 @@ export function GameProvider({ children }) {
           setIsHost(res.hostId === playerId);
           setIsSpectator(!!res.isSpectator);
           if (res.auctionMode) setLobbyMode(res.auctionMode);
+          setRoomMeta({
+            roomType: res.roomType || 'standard',
+            activeTeamIds: res.activeTeamIds || null,
+            rivalsMatch: res.rivalsMatch || null,
+            roomName: res.roomName || null,
+          });
           if (res.roomStatus === "active") {
             setMultiGS(res.gameState);
+            if (pathname !== '/auction') {
+              router.push(buildUrl('/auction', { room: res.gameState?.roomCode || savedRoom, mode: (res.auctionMode || 'MEGA').toUpperCase(), spectator: res.isSpectator ? 1 : undefined }));
+            }
           } else if (res.roomStatus === "finished") {
             setMultiGS(res.gameState);
             router.push(buildUrl('/results', { room: savedRoom, mode: res.auctionMode }));
@@ -220,21 +230,49 @@ export function GameProvider({ children }) {
   // Socket listeners for multiplayer
   useEffect(() => {
     if (playMode !== "multi") return;
-    const off1 = on("lobby-update", ({ players, auctionMode: m, hostId }) => {
+    const off1 = on("lobby-update", ({ players, auctionMode: m, hostId, roomType, activeTeamIds, rivalsMatch, roomName }) => {
       setLobbyPlayers(players);
       if (m) setLobbyMode(m);
       if (hostId) setIsHost(hostId === playerId);
+      setRoomMeta(prev => ({
+        roomType: roomType || prev?.roomType || 'standard',
+        activeTeamIds: activeTeamIds || prev?.activeTeamIds || null,
+        rivalsMatch: rivalsMatch || prev?.rivalsMatch || null,
+        roomName: roomName || prev?.roomName || null,
+      }));
     });
     const off2 = on("game-started", (gs) => {
       setMultiGS(gs);
-      router.push(buildUrl('/auction', { room: roomCode, mode: (lobbyMode || 'MEGA').toUpperCase() }));
+      setRoomMeta(prev => ({
+        roomType: gs?.roomType || prev?.roomType || 'standard',
+        activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
+        rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
+        roomName: gs?.roomName || prev?.roomName || null,
+      }));
+      if (gs?.roomType === 'rivals' && pathname === '/room') {
+        router.push(buildUrl('/room', { action: 'rivals-found', room: roomCode || gs?.roomCode }));
+        return;
+      }
+      router.push(buildUrl('/auction', { room: roomCode || gs?.roomCode, mode: (lobbyMode || gs?.auctionMode || 'MEGA').toUpperCase() }));
     });
     const off3 = on("game-state", (gs) => {
       setMultiGS(gs);
+      setRoomMeta(prev => ({
+        roomType: gs?.roomType || prev?.roomType || 'standard',
+        activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
+        rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
+        roomName: gs?.roomName || prev?.roomName || null,
+      }));
     });
     const off4 = on("game-over", (gs) => {
       setMultiGS(gs);
-      router.push(buildUrl('/results', { room: roomCode, mode: (lobbyMode || 'MEGA').toUpperCase() }));
+      setRoomMeta(prev => ({
+        roomType: gs?.roomType || prev?.roomType || 'standard',
+        activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
+        rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
+        roomName: gs?.roomName || prev?.roomName || null,
+      }));
+      router.push(buildUrl('/results', { room: roomCode || gs?.roomCode, mode: (lobbyMode || gs?.auctionMode || 'MEGA').toUpperCase() }));
     });
     // Lightweight timer tick — only updates the timer field to avoid full re-render
     const off5 = on("timer-tick", ({ timer }) => {
@@ -244,7 +282,7 @@ export function GameProvider({ children }) {
       setChatLog(logs);
     });
     return () => { off1(); off2(); off3(); off4(); off5(); off6(); };
-  }, [playMode, on, router]);
+  }, [playMode, on, router, pathname, roomCode, lobbyMode]);
 
   // Unified Audio & Animation side-effects
   const gs = playMode === "multi" ? multiGS : g.current;
@@ -431,6 +469,12 @@ export function GameProvider({ children }) {
       setPlayMode("multi");
       setIsSpectator(false);
       setIsPrivateRoom(isPrivate);
+      setRoomMeta({
+        roomType: res.roomType || 'standard',
+        activeTeamIds: res.activeTeamIds || null,
+        rivalsMatch: res.rivalsMatch || null,
+        roomName: null,
+      });
       router.push(buildUrl(`/lobby/${res.code}`, { public: !isPrivate }));
     });
   }
@@ -449,6 +493,12 @@ export function GameProvider({ children }) {
         setPlayMode("multi");
         if (res.auctionMode) setLobbyMode(res.auctionMode);
         setIsSpectator(!!res.isSpectator);
+        setRoomMeta({
+          roomType: res.roomType || 'standard',
+          activeTeamIds: res.activeTeamIds || null,
+          rivalsMatch: res.rivalsMatch || null,
+          roomName: res.roomName || null,
+        });
 
         if (res.roomStatus === "active") {
           setMultiGS(res.gameState);
@@ -487,7 +537,7 @@ export function GameProvider({ children }) {
     });
   }
 
-  function handleRestart() {
+  function handleRestart(destination = "/") {
     if (typeof window !== 'undefined') {
       ["ipl_room_code", "ipl_play_mode", "ipl_single_gs", "ipl_single_screen", "ipl_auction_mode", "ipl_my_team_id"].forEach(k => localStorage.removeItem(k));
     }
@@ -499,7 +549,8 @@ export function GameProvider({ children }) {
     setLobbyMode(null);
     setRoomCode(null);
     setMyTeamId(null);
-    router.push("/");
+    setRoomMeta(null);
+    router.push(destination);
   }
 
   useEffect(() => () => clearInterval(intervalRef.current), []);
@@ -512,7 +563,7 @@ export function GameProvider({ children }) {
     myTeamId, setMyTeamId, showSquad, setShowSquad,
     viewingTeam, setViewingTeam, showStats, setShowStats,
     multiGS, setMultiGS, playerId, g, effectiveMyTeamId,
-    isSpectator, setIsSpectator, chatLog, setChatLog,
+    isSpectator, setIsSpectator, chatLog, setChatLog, roomMeta, setRoomMeta,
     // Socket
     emit, on,
     // Actions

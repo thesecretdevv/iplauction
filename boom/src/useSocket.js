@@ -2,20 +2,22 @@
 
 import { useRef, useEffect, useCallback } from "react";
 import { io } from "socket.io-client";
+import { getSocketUrl } from "../app/lib/backendUrl";
 
 export function useSocket() {
     const sock = useRef(null);
 
     useEffect(() => {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://bidwicket.onrender.com";
-        console.log("Connecting to Auction Server:", backendUrl);
-        sock.current = io(backendUrl, {
+        const socketUrl = getSocketUrl();
+        console.log("Connecting to Auction Server:", socketUrl);
+        sock.current = io(socketUrl, {
+            path: "/socket.io",
             transports: ["websocket", "polling"],
             reconnection: true,
             reconnectionAttempts: Infinity,
             reconnectionDelay: 500,
             reconnectionDelayMax: 3000,
-            timeout: 10000,
+            timeout: 20000,
         });
 
         sock.current.on('connect', () => console.log('[Socket] Connected:', sock.current.id));

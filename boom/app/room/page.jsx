@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
+import { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useGame } from '../GameContext';
 import AppDialog from '../components/AppDialog';
+import { getBackendUrl } from '../lib/backendUrl';
 
 const GOLD  = '#E8B84B';
 const CYAN  = '#22D3EE';
@@ -24,6 +25,94 @@ const TEAMS = [
   { id:'LSG',  name:'Lucknow Super Giants',        short:'LSG',  color:'#81D4FA' },
 ];
 
+const MODE_OPTIONS = [
+  {
+    id: 'mega',
+    accentColor: GOLD,
+    title: 'IPL MEGA Auction',
+    eyebrow: 'Full-scale auction room',
+    sub: 'Deep player pool, longer bidding battles, and full-squad strategy.',
+    chips: ['500+ players', 'Full season feel', 'Best for bigger rooms'],
+    footer: 'Build across the full auction list and manage a deeper roster.',
+  },
+  {
+    id: 'mini',
+    accentColor: CYAN,
+    title: 'IPL MINI Auction',
+    eyebrow: 'Fast-track competitive mode',
+    sub: 'Shorter pool, quicker decisions, and stronger playing-XI pressure.',
+    chips: ['~200 players', 'Fast format', 'XI-first challenge'],
+    footer: 'Ideal for faster rooms where every bid changes the final XI balance.',
+  },
+];
+
+function getPhaseFromAction(action) {
+  if (action === 'rivals') return 'rivals';
+  if (action === 'rivals-searching') return 'rivals-searching';
+  if (action === 'rivals-found') return 'rivals-found';
+  if (action === 'create') return 'create-form';
+  if (action === 'join' || action === 'join-code') return 'join-code';
+  if (action === 'browse') return 'join';
+  return 'home';
+}
+
+function getDateKey(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function getRivalsMatchState(match, nowMs) {
+  const openMs = new Date(match.auctionOpensAt).getTime();
+  const startMs = new Date(match.startAt).getTime();
+  const endMs = new Date(match.endAt).getTime();
+
+  if (nowMs >= endMs) return 'completed';
+  if (nowMs >= startMs) return 'locked';
+  if (nowMs >= openMs) return 'open';
+  return 'scheduled';
+}
+
+function isPlayableRivalsMatch(match, nowMs) {
+  const state = getRivalsMatchState(match, nowMs);
+  return state === 'scheduled' || state === 'open';
+}
+
+function formatCountdown(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return 'LIVE';
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+  return `${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+}
+
+function formatRivalsMeta(startAt) {
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(startAt));
+}
+
+const MATCHMAKING_LINES = [
+  'Finding a stronger opponent...',
+  'Scanning live Rivals queues...',
+  'Checking who is ready to duel...',
+  'Matching you with a sharp bidder...',
+  'Looking for a worthy auction rival...',
+  'Almost there...',
+  'Locking the match lobby...',
+  'Warming up the auction room...',
+  'Preparing both franchises...',
+  'One great rival is all we need...',
+];
+
 // ── Global styles ───────────────────────────────────────────────────────────
 const globalStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;600;700&family=Rajdhani:wght@500;600;700&family=Courier+Prime:wght@400;700&display=swap');
@@ -37,6 +126,10 @@ const globalStyles = `
   @keyframes floatOrb  { 0%{transform:translateY(0)rotate(0);opacity:0} 20%{opacity:.12} 80%{opacity:.12} 100%{transform:translateY(-800px)rotate(360deg);opacity:0} }
   @keyframes scrollMq  { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
   @keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @keyframes rivalsSweep { 0%{transform:translateX(0)} 100%{transform:translateX(18px)} }
+  @keyframes rivalsVsPop { 0%{transform:scale(.7);opacity:0} 60%{transform:scale(1.08);opacity:1} 100%{transform:scale(1);opacity:1} }
+  @keyframes rivalsLeftIn { 0%{opacity:0;transform:translateX(-120px) scale(.88)} 100%{opacity:1;transform:translateX(0) scale(1)} }
+  @keyframes rivalsRightIn { 0%{opacity:0;transform:translateX(120px) scale(.88)} 100%{opacity:1;transform:translateX(0) scale(1)} }
 
   .rp-particles { position:fixed; top:0;left:0;right:0;bottom:0; overflow:hidden; pointer-events:none; z-index:0; }
   .particle { position:absolute; border-radius:50%; background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.8),rgba(232,184,75,.4) 40%,rgba(0,0,0,0) 80%); opacity:0; animation:floatOrb linear infinite; }
@@ -66,6 +159,95 @@ const globalStyles = `
   .rp-h1 span { color:${GOLD}; }
   .rp-live-counter { display:inline-flex; align-items:center; gap:8px; font-family:'Barlow Condensed',sans-serif; font-size:12px; letter-spacing:1px; color:${CYAN}; background:rgba(34,211,238,.1); padding:4px 10px; border-radius:4px; border:1px solid rgba(34,211,238,.2); margin:10px 0 22px; font-weight:700; }
   .rp-live-dot { width:6px; height:6px; border-radius:50%; background:${CYAN}; box-shadow:0 0 8px ${CYAN}; animation:pulse 1.5s ease-in-out infinite; }
+  .rivals-screen {
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:88px 24px 48px;
+    position:relative;
+    z-index:5;
+  }
+  .rivals-shell {
+    width:100%;
+    max-width:900px;
+    animation:fadeUp .35s ease both;
+  }
+  .rivals-found-shell {
+    width:100%;
+    max-width:1100px;
+    display:grid;
+    gap:26px;
+    justify-items:center;
+    text-align:center;
+  }
+  .rivals-found-arena {
+    width:100%;
+    display:grid;
+    grid-template-columns:minmax(0, 1fr) auto minmax(0, 1fr);
+    gap:18px;
+    align-items:center;
+  }
+  .rivals-team-entry {
+    padding:22px 18px;
+    border-radius:22px;
+    border:1px solid #222;
+    background:linear-gradient(160deg, rgba(255,255,255,0.06), rgba(8,8,8,0.94));
+    display:flex;
+    align-items:center;
+    gap:14px;
+    justify-content:center;
+    min-height:160px;
+  }
+  .rivals-team-entry.left { animation:rivalsLeftIn .8s cubic-bezier(.16,1,.3,1) both; }
+  .rivals-team-entry.right { animation:rivalsRightIn .8s cubic-bezier(.16,1,.3,1) both; }
+  .rivals-vs-burst {
+    width:126px;
+    height:126px;
+    border-radius:999px;
+    border:1px solid rgba(232,184,75,0.4);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:radial-gradient(circle, rgba(232,184,75,0.24), rgba(34,211,238,0.12), transparent 72%);
+    box-shadow:0 0 48px rgba(232,184,75,0.2);
+    animation:rivalsVsPop .9s ease .25s both;
+  }
+  .rivals-search-card {
+    border:1px solid rgba(232,184,75,0.18);
+    border-radius:26px;
+    padding:28px 24px;
+    background:linear-gradient(160deg, rgba(232,184,75,0.10), rgba(8,8,8,0.96));
+    box-shadow:0 24px 60px rgba(0,0,0,0.24);
+  }
+  .rivals-search-line {
+    min-height:32px;
+    color:#fff;
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(28px, 5vw, 42px);
+    letter-spacing:1.2px;
+  }
+  .rivals-search-progress {
+    width:100%;
+    height:10px;
+    border-radius:999px;
+    background:#111827;
+    overflow:hidden;
+    border:1px solid #1f2937;
+  }
+  .rivals-search-progress > span {
+    display:block;
+    height:100%;
+    border-radius:999px;
+    background:linear-gradient(90deg, ${GOLD}, ${CYAN});
+    animation:rivalsSweep 1.2s ease-in-out infinite alternate;
+  }
+  @media (max-width: 768px) {
+    .rivals-screen { padding:82px 16px 28px; }
+    .rivals-found-arena { grid-template-columns:1fr; }
+    .rivals-vs-burst { width:92px; height:92px; margin:0 auto; }
+    .rivals-team-entry { min-height:auto; }
+  }
 
   /* ── Choice cards (home screen) ── */
   .rp-choices { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; width:100%; }
@@ -102,6 +284,151 @@ const globalStyles = `
   .rp-toggle-card-title { font-family:'Bebas Neue',sans-serif; font-size:1.1rem; letter-spacing:.08em; color:#fff; }
   .rp-toggle-card-sub   { font-family:'Courier Prime',monospace; font-size:9px; letter-spacing:1px; color:#888; }
   .rp-toggle-check { position:absolute; top:8px; right:10px; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; transition:all .18s; }
+  .rp-toggle-card.mode-card {
+    min-height: 196px;
+    padding: 18px 16px 16px;
+    gap: 10px;
+    border-radius: 14px;
+    border: 1px solid #242424;
+    border-left-width: 1px;
+  }
+  .rp-toggle-card.mode-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at top right, rgba(255,255,255,0.06), transparent 36%),
+      linear-gradient(180deg, rgba(255,255,255,0.03), transparent 56%);
+    opacity: 0;
+    transition: opacity .18s ease;
+    pointer-events: none;
+  }
+  .rp-toggle-card.mode-card:hover {
+    transform: translateY(-3px);
+    border-color: #3a3a3a;
+  }
+  .rp-toggle-card.mode-card:hover::before,
+  .rp-toggle-card.mode-card.selected-gold::before,
+  .rp-toggle-card.mode-card.selected-cyan::before {
+    opacity: 1;
+  }
+  .rp-toggle-card.mode-card.selected-gold {
+    background: linear-gradient(180deg, rgba(232,184,75,0.14), rgba(232,184,75,0.05));
+    box-shadow: 0 14px 36px rgba(232,184,75,0.16);
+  }
+  .rp-toggle-card.mode-card.selected-cyan {
+    background: linear-gradient(180deg, rgba(34,211,238,0.14), rgba(34,211,238,0.05));
+    box-shadow: 0 14px 36px rgba(34,211,238,0.14);
+  }
+  .rp-toggle-card.mode-card .rp-toggle-check {
+    top: 12px;
+    right: 12px;
+  }
+  .rp-toggle-mode-header {
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:14px;
+    position:relative;
+    z-index:1;
+  }
+  .rp-toggle-mode-eyebrow {
+    font-family:'Courier Prime',monospace;
+    font-size:9px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:#8892a6;
+    line-height:1.5;
+    margin-bottom:4px;
+  }
+  .rp-toggle-mode-icon {
+    width:42px;
+    height:42px;
+    border-radius:12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border:1px solid currentColor;
+    background:rgba(255,255,255,0.03);
+    flex-shrink:0;
+  }
+  .rp-toggle-card.mode-card .rp-toggle-card-title {
+    font-size: 1.45rem;
+    line-height: .95;
+    letter-spacing: .04em;
+    max-width: 220px;
+  }
+  .rp-toggle-card.mode-card .rp-toggle-card-sub {
+    font-size: 10px;
+    letter-spacing: .8px;
+    line-height: 1.7;
+    color: #9aa3b2;
+    position: relative;
+    z-index: 1;
+  }
+  .rp-toggle-mode-chips {
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    position:relative;
+    z-index:1;
+  }
+  .rp-toggle-mode-chip {
+    padding:5px 9px;
+    border-radius:999px;
+    border:1px solid currentColor;
+    background:rgba(255,255,255,0.03);
+    font-family:'Barlow Condensed',sans-serif;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.06em;
+    line-height:1;
+  }
+  .rp-toggle-mode-footer {
+    margin-top:auto;
+    padding-top:10px;
+    border-top:1px solid rgba(255,255,255,0.08);
+    font-family:'Barlow Condensed',sans-serif;
+    font-size:13px;
+    line-height:1.5;
+    color:#d2d8e2;
+    position:relative;
+    z-index:1;
+  }
+  .rp-mode-helper {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-top:12px;
+  }
+  .rp-mode-helper-card {
+    padding:12px 14px;
+    border-radius:10px;
+    border:1px solid #1d1d1d;
+    background:#0b0b0d;
+  }
+  .rp-mode-helper-label {
+    font-family:'Courier Prime',monospace;
+    font-size:9px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:#666;
+    margin-bottom:6px;
+  }
+  .rp-mode-helper-value {
+    font-family:'Bebas Neue',sans-serif;
+    font-size:1.05rem;
+    letter-spacing:.06em;
+    line-height:1;
+  }
+  @media(max-width:600px) {
+    .rp-toggle-card.mode-card {
+      min-height: 184px;
+    }
+    .rp-mode-helper {
+      grid-template-columns:1fr;
+    }
+  }
 
   /* ── Buttons ── */
   .rp-btn { width:100%; padding:16px; background:${GOLD}; border:none; border-radius:6px; font-family:'Bebas Neue',sans-serif; font-size:1.3rem; letter-spacing:.1em; color:#000; cursor:pointer; margin-top:24px; transition:transform .2s,box-shadow .2s; display:flex; align-items:center; justify-content:center; gap:10px; }
@@ -321,17 +648,68 @@ function CheckIcon({ color = GOLD }) {
   );
 }
 
-// ─── Toggle Card ────────────────────────────────────────────────────────────
-function ToggleCard({ selected, onSelect, accentColor = GOLD, title, sub, icon }) {
-  const cls = selected ? (accentColor === CYAN ? 'rp-toggle-card selected-cyan' : 'rp-toggle-card selected-gold') : 'rp-toggle-card';
+function ModeGlyph({ color, mode }) {
+  if (mode === 'mini') {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M6 15L10 11L13 14L18 8" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M15 8H18V11" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M5 19H19" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
   return (
-    <div className={cls} onClick={onSelect}>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 18V10" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M10 18V6" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M16 18V12" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M20 18V8" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ─── Toggle Card ────────────────────────────────────────────────────────────
+function ToggleCard({ selected, onSelect, accentColor = GOLD, title, sub, icon, eyebrow, chips, footer, modeId }) {
+  const cls = selected ? (accentColor === CYAN ? 'rp-toggle-card selected-cyan' : 'rp-toggle-card selected-gold') : 'rp-toggle-card';
+  const isModeCard = !!modeId;
+
+  return (
+    <div className={`${cls}${isModeCard ? ' mode-card' : ''}`} onClick={onSelect}>
       <div className="rp-toggle-check">
         {selected && <CheckIcon color={accentColor} />}
       </div>
-      {icon && <div style={{ marginBottom: 6, opacity: selected ? 1 : 0.4, transition: 'opacity 0.2s', color: selected ? accentColor : '#666' }}>{icon}</div>}
-      <div className="rp-toggle-card-title" style={{ color: selected ? accentColor : '#bbb' }}>{title}</div>
-      <div className="rp-toggle-card-sub">{sub}</div>
+
+      {isModeCard ? (
+        <>
+          <div className="rp-toggle-mode-header">
+            <div>
+              {eyebrow && <div className="rp-toggle-mode-eyebrow">{eyebrow}</div>}
+              <div className="rp-toggle-card-title" style={{ color: selected ? accentColor : '#f2f4f8' }}>{title}</div>
+            </div>
+            <div className="rp-toggle-mode-icon" style={{ color: selected ? accentColor : '#666' }}>
+              <ModeGlyph color={selected ? accentColor : '#666'} mode={modeId} />
+            </div>
+          </div>
+          <div className="rp-toggle-card-sub">{sub}</div>
+          {!!chips?.length && (
+            <div className="rp-toggle-mode-chips">
+              {chips.map(chip => (
+                <span key={chip} className="rp-toggle-mode-chip" style={{ color: selected ? accentColor : '#7f8794' }}>
+                  {chip}
+                </span>
+              ))}
+            </div>
+          )}
+          {footer && <div className="rp-toggle-mode-footer">{footer}</div>}
+        </>
+      ) : (
+        <>
+          {icon && <div style={{ marginBottom: 6, opacity: selected ? 1 : 0.4, transition: 'opacity 0.2s', color: selected ? accentColor : '#666' }}>{icon}</div>}
+          <div className="rp-toggle-card-title" style={{ color: selected ? accentColor : '#bbb' }}>{title}</div>
+          <div className="rp-toggle-card-sub">{sub}</div>
+        </>
+      )}
     </div>
   );
 }
@@ -442,6 +820,8 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
                 const isActive = room.status === 'active';
                 const isCompleted = room.status === 'finished';
                 const teamCount = room.players || 0;
+                const isRivals = room.roomType === 'rivals';
+                const teamLimit = isRivals ? 2 : 10;
                 
                 return (
                   <div key={i} className="rb-room-card" 
@@ -463,13 +843,19 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
                           <span className={`rb-status-dot ${isActive ? 'live' : 'waiting'}`} />
                           <div className="rb-room-code" style={{ fontSize: 12, color: GOLD, background: `${GOLD}11`, padding: '2px 8px', borderRadius: 4 }}>{room.code}</div>
                         <div style={{ fontSize: 9, color: '#444', letterSpacing: 1, textTransform: 'uppercase' }}>{(room.mode || 'MEGA').toUpperCase()}</div>
+                        {isRivals && <div style={{ fontSize: 9, color: '#f97316', letterSpacing: 1, textTransform: 'uppercase', border: '1px solid #f9731640', background: '#f9731614', padding: '2px 6px', borderRadius: 999 }}>RIVALS</div>}
                         {isCompleted && <div style={{ fontSize: 9, color: '#22c55e', letterSpacing: 1, textTransform: 'uppercase' }}>RESULTS READY</div>}
                         </div>
                         <div className="rb-room-name" style={{ fontSize: 28, letterSpacing: 1 }}>{room.name || 'Mega Auction'}</div>
+                        {isRivals && room.rivalsMatch && (
+                          <div style={{ marginTop: 8, fontSize: 11, color: '#94A3B8', letterSpacing: 1 }}>
+                            {room.rivalsMatch.homeTeam} VS {room.rivalsMatch.awayTeam}
+                          </div>
+                        )}
                       </div>
                       
                       <div style={{ textAlign: 'right' }}>
-                        <div className="rb-team-count" style={{ color: teamCount >= 10 ? '#ef4444' : '#fff' }}>{teamCount}<span>/10</span></div>
+                        <div className="rb-team-count" style={{ color: teamCount >= teamLimit ? '#ef4444' : '#fff' }}>{teamCount}<span>/{teamLimit}</span></div>
                         <div className="rb-team-label" style={{ fontSize: 8 }}>PARTICIPANTS</div>
                       </div>
                     </div>
@@ -504,15 +890,18 @@ function RoomContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const action = searchParams.get('action');
+  const rivalsMatchKey = searchParams.get('matchKey');
+  const autoFind = searchParams.get('autoFind') === '1';
 
   const {
     emit, on, playerId,
     roomCode, setRoomCode, lobbyPlayers, setLobbyPlayers,
     isHost, setIsHost, myName, setMyName, setPlayMode,
     lobbyMode, setLobbyMode, multiGS, setMultiGS, startMultiAuction, isSpectator, setIsSpectator,
+    roomMeta, setRoomMeta,
   } = useGame();
 
-  const [phase,       setPhase]       = useState('home');
+  const [phase,       setPhase]       = useState(() => getPhaseFromAction(action));
   const [name,        setName]        = useState('');
   const [isPrivate,   setIsPrivate]   = useState(false);
   const [joinCode,    setJoinCode]    = useState('');
@@ -526,6 +915,12 @@ function RoomContent() {
   const [recentRooms, setRecentRooms] = useState([]);
   const [liveStats,   setLiveStats]   = useState({ rooms: 0, players: 0 });
   const [dialog,      setDialog]      = useState(null);
+  const [rivalsMatches, setRivalsMatches] = useState([]);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [matchmakingLineIndex, setMatchmakingLineIndex] = useState(0);
+  const [matchmakingStartedAt, setMatchmakingStartedAt] = useState(null);
+  const [matchmakingTimedOut, setMatchmakingTimedOut] = useState(false);
+  const [matchmakingCycle, setMatchmakingCycle] = useState(0);
   const nameRef = useRef(null);
   const closeDialog = useCallback(() => setDialog(null), []);
 
@@ -546,17 +941,71 @@ function RoomContent() {
     }
   }, [name]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'rivals-searching') return undefined;
+
+    setMatchmakingTimedOut(false);
+    setMatchmakingStartedAt(Date.now());
+    setMatchmakingLineIndex(0);
+
+    const lineTimer = window.setInterval(() => {
+      setMatchmakingLineIndex((prev) => (prev + 1) % MATCHMAKING_LINES.length);
+    }, 3200);
+
+    const timeoutTimer = window.setTimeout(() => {
+      setMatchmakingTimedOut(true);
+    }, 60000);
+
+    return () => {
+      window.clearInterval(lineTimer);
+      window.clearTimeout(timeoutTimer);
+    };
+  }, [phase, matchmakingCycle]);
+
+  useEffect(() => {
+    if (phase !== 'rivals-found' || !multiGS) return undefined;
+    const timer = window.setTimeout(() => {
+      router.push(`/auction?room=${roomCode || multiGS?.roomCode}&mode=RIVALS${isSpectator ? '&spectator=1' : ''}`);
+    }, 3600);
+    return () => window.clearTimeout(timer);
+  }, [phase, multiGS, router, roomCode, isSpectator]);
+
   // ── Auto-focus name input ──
   useEffect(() => {
-    if (phase === 'join' || phase === 'join-code' || phase === 'create-form') nameRef.current?.focus();
+    if (phase === 'join' || phase === 'join-code' || phase === 'create-form' || phase === 'rivals' || phase === 'rivals-create') nameRef.current?.focus();
   }, [phase]);
 
   // ── URL action param ──
   useEffect(() => {
-    if (action === 'create') setPhase('create-form');
-    if (action === 'join' || action === 'join-code') setPhase('join-code');
-    if (action === 'browse') setPhase('join');
+    const nextPhase = getPhaseFromAction(action);
+    setPhase(prev => {
+      if (prev === 'lobby' && nextPhase !== 'lobby' && !String(nextPhase).startsWith('rivals-')) return prev;
+      return prev === nextPhase ? prev : nextPhase;
+    });
   }, [action]);
+
+  useEffect(() => {
+    if (!['rivals', 'rivals-create', 'rivals-searching', 'rivals-found'].includes(phase)) return;
+    let cancelled = false;
+
+    fetch(`${getBackendUrl()}/api/rivals/matches`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled) setRivalsMatches(data?.matches || []);
+      })
+      .catch(() => {
+        if (!cancelled) setRivalsMatches([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [phase]);
 
   // ── Fetch public rooms ──
   const fetchRooms = useCallback(() => {
@@ -599,6 +1048,32 @@ function RoomContent() {
     router.push(`/results?${params.toString()}`);
   }, [router]);
 
+  const todayKey = getDateKey(new Date(nowMs));
+  const selectedRivalsMatch = useMemo(() => {
+    const sorted = [...rivalsMatches].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
+    if (rivalsMatchKey) {
+      const exact = sorted.find((match) => match.key === rivalsMatchKey);
+      if (exact && isPlayableRivalsMatch(exact, nowMs)) return exact;
+    }
+
+    const todays = sorted.filter((match) => match.date === todayKey);
+    const todayPlayable = todays.find((match) => isPlayableRivalsMatch(match, nowMs));
+    if (todayPlayable) return todayPlayable;
+
+    return sorted.find((match) => isPlayableRivalsMatch(match, nowMs)) || null;
+  }, [rivalsMatches, rivalsMatchKey, todayKey, nowMs]);
+
+  const isRivalsLobby = roomMeta?.roomType === 'rivals';
+  const myLobbyPlayer = lobbyPlayers.find((p) => p.name === myName || p.id === playerId);
+  const myTeamId  = myLobbyPlayer?.teamId;
+  const takenMap  = Object.fromEntries(
+    lobbyPlayers.filter(p => p.teamId).map(p => [p.teamId, p.name])
+  );
+  const rivalsHomeTeam = roomMeta?.rivalsMatch?.homeTeam || selectedRivalsMatch?.homeTeam;
+  const rivalsAwayTeam = roomMeta?.rivalsMatch?.awayTeam || selectedRivalsMatch?.awayTeam;
+  const activeRivalsMatch = roomMeta?.rivalsMatch || selectedRivalsMatch;
+  const matchmakingElapsed = matchmakingStartedAt ? Math.max(0, 60 - Math.floor((nowMs - matchmakingStartedAt) / 1000)) : 60;
+
   // ── Handlers ──
   const handleCreate = () => {
     if (!name.trim()) { setError('Enter your name first'); return; }
@@ -620,10 +1095,101 @@ function RoomContent() {
       setPlayMode('multi');
       setIsSpectator(false);
       setLobbyMode(aMode);
+      setRoomMeta({
+        roomType: res.roomType || 'standard',
+        activeTeamIds: res.activeTeamIds || null,
+        rivalsMatch: res.rivalsMatch || null,
+        roomName,
+      });
       emit('set-auction-mode', { mode: aMode });
       setPhase('lobby');
     });
   };
+
+  const handleCreateRivalsRoom = () => {
+    if (!name.trim()) { setError('Enter your name first'); return; }
+    if (!selectedRivalsMatch) { setError('No active Rivals match is available right now.'); return; }
+    setLoading(true);
+    setError('');
+    const roomName = `${selectedRivalsMatch.homeTeam} vs ${selectedRivalsMatch.awayTeam} Rivals`;
+    emit('create-room', {
+      playerName: name.trim(),
+      isPrivate,
+      roomName,
+      playerId,
+      roomType: 'rivals',
+      matchKey: selectedRivalsMatch.key,
+    }, (res) => {
+      setLoading(false);
+      if (!res?.ok) { setError(res?.error || 'Failed to create Rivals room'); return; }
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ipl_room_code', res.code);
+        localStorage.setItem('ipl_player_name', name.trim());
+        localStorage.setItem('ipl_play_mode', 'multi');
+      }
+      saveRecentRoom(res.code, roomName);
+      setRoomCode(res.code);
+      setIsHost(true);
+      setMyName(name.trim());
+      setLobbyPlayers(res.players || []);
+      setPlayMode('multi');
+      setIsSpectator(false);
+      setLobbyMode('rivals');
+      setRoomMeta({
+        roomType: res.roomType || 'rivals',
+        activeTeamIds: res.activeTeamIds || [],
+        rivalsMatch: res.rivalsMatch || selectedRivalsMatch,
+        roomName,
+      });
+      setPhase('lobby');
+    });
+  };
+
+  const handleFindOnline = useCallback(() => {
+    if (!name.trim()) { setError('Enter your name first'); return; }
+    if (!selectedRivalsMatch) { setError('No active Rivals match is available right now.'); return; }
+    setLoading(true);
+    setError('');
+    setMatchmakingTimedOut(false);
+    setMatchmakingLineIndex(0);
+    emit('join-rivals-match', { matchKey: selectedRivalsMatch.key, playerName: name.trim(), playerId }, (res) => {
+      setLoading(false);
+      if (!res?.ok) {
+        setError(res?.error || 'Unable to find a Rivals opponent right now.');
+        return;
+      }
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ipl_room_code', res.code);
+        localStorage.setItem('ipl_player_name', name.trim());
+        localStorage.setItem('ipl_play_mode', 'multi');
+      }
+      setRoomCode(res.code);
+      setIsHost(res.hostId === playerId);
+      setMyName(name.trim());
+      setLobbyPlayers(res.players || []);
+      setPlayMode('multi');
+      setIsSpectator(!!res.isSpectator);
+      setLobbyMode('rivals');
+      setRoomMeta({
+        roomType: res.roomType || 'rivals',
+        activeTeamIds: res.activeTeamIds || [],
+        rivalsMatch: res.rivalsMatch || selectedRivalsMatch,
+        roomName: `${selectedRivalsMatch.homeTeam} vs ${selectedRivalsMatch.awayTeam} Rivals`,
+      });
+      if (res.roomStatus === 'active' && res.gameState) {
+        setMultiGS(res.gameState);
+        router.push(`/room?action=rivals-found&room=${res.code}`);
+      } else {
+        router.push(`/room?action=rivals-searching&matchKey=${encodeURIComponent(selectedRivalsMatch.key)}&room=${res.code}`);
+      }
+    });
+  }, [emit, name, playerId, router, selectedRivalsMatch, setIsHost, setIsSpectator, setLobbyMode, setLobbyPlayers, setMultiGS, setMyName, setPlayMode, setRoomCode, setRoomMeta]);
+
+  useEffect(() => {
+    if (phase !== 'rivals' || !autoFind || loading) return;
+    if (!name.trim() || !selectedRivalsMatch) return;
+    handleFindOnline();
+  }, [autoFind, handleFindOnline, loading, name, phase, selectedRivalsMatch]);
 
   const doJoin = (targetCode) => {
     if (!name.trim()) { setError('Enter your name first'); return; }
@@ -651,6 +1217,12 @@ function RoomContent() {
       setPlayMode('multi');
       setIsSpectator(!!res.isSpectator);
       if (res.auctionMode) { setLobbyMode(res.auctionMode); setAMode(res.auctionMode); }
+      setRoomMeta({
+        roomType: res.roomType || 'standard',
+        activeTeamIds: res.activeTeamIds || null,
+        rivalsMatch: res.rivalsMatch || null,
+        roomName: res.roomName || null,
+      });
       if (res.roomStatus === 'active') {
         setMultiGS(res.gameState);
         const myP = (res.players || []).find(p => p.id === playerId);
@@ -676,19 +1248,7 @@ function RoomContent() {
     emit('set-auction-mode', { mode: m });
   };
 
-  const handleStart = () => {
-    if (!aMode) { setError('Select MEGA or MINI first'); return; }
-    const activePlayers = lobbyPlayers.filter(p => !p.isSpectator && !p.offline);
-    if (activePlayers.length < 2) {
-      setDialog({
-        title: 'More Players Needed',
-        message: 'At least 2 active players must join the room before the auction can start.',
-        tone: 'info',
-        actions: [{ label: 'OK', onClick: closeDialog }],
-      });
-      return;
-    }
-
+  const runStartAuction = () => {
     startMultiAuction({
       onError: (message) => {
         setDialog({
@@ -701,13 +1261,45 @@ function RoomContent() {
     });
   };
 
+  const handleStart = () => {
+    if (!aMode) { setError('Select MEGA or MINI first'); return; }
+    const activePlayers = lobbyPlayers.filter(p => !p.isSpectator && !p.offline);
+    if (activePlayers.length === 0) {
+      setDialog({
+        title: 'More Players Needed',
+        message: 'At least 1 active player must join the room before the auction can start.',
+        tone: 'info',
+        actions: [{ label: 'OK', onClick: closeDialog }],
+      });
+      return;
+    }
+
+    if (activePlayers.length === 1) {
+      const soloPlayer = activePlayers[0];
+      setDialog({
+        title: 'Start With One Player?',
+        message: `${soloPlayer?.name || 'Only one active player'} is currently in the room. You can still start now, and more players can join later.`,
+        tone: 'info',
+        actions: [
+          { label: 'Cancel', variant: 'secondary', onClick: closeDialog },
+          {
+            label: 'Start Auction',
+            onClick: () => {
+              closeDialog();
+              runStartAuction();
+            },
+          },
+        ],
+      });
+      return;
+    }
+
+    runStartAuction();
+  };
+
   const shareUrl  = typeof window !== 'undefined' ? `${window.location.origin}/join/${roomCode}` : '';
   const copyCode  = () => { navigator.clipboard.writeText(roomCode); setCopiedCode(true); setTimeout(() => setCopiedCode(false), 2000); };
   const copyUrl   = () => { navigator.clipboard.writeText(shareUrl); setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2000); };
-  const myTeamId  = lobbyPlayers.find(p => p.name === myName)?.teamId;
-  const takenMap  = Object.fromEntries(
-    lobbyPlayers.filter(p => p.teamId).map(p => [p.teamId, p.name])
-  );
   const canStart  = isHost && lobbyPlayers.length >= 1 && !!aMode;
 
   return (
@@ -731,11 +1323,182 @@ function RoomContent() {
       {phase !== 'join' && (
         <nav className="rp-nav">
           <button className="rp-back" onClick={() => {
-            if (phase === 'lobby' || phase === 'create-form') setPhase('home');
+            if (phase === 'lobby' || phase === 'create-form' || phase === 'rivals-create') setPhase(isRivalsLobby ? 'rivals' : 'home');
+            else if (phase === 'rivals-searching') setPhase('rivals');
+            else if (phase === 'rivals') router.push('/');
             else router.push('/');
           }}>← Back</button>
           <div className="rp-brand">IPL <span>AUCTION ONLINE</span></div>
         </nav>
+      )}
+
+      {phase === 'rivals-searching' && (
+        <div className="rivals-screen">
+          <div className="rivals-shell">
+            <div className="rivals-search-card">
+              <div style={{ color: GOLD, fontSize: 11, letterSpacing: 3, fontWeight: 800, marginBottom: 10 }}>MATCHMAKING</div>
+              <div className="rivals-search-line">{matchmakingTimedOut ? 'NO RIVAL FOUND RIGHT NOW' : MATCHMAKING_LINES[matchmakingLineIndex]}</div>
+
+              {activeRivalsMatch && (
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:18, flexWrap:'wrap', margin:'18px 0 20px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    <img src={`/assets/${activeRivalsMatch.homeTeam}.png`} alt={activeRivalsMatch.homeTeam} style={{ width:64, height:64, objectFit:'contain' }} />
+                    <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:32, color:'#fff', letterSpacing:1 }}>{activeRivalsMatch.homeTeam}</div>
+                  </div>
+                  <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:38, color:'#94A3B8', letterSpacing:4 }}>VS</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:32, color:'#fff', letterSpacing:1 }}>{activeRivalsMatch.awayTeam}</div>
+                    <img src={`/assets/${activeRivalsMatch.awayTeam}.png`} alt={activeRivalsMatch.awayTeam} style={{ width:64, height:64, objectFit:'contain' }} />
+                  </div>
+                </div>
+              )}
+
+              {!matchmakingTimedOut ? (
+                <>
+                  <div className="rivals-search-progress" style={{ marginBottom: 14 }}>
+                    <span style={{ width: `${Math.max(8, ((60 - matchmakingElapsed) / 60) * 100)}%` }} />
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', gap:12, flexWrap:'wrap', color:'#94A3B8', fontSize:12, letterSpacing:1 }}>
+                    <span>Waiting for one more player to join the duel...</span>
+                    <span>{String(matchmakingElapsed).padStart(2, '0')}s left</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ color:'#94A3B8', fontSize:14, lineHeight:1.7, marginTop:10 }}>
+                    No player is online currently for this Rivals match. Try creating a room and invite a friend, or keep waiting in the public queue.
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:14, marginTop:22 }}>
+                    <button className="rp-btn" onClick={() => setPhase('rivals-create')}>
+                      CREATE ROOM
+                    </button>
+                    <button className="rp-btn cyan-btn" onClick={() => { setMatchmakingTimedOut(false); setMatchmakingLineIndex(0); setMatchmakingCycle((prev) => prev + 1); }}>
+                      KEEP WAITING
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {phase === 'rivals-found' && activeRivalsMatch && (
+        <div className="rivals-screen">
+          <div className="rivals-found-shell">
+            <div style={{ color: GOLD, fontSize: 11, letterSpacing: 3, fontWeight: 800 }}>OPPONENT FOUND</div>
+            <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'clamp(38px, 8vw, 74px)', color:'#fff', letterSpacing:1.5, lineHeight:.9 }}>
+              THE AUCTION <span style={{ color: CYAN }}>BEGINS</span>
+            </div>
+            <div className="rivals-found-arena">
+              <div className="rivals-team-entry left" style={{ borderColor: `${TEAMS.find((team) => team.id === activeRivalsMatch.homeTeam)?.color || GOLD}50` }}>
+                <img src={`/assets/${activeRivalsMatch.homeTeam}.png`} alt={activeRivalsMatch.homeTeam} style={{ width:88, height:88, objectFit:'contain' }} />
+                <div>
+                  <div style={{ color: TEAMS.find((team) => team.id === activeRivalsMatch.homeTeam)?.color || GOLD, fontSize: 12, fontWeight: 800, letterSpacing: 2 }}>HOME</div>
+                  <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:42, letterSpacing:1.4 }}>{activeRivalsMatch.homeTeam}</div>
+                </div>
+              </div>
+              <div className="rivals-vs-burst">
+                <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:44, color:'#fff', letterSpacing:4 }}>VS</div>
+              </div>
+              <div className="rivals-team-entry right" style={{ borderColor: `${TEAMS.find((team) => team.id === activeRivalsMatch.awayTeam)?.color || CYAN}50` }}>
+                <div>
+                  <div style={{ color: TEAMS.find((team) => team.id === activeRivalsMatch.awayTeam)?.color || CYAN, fontSize: 12, fontWeight: 800, letterSpacing: 2 }}>AWAY</div>
+                  <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:42, letterSpacing:1.4 }}>{activeRivalsMatch.awayTeam}</div>
+                </div>
+                <img src={`/assets/${activeRivalsMatch.awayTeam}.png`} alt={activeRivalsMatch.awayTeam} style={{ width:88, height:88, objectFit:'contain' }} />
+              </div>
+            </div>
+            <div style={{ color:'#94A3B8', fontSize:14, letterSpacing:1.2 }}>
+              Loading the live auction room...
+            </div>
+          </div>
+        </div>
+      )}
+
+      {phase === 'rivals' && (
+        <div className="rivals-screen">
+          <div className="rivals-shell">
+            <span className="rp-eyebrow">Daily Rivals Auction</span>
+            <h1 className="rp-h1">PLAY TODAY&apos;S<br /><span>RIVALS MATCH</span></h1>
+            <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#94A3B8', margin:'10px 0 22px', lineHeight:1.8 }}>
+              Jump straight into the scheduled 1v1 duel. We&apos;ll assign one of the two IPL teams automatically and start the auction as soon as both rivals are in.
+            </p>
+
+            {selectedRivalsMatch ? (() => {
+              const state = getRivalsMatchState(selectedRivalsMatch, nowMs);
+              const countdown = formatCountdown(new Date(selectedRivalsMatch.startAt).getTime() - nowMs);
+              const homeTeam = TEAMS.find((team) => team.id === selectedRivalsMatch.homeTeam);
+              const awayTeam = TEAMS.find((team) => team.id === selectedRivalsMatch.awayTeam);
+              const timerLabel = state === 'locked' ? 'MATCH LIVE' : state === 'open' ? 'AUCTION LOCKS IN' : 'MATCH STARTS IN';
+              return (
+                <div style={{ background:'linear-gradient(160deg, rgba(232,184,75,0.1), rgba(8,8,8,0.96))', border:'1px solid rgba(232,184,75,0.18)', borderRadius:24, padding:'24px 22px', boxShadow:'0 24px 60px rgba(0,0,0,0.22)' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:18, flexWrap:'wrap', marginBottom:18 }}>
+                    <div>
+                      <div style={{ color:'#E8B84B', fontSize:11, letterSpacing:2.5, fontWeight:800, marginBottom:6 }}>TODAY&apos;S FIXTURE</div>
+                      <div style={{ color:'#94A3B8', fontSize:12, letterSpacing:1.4 }}>{formatRivalsMeta(selectedRivalsMatch.startAt)} IST • {selectedRivalsMatch.venue}</div>
+                    </div>
+                    <div style={{ textAlign:'right' }}>
+                      <div style={{ color:'#94A3B8', fontSize:10, letterSpacing:2, fontWeight:800 }}>{timerLabel}</div>
+                      <div style={{ color: state === 'locked' ? '#ef4444' : state === 'open' ? '#4ade80' : CYAN, fontFamily:"'Bebas Neue',sans-serif", fontSize:34, letterSpacing:1.5 }}>
+                        {state === 'locked' ? 'LIVE' : countdown}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:22, flexWrap:'wrap', marginBottom:24 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+                      <img src={`/assets/${selectedRivalsMatch.homeTeam}.png`} alt={homeTeam?.short} style={{ width:72, height:72, objectFit:'contain' }} />
+                      <div>
+                        <div style={{ color:homeTeam?.color || GOLD, fontSize:12, fontWeight:800, letterSpacing:1.5 }}>{homeTeam?.short}</div>
+                        <div style={{ color:'#fff', fontFamily:"'Bebas Neue',sans-serif", fontSize:30, letterSpacing:1 }}>{homeTeam?.name}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:42, color:'#94A3B8', letterSpacing:4 }}>VS</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+                      <div style={{ textAlign:'right' }}>
+                        <div style={{ color:awayTeam?.color || CYAN, fontSize:12, fontWeight:800, letterSpacing:1.5 }}>{awayTeam?.short}</div>
+                        <div style={{ color:'#fff', fontFamily:"'Bebas Neue',sans-serif", fontSize:30, letterSpacing:1 }}>{awayTeam?.name}</div>
+                      </div>
+                      <img src={`/assets/${selectedRivalsMatch.awayTeam}.png`} alt={awayTeam?.short} style={{ width:72, height:72, objectFit:'contain' }} />
+                    </div>
+                  </div>
+
+                  <label className="rp-label">Your Name</label>
+                  <input
+                    ref={nameRef}
+                    className="rp-input"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="e.g. Rahul"
+                    maxLength={20}
+                    onKeyDown={e => e.key === 'Enter' && handleFindOnline()}
+                  />
+
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:14, marginTop:20 }}>
+                    <button className="rp-btn cyan-btn" onClick={handleFindOnline} disabled={loading || state === 'locked' || state === 'completed'}>
+                      {loading ? 'FINDING RIVAL…' : 'FIND ONLINE'}
+                    </button>
+                    <button className="rp-btn" onClick={() => { setError(''); setPhase('rivals-create'); }} disabled={!selectedRivalsMatch || state === 'locked' || state === 'completed'}>
+                      CREATE ROOM
+                    </button>
+                  </div>
+
+                  <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginTop:16 }}>
+                    <button className="lobby-copy-btn" onClick={() => router.push('/room?action=browse')}>LIVE AUCTION ROOMS</button>
+                    <button className="lobby-copy-btn" onClick={() => router.push('/room?action=join-code')}>JOIN WITH CODE</button>
+                  </div>
+
+                  {error && <div className="rp-error" style={{ marginTop:16 }}>{error}</div>}
+                </div>
+              );
+            })() : (
+              <div style={{ border:'1px solid #1f2937', borderRadius:18, padding:'24px 22px', background:'#0a0a0a', color:'#94A3B8', lineHeight:1.8 }}>
+                No joinable Rivals match is available right now. The card on the homepage will automatically switch to the next scheduled IPL fixture.
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ══════════ HOME ══════════ */}
@@ -810,12 +1573,16 @@ function RoomContent() {
       )}
 
       {/* ══════════ CREATE FORM ══════════ */}
-      {phase === 'create-form' && (
+      {(phase === 'create-form' || phase === 'rivals-create') && (
         <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 24px 40px', position:'relative', zIndex:5 }}>
           <div style={{ width:'100%', maxWidth:480, animation:'fadeUp .35s ease both' }}>
-            <span className="rp-eyebrow">Create Room</span>
-            <h1 className="rp-h1" style={{ fontSize:'clamp(2rem,7vw,3.8rem)', marginBottom:4 }}>SET UP YOUR<br /><span>ROOM</span></h1>
-            <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#94A3B8', margin:'8px 0 4px', lineHeight:1.6 }}>Configure your auction room and invite up to 10 friends.</p>
+            <span className="rp-eyebrow">{phase === 'rivals-create' ? 'Create Rivals Room' : 'Create Room'}</span>
+            <h1 className="rp-h1" style={{ fontSize:'clamp(2rem,7vw,3.8rem)', marginBottom:4 }}>{phase === 'rivals-create' ? <>SET UP THE<br /><span>DUEL</span></> : <>SET UP YOUR<br /><span>ROOM</span></>}</h1>
+            <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#94A3B8', margin:'8px 0 4px', lineHeight:1.6 }}>
+              {phase === 'rivals-create'
+                ? `${selectedRivalsMatch?.homeTeam || ''} vs ${selectedRivalsMatch?.awayTeam || ''} will be locked in automatically. Invite one friend or keep it public and let another rival join.`
+                : 'Configure your auction room and invite up to 10 friends.'}
+            </p>
 
             <label className="rp-label">Your Name</label>
             <input
@@ -842,19 +1609,31 @@ function RoomContent() {
               />
             </div>
 
-            <label className="rp-label">Auction Mode</label>
-            <div className="rp-toggle-grid">
-              <ToggleCard
-                selected={aMode === 'mega'} onSelect={() => setAMode('mega')}
-                accentColor={GOLD} title="MEGA" sub="500+ players · Full season" />
-              <ToggleCard
-                selected={aMode === 'mini'} onSelect={() => setAMode('mini')}
-                accentColor={CYAN} title="MINI" sub="~200 players · Fast format" />
-            </div>
+            {phase !== 'rivals-create' && (
+              <>
+                <label className="rp-label">Auction Mode</label>
+                <div className="rp-toggle-grid">
+                  <ToggleCard
+                    selected={aMode === 'mega'}
+                    onSelect={() => setAMode('mega')}
+                    accentColor={GOLD}
+                    title="MEGA"
+                    sub="500+ players · Full season"
+                  />
+                  <ToggleCard
+                    selected={aMode === 'mini'}
+                    onSelect={() => setAMode('mini')}
+                    accentColor={CYAN}
+                    title="MINI"
+                    sub="~200 players · Fast format"
+                  />
+                </div>
+              </>
+            )}
 
             {error && <div className="rp-error">{error}</div>}
-            <button className="rp-btn" onClick={handleCreate} disabled={loading}>
-              {loading ? 'CREATING ROOM…' : 'CREATE ROOM →'}
+            <button className="rp-btn" onClick={phase === 'rivals-create' ? handleCreateRivalsRoom : handleCreate} disabled={loading}>
+              {loading ? (phase === 'rivals-create' ? 'CREATING RIVALS ROOM…' : 'CREATING ROOM…') : (phase === 'rivals-create' ? 'CREATE RIVALS ROOM →' : 'CREATE ROOM →')}
             </button>
           </div>
         </div>
@@ -945,24 +1724,45 @@ function RoomContent() {
               <div className="rp-hr" />
 
               {/* Auction mode */}
-              {isHost ? (
+              {isRivalsLobby ? (
+                <div style={{ marginBottom: 18 }}>
+                  <div className="lobby-section-label">RIVALS MATCH</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', border:'1px solid #1b2030', borderRadius:12, background:'#0b0d12' }}>
+                    <img src={`/assets/${rivalsHomeTeam}.png`} alt="" style={{ width:32, height:32, objectFit:'contain' }} />
+                    <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:24, letterSpacing:1.5, color:'#fff' }}>{rivalsHomeTeam} VS {rivalsAwayTeam}</div>
+                    <img src={`/assets/${rivalsAwayTeam}.png`} alt="" style={{ width:32, height:32, objectFit:'contain' }} />
+                  </div>
+                </div>
+              ) : isHost ? (
                 <>
                   <div className="lobby-section-label">AUCTION MODE</div>
                   <div className="rp-toggle-grid" style={{ marginBottom:20 }}>
-                    <ToggleCard selected={aMode==='mega'} onSelect={() => changeMode('mega')} accentColor={GOLD} title="MEGA" sub="500+ players" />
-                    <ToggleCard selected={aMode==='mini'} onSelect={() => changeMode('mini')} accentColor={CYAN} title="MINI" sub="~200 players" />
+                    {MODE_OPTIONS.map(mode => (
+                      <ToggleCard
+                        key={mode.id}
+                        selected={aMode === mode.id}
+                        onSelect={() => changeMode(mode.id)}
+                        accentColor={mode.accentColor}
+                        title={mode.title}
+                        eyebrow={mode.eyebrow}
+                        sub={mode.sub}
+                        chips={mode.chips}
+                        footer={mode.footer}
+                        modeId={mode.id}
+                      />
+                    ))}
                   </div>
                 </>
               ) : (
                 <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:12, color:'#888', marginBottom:16 }}>
-                  Mode: <span style={{ color: (lobbyMode || aMode) === 'mega' ? GOLD : CYAN }}>{(lobbyMode || aMode || 'mega').toUpperCase()} AUCTION</span>
+                  Mode: <span style={{ color: (lobbyMode || aMode) === 'mega' ? GOLD : CYAN }}>{(lobbyMode || aMode || 'mega') === 'mega' ? 'IPL MEGA Auction' : 'IPL MINI Auction'}</span>
                 </div>
               )}
 
               <div className="rp-hr" />
 
               {/* Players */}
-              <div className="lobby-section-label">PLAYERS ({lobbyPlayers.length}/10)</div>
+              <div className="lobby-section-label">PLAYERS ({lobbyPlayers.length}/{isRivalsLobby ? 2 : 10})</div>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                 {lobbyPlayers.map((p, i) => {
                   const team = TEAMS.find(t => t.id === p.teamId);
@@ -982,7 +1782,7 @@ function RoomContent() {
                   );
                 })}
                 {/* Placeholder slots */}
-                {Array.from({ length: Math.max(0, 1 - lobbyPlayers.length) }).map((_, i) => (
+                {Array.from({ length: Math.max(0, (isRivalsLobby ? 2 : 1) - lobbyPlayers.length) }).map((_, i) => (
                   <div key={`empty-${i}`} style={{ padding:'10px 12px', border:'1px dashed #111', borderRadius:8, height:42 }} />
                 ))}
               </div>
@@ -995,56 +1795,93 @@ function RoomContent() {
               <div style={{ marginBottom:4 }}>
                 <span className="rp-eyebrow" style={{ fontSize:10 }}>Lobby · {roomCode}</span>
               </div>
-              <h2 style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'clamp(1.6rem,4vw,2.8rem)', color:'#fff', letterSpacing:2, marginBottom:6 }}>
-                PICK YOUR <span style={{ color:GOLD }}>FRANCHISE</span>
-              </h2>
-              <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#888', marginBottom:24, lineHeight:1.6 }}>
-                Select the IPL team you want to bid for. Each franchise can only be claimed by one player.
-                {myTeamId && <span style={{ color:GOLD }}> You picked <strong>{TEAMS.find(t=>t.id===myTeamId)?.name}</strong>.</span>}
-              </p>
+              {isRivalsLobby ? (
+                <>
+                  <h2 style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'clamp(1.6rem,4vw,2.8rem)', color:'#fff', letterSpacing:2, marginBottom:6 }}>
+                    RIVALS <span style={{ color:GOLD }}>SHOWDOWN</span>
+                  </h2>
+                  <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#888', marginBottom:24, lineHeight:1.6 }}>
+                    Teams are assigned automatically for this 1v1 match. Once the second player joins, the duel starts immediately.
+                    {myTeamId && <span style={{ color:GOLD }}> You are playing as <strong>{TEAMS.find(t=>t.id===myTeamId)?.name}</strong>.</span>}
+                  </p>
 
-              <div className="franchise-grid">
-                {TEAMS.map(t => {
-                  const isMine  = t.id === myTeamId;
-                  const takenBy = takenMap[t.id];
-                  const taken   = !!takenBy && !isMine;
-                  let cls = 'franchise-tile';
-                  if (isMine)  cls += ' ft-mine';
-                  if (taken)   cls += ' ft-taken';
-
-                  return (
-                    <div
-                      key={t.id}
-                      className={cls}
-                      style={{
-                        borderColor: isMine ? t.color : taken ? '#1c1c1c' : '#242424',
-                        background: isMine
-                          ? `linear-gradient(160deg, ${t.color}18, ${t.color}08)`
-                          : taken ? '#0a0a0a' : `${t.color}06`,
-                        boxShadow: isMine ? `0 0 20px ${t.color}28, inset 0 0 20px ${t.color}08` : 'none',
-                      }}
-                      onClick={() => !taken && selectTeam(t.id)}
-                    >
-                      {/* TAKEN overlay */}
-                      {taken && <div className="taken-overlay" />}
-
-                      {/* Team color accent top bar */}
-                      <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background: isMine ? t.color : `${t.color}40`, borderRadius:'8px 8px 0 0' }} />
-
-                      <div className="franchise-short" style={{ color: isMine ? t.color : taken ? '#333' : t.color }}>
-                        {t.short}
-                      </div>
-                      <div className="franchise-name">{t.name}</div>
-
-                      {isMine && (
-                        <div className="franchise-mine-badge" style={{ color: t.color, marginTop:4 }}>
-                          ✓ YOUR PICK
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:16 }}>
+                    {[rivalsHomeTeam, rivalsAwayTeam].map((teamId) => {
+                      const team = TEAMS.find((entry) => entry.id === teamId);
+                      const owner = takenMap[teamId];
+                      const isMine = myTeamId === teamId;
+                      return (
+                        <div key={teamId} style={{
+                          border:`1px solid ${team?.color || '#333'}40`,
+                          background:`linear-gradient(160deg, ${team?.color || '#fff'}18, rgba(8,8,8,0.96))`,
+                          borderRadius:18,
+                          padding:'18px 16px',
+                          boxShadow:isMine ? `0 0 28px ${team?.color || '#fff'}22` : 'none'
+                        }}>
+                          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:14 }}>
+                            <img src={`/assets/${teamId}.png`} alt={team?.short} style={{ width:48, height:48, objectFit:'contain' }} />
+                            {isMine && <div style={{ fontSize:10, letterSpacing:2, color:team?.color, fontWeight:800 }}>YOUR TEAM</div>}
+                          </div>
+                          <div style={{ color:team?.color, fontFamily:"'Bebas Neue',sans-serif", fontSize:28, letterSpacing:1.2 }}>{team?.short}</div>
+                          <div style={{ color:'#fff', fontSize:14, marginTop:4 }}>{team?.name}</div>
+                          <div style={{ color:'#94A3B8', fontSize:11, marginTop:12, letterSpacing:1 }}>
+                            {owner ? `Assigned to ${owner}` : 'Waiting for rival'}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:'clamp(1.6rem,4vw,2.8rem)', color:'#fff', letterSpacing:2, marginBottom:6 }}>
+                    PICK YOUR <span style={{ color:GOLD }}>FRANCHISE</span>
+                  </h2>
+                  <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#888', marginBottom:24, lineHeight:1.6 }}>
+                    Select the IPL team you want to bid for. Each franchise can only be claimed by one player.
+                    {myTeamId && <span style={{ color:GOLD }}> You picked <strong>{TEAMS.find(t=>t.id===myTeamId)?.name}</strong>.</span>}
+                  </p>
+
+                  <div className="franchise-grid">
+                    {TEAMS.map(t => {
+                      const isMine  = t.id === myTeamId;
+                      const takenBy = takenMap[t.id];
+                      const taken   = !!takenBy && !isMine;
+                      let cls = 'franchise-tile';
+                      if (isMine)  cls += ' ft-mine';
+                      if (taken)   cls += ' ft-taken';
+
+                      return (
+                        <div
+                          key={t.id}
+                          className={cls}
+                          style={{
+                            borderColor: isMine ? t.color : taken ? '#1c1c1c' : '#242424',
+                            background: isMine
+                              ? `linear-gradient(160deg, ${t.color}18, ${t.color}08)`
+                              : taken ? '#0a0a0a' : `${t.color}06`,
+                            boxShadow: isMine ? `0 0 20px ${t.color}28, inset 0 0 20px ${t.color}08` : 'none',
+                          }}
+                          onClick={() => !taken && selectTeam(t.id)}
+                        >
+                          {taken && <div className="taken-overlay" />}
+                          <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background: isMine ? t.color : `${t.color}40`, borderRadius:'8px 8px 0 0' }} />
+                          <div className="franchise-short" style={{ color: isMine ? t.color : taken ? '#333' : t.color }}>
+                            {t.short}
+                          </div>
+                          <div className="franchise-name">{t.name}</div>
+
+                          {isMine && (
+                            <div className="franchise-mine-badge" style={{ color: t.color, marginTop:4 }}>
+                              ✓ YOUR PICK
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
 
               {error && <div className="rp-error" style={{ marginTop:16 }}>{error}</div>}
             </div>
@@ -1057,21 +1894,23 @@ function RoomContent() {
 
               <div className="lobby-stat-card">
                 <div className="lobby-stat-val" style={{ color:GOLD }}>
-                  {lobbyPlayers.filter(p => p.teamId).length}/{lobbyPlayers.length}
+                  {lobbyPlayers.filter(p => p.teamId).length}/{isRivalsLobby ? 2 : lobbyPlayers.length}
                 </div>
-                <div className="lobby-stat-lbl">PLAYERS WITH TEAM</div>
+                <div className="lobby-stat-lbl">{isRivalsLobby ? 'RIVALS READY' : 'PLAYERS WITH TEAM'}</div>
               </div>
 
               <div className="lobby-stat-card">
                 <div className="lobby-stat-val" style={{ color:CYAN }}>
-                  {10 - lobbyPlayers.length}
+                  {Math.max(0, (isRivalsLobby ? 2 : 10) - lobbyPlayers.length)}
                 </div>
-                <div className="lobby-stat-lbl">SLOTS REMAINING</div>
+                <div className="lobby-stat-lbl">{isRivalsLobby ? 'DUEL SLOTS LEFT' : 'SLOTS REMAINING'}</div>
               </div>
 
               <div className="lobby-stat-card">
                 <div className="lobby-stat-val" style={{ color:GREEN }}>
-                  {lobbyPlayers.length >= 1 && lobbyPlayers.every(p => p.teamId) ? 'READY' : 'WAITING'}
+                  {isRivalsLobby
+                    ? (multiGS ? 'LIVE' : lobbyPlayers.length >= 2 ? 'STARTING' : 'MATCHING')
+                    : (lobbyPlayers.length >= 1 && lobbyPlayers.every(p => p.teamId) ? 'READY' : 'WAITING')}
                 </div>
                 <div className="lobby-stat-lbl">ROOM STATUS</div>
               </div>
@@ -1082,7 +1921,7 @@ function RoomContent() {
               <div className="lobby-section-label">CLAIMED FRANCHISES</div>
               {Object.entries(takenMap).length === 0 ? (
                 <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#666', lineHeight:1.8 }}>
-                  No franchise selected yet.<br />Be the first!
+                  {isRivalsLobby ? 'Waiting for the first team assignment to appear.' : <>No franchise selected yet.<br />Be the first!</>}
                 </div>
               ) : (
                 TEAMS.filter(t => takenMap[t.id]).map(t => (
@@ -1103,7 +1942,31 @@ function RoomContent() {
       {/* ── Fixed bottom start bar (lobby only) ── */}
       {phase === 'lobby' && (
         <div className="lobby-bottom-bar">
-          {isHost ? (
+          {isRivalsLobby ? (
+            <div style={{ display:'flex', flexDirection:'column', gap:10, width:'100%', alignItems:'center' }}>
+              <span style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#888', letterSpacing:2, textAlign:'center' }}>
+                {multiGS
+                  ? 'Both rivals are locked in. Enter the auction room.'
+                  : lobbyPlayers.length >= 2
+                    ? 'Second player joined. Starting the Rivals auction...'
+                    : isHost
+                      ? 'Room created. Share the code or wait while we find another rival.'
+                      : 'You are in. Waiting for the duel to begin...'}
+              </span>
+              {multiGS ? (
+                <button
+                  className="lobby-start-btn"
+                  onClick={() => router.push(`/auction?room=${roomCode}${isSpectator?'&spectator=1':''}&mode=RIVALS`)}
+                >
+                  ENTER AUCTION →
+                </button>
+              ) : (
+                <div className="lobby-waiting">
+                  {isHost ? '⏳ Waiting for one more rival…' : '⏳ Matching both rivals…'}
+                </div>
+              )}
+            </div>
+          ) : isHost ? (
             <>
               <span style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#888', letterSpacing:2 }}>
                 {multiGS ? 'Auction is ongoing' : (canStart ? 'Ready to go!' : 'Waiting for players…')}

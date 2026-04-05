@@ -1,9 +1,16 @@
 'use client';
 
-import { useState } from "react";
-import { GOLD, CYAN, BG, CARD, BORDER, ROLE_C, ROLE_EMOJI, ROLE_L } from "./MultiScreens";
+import ALL_PLAYERS from "../app/data/Players.json";
+import { GOLD, CYAN, BG, CARD, BORDER, ROLE_C, ROLE_L } from "./MultiScreens";
 
+const PLAYER_PHOTOS = ALL_PLAYERS.reduce((acc, player) => {
+    acc[player.name.toLowerCase()] = player.photo_url || player.image_url || null;
+    return acc;
+}, {});
 
+function getPlayerPhoto(name) {
+    return PLAYER_PHOTOS[(name || '').toLowerCase()] || null;
+}
 
 export function SquadModal({ isOpen, onClose, squads, myTeamId, TEAMS, maxSquad = 25, maxOverseas = 8 }) {
     if (!isOpen) return null;
@@ -72,12 +79,20 @@ export function SquadModal({ isOpen, onClose, squads, myTeamId, TEAMS, maxSquad 
                                         </div>
 
                                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14 }}>
-                                            {players.map((p, i) => (
-                                                <div key={i} style={{ background: "#05070D", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 14, display: "flex", flexDirection: "column", gap: 8, transition: "transform 0.2s", cursor: "default" }} onMouseEnter={e => e.currentTarget.style.transform = "translateY(-2px)"} onMouseLeave={e => e.currentTarget.style.transform = "none"}>
+                                            {players.map((p, i) => {
+                                                const photoUrl = getPlayerPhoto(p.name);
+                                                return (
+                                                <div key={i} style={{ background: "#05070D", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 14, display: "flex", flexDirection: "column", gap: 10, transition: "transform 0.2s", cursor: "default" }} onMouseEnter={e => e.currentTarget.style.transform = "translateY(-2px)"} onMouseLeave={e => e.currentTarget.style.transform = "none"}>
                                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                                                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                                            <span style={{ fontSize: 16 }}>{ROLE_EMOJI[p.role]}</span>
-                                                            <div style={{ fontWeight: 800, color: "#fff", fontSize: 15, lineHeight: 1.2 }}>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+                                                            <div style={{ width: 38, height: 38, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: `1px solid ${ROLE_C[p.role]}55`, background: `${ROLE_C[p.role]}12`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                                {photoUrl ? (
+                                                                    <img src={photoUrl} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }} />
+                                                                ) : (
+                                                                    <img src={`/assets/${myTeamId}.png`} alt={myTeamId} style={{ width: 24, height: 24, objectFit: "contain", opacity: 0.9 }} />
+                                                                )}
+                                                            </div>
+                                                            <div style={{ fontWeight: 800, color: "#fff", fontSize: 15, lineHeight: 1.2, minWidth: 0 }}>
                                                                 {p.name} {p.overseas && <span title="Overseas Player">✈️</span>}
                                                             </div>
                                                         </div>
@@ -89,7 +104,7 @@ export function SquadModal({ isOpen, onClose, squads, myTeamId, TEAMS, maxSquad 
                                                         <div style={{ fontSize: 11, color: p.overseas ? CYAN : "#888", fontWeight: 700, letterSpacing: 1 }}>{p.overseas ? "OVERSEAS" : "INDIAN"}</div>
                                                     </div>
                                                 </div>
-                                            ))}
+                                            )})}
                                         </div>
                                     </div>
                                 );

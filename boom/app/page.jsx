@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CircularGallery from './components/CircularGallery';
 import ALL_PLAYERS from './data/Players.json';
+import { getBackendUrl } from './lib/backendUrl';
 import './landing.css';
 
 
@@ -29,6 +31,52 @@ const TEAMS = [
   { id: 'GT', name: 'Gujarat Titans', short: 'GT', color: '#4DD0E1', logo: '/assets/GT.png' },
   { id: 'LSG', name: 'Lucknow Super Giants', short: 'LSG', color: '#81D4FA', logo: '/assets/LSG.png' },
 ];
+
+const TEAM_LOOKUP = Object.fromEntries(TEAMS.map((team) => [team.id, team]));
+
+function getDateKey(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function getMatchState(match, nowMs) {
+  const openMs = new Date(match.auctionOpensAt).getTime();
+  const startMs = new Date(match.startAt).getTime();
+  const endMs = new Date(match.endAt).getTime();
+
+  if (nowMs >= endMs) return 'completed';
+  if (nowMs >= startMs) return 'locked';
+  if (nowMs >= openMs) return 'open';
+  return 'scheduled';
+}
+
+function isPlayableMatch(match, nowMs) {
+  const state = getMatchState(match, nowMs);
+  return state === 'scheduled' || state === 'open';
+}
+
+function formatCountdown(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return 'Live';
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+  return `${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+}
+
+function formatMatchMeta(startAt) {
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(startAt));
+}
 
 const TICKER_ITEMS = [
   '204 PLAYERS IN THE POOL', '10 FRANCHISES PER GAME', 'LIVE MULTIPLAYER BIDDING',
@@ -92,6 +140,48 @@ function PlayerCard({ name, role, path }) {
 /* ── Page ── */
 export default function LandingPage() {
   const router = useRouter();
+  const [rivalsMatches, setRivalsMatches] = useState([]);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [isCompactCard, setIsCompactCard] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const syncCompact = () => setIsCompactCard(window.innerWidth <= 720);
+    syncCompact();
+    window.addEventListener('resize', syncCompact);
+    return () => window.removeEventListener('resize', syncCompact);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${getBackendUrl()}/api/rivals/matches`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled) setRivalsMatches(data?.matches || []);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const todayKey = getDateKey(new Date(nowMs));
+  const todayRivals = useMemo(
+    () => rivalsMatches.filter((match) => match.date === todayKey).sort((a, b) => new Date(a.startAt) - new Date(b.startAt)),
+    [rivalsMatches, todayKey]
+  );
+  const featuredRival = useMemo(() => {
+    const nextPlayableToday = todayRivals.find((match) => isPlayableMatch(match, nowMs));
+    if (nextPlayableToday) return nextPlayableToday;
+    return rivalsMatches.find((match) => isPlayableMatch(match, nowMs)) || null;
+  }, [todayRivals, rivalsMatches, nowMs]);
+  const rivalsHref = featuredRival ? `/room?action=rivals&matchKey=${encodeURIComponent(featuredRival.key)}` : '/room?action=browse';
 
   return (
     <div className="landing-root">
@@ -106,6 +196,7 @@ export default function LandingPage() {
             { label: 'Teams', href: '/teams' },
             { label: 'Players', href: '/players' },
             { label: 'How to Play', href: '/how-to-play' },
+            { label: 'Schedule', href: '/schedule' },
           ].map((link) => (
             <a key={link.label} href={link.href} className="l-nav-link">{link.label}</a>
           ))}
@@ -182,6 +273,79 @@ export default function LandingPage() {
             {/* Hero Players Image */}
             <img className="l-hero-players" src="/assets/Hero_players.png" alt="" fetchPriority="high" />
           </div>
+        </div>
+      </section>
+
+      <section style={{ padding: '0 24px 28px', position: 'relative', zIndex: 2 }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', background: 'linear-gradient(160deg, rgba(232,184,75,0.12), rgba(9,10,14,0.96))', border: '1px solid rgba(232,184,75,0.18)', borderRadius: 28, padding: '22px 20px 24px', boxShadow: '0 24px 60px rgba(0,0,0,0.28)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+            <div>
+              <div style={{ color: '#E8B84B', fontSize: 11, letterSpacing: 3, fontWeight: 800, marginBottom: 6 }}>NEW DAILY MODE</div>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: 1.5, color: '#fff' }}>TODAY IN RIVALS MODE</div>
+            </div>
+            <button onClick={() => router.push(rivalsHref)} style={{ border: 'none', borderRadius: 999, padding: '12px 18px', background: 'linear-gradient(135deg, #E8B84B, #c8921b)', color: '#000', fontWeight: 900, letterSpacing: 1.2, cursor: 'pointer' }}>
+              PLAY AUCTION NOW
+            </button>
+          </div>
+
+          {featuredRival ? (() => {
+            const home = TEAM_LOOKUP[featuredRival.homeTeam];
+            const away = TEAM_LOOKUP[featuredRival.awayTeam];
+            const state = getMatchState(featuredRival, nowMs);
+            const countdown = formatCountdown(new Date(featuredRival.startAt).getTime() - nowMs);
+            const accent = state === 'open' ? '#4ade80' : state === 'locked' ? '#ef4444' : '#22D3EE';
+            const timerLabel = state === 'locked' ? 'MATCH LIVE' : state === 'open' ? 'AUCTION LOCKS IN' : 'MATCH STARTS IN';
+            const matchMeta = formatMatchMeta(featuredRival.startAt);
+
+            return (
+              <div style={{ background: '#0b0d12', border: `1px solid ${featuredRival.isHighProfile ? 'rgba(232,184,75,0.28)' : '#1b2030'}`, borderRadius: 22, padding: '18px 20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isCompactCard ? 'minmax(0, 1fr)' : '1fr auto', gap: 16, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ color: '#E8B84B', fontSize: 12, letterSpacing: 2.5, fontWeight: 800 }}>RIVALS</div>
+                      <div style={{ color: '#94A3B8', fontSize: 12, letterSpacing: 1.4 }}>{matchMeta} IST</div>
+                      <div style={{ color: featuredRival.isHighProfile ? '#E8B84B' : '#64748B', fontSize: 12, letterSpacing: 1.4 }}>
+                        {featuredRival.isHighProfile ? 'HIGHLIGHT CLASH' : featuredRival.venue}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isCompactCard ? 12 : 18, flexWrap: 'nowrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: isCompactCard ? 8 : 12, minWidth: 0, flex: 1 }}>
+                      <img src={home?.logo} alt={home?.short} style={{ width: isCompactCard ? 46 : 58, height: isCompactCard ? 46 : 58, objectFit: 'contain', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ color: home?.color, fontWeight: 800, letterSpacing: 1.4, fontSize: isCompactCard ? 11 : 13 }}>{home?.short}</div>
+                        <div style={{ color: '#fff', fontFamily: "'Bebas Neue', sans-serif", fontSize: isCompactCard ? 18 : 26, letterSpacing: 1, lineHeight: 1 }}>{home?.name}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: isCompactCard ? 24 : 34, color: '#94A3B8', letterSpacing: isCompactCard ? 2 : 4, flexShrink: 0 }}>VS</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: isCompactCard ? 8 : 12, minWidth: 0, flex: 1, justifyContent: 'flex-end' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ color: away?.color, fontWeight: 800, letterSpacing: 1.4, fontSize: isCompactCard ? 11 : 13 }}>{away?.short}</div>
+                        <div style={{ color: '#fff', fontFamily: "'Bebas Neue', sans-serif", fontSize: isCompactCard ? 18 : 26, letterSpacing: 1, lineHeight: 1 }}>{away?.name}</div>
+                      </div>
+                      <img src={away?.logo} alt={away?.short} style={{ width: isCompactCard ? 46 : 58, height: isCompactCard ? 46 : 58, objectFit: 'contain', flexShrink: 0 }} />
+                    </div>
+                  </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isCompactCard ? 'stretch' : 'flex-end', gap: 10, textAlign: isCompactCard ? 'center' : 'right' }}>
+                    <div style={{ color: '#94A3B8', fontSize: 11, fontWeight: 800, letterSpacing: 2 }}>{timerLabel}</div>
+                    <div style={{ color: accent, fontFamily: "'Bebas Neue', sans-serif", fontSize: isCompactCard ? 30 : 34, letterSpacing: 1.2 }}>{state === 'locked' ? 'LIVE' : countdown}</div>
+                    <button onClick={() => router.push(rivalsHref)} style={{ border: 'none', borderRadius: 999, padding: '12px 18px', background: 'linear-gradient(135deg, #E8B84B, #c8921b)', color: '#000', fontWeight: 900, letterSpacing: 1.2, cursor: 'pointer', width: isCompactCard ? '100%' : 'auto' }}>
+                      PLAY AUCTION NOW
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })() : (
+            <div style={{ background: '#0b0d12', border: '1px solid #1b2030', borderRadius: 18, padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ color: '#94A3B8', lineHeight: 1.7 }}>
+                Rivals mode auto-updates with the IPL schedule each day. Jump in from here to find an online rival or create a private duel room.
+              </div>
+              <button onClick={() => router.push('/room?action=browse')} style={{ border: 'none', borderRadius: 999, padding: '12px 18px', background: 'linear-gradient(135deg, #E8B84B, #c8921b)', color: '#000', fontWeight: 900, letterSpacing: 1.2, cursor: 'pointer' }}>
+                PLAY AUCTION NOW
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
