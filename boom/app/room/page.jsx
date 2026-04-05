@@ -722,7 +722,7 @@ const TEAM_COLORS = {
 };
 const ALL_TEAM_IDS = ['MI','CSK','RCB','KKR','DC','PBKS','RR','SRH','GT','LSG'];
 
-function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetchRooms, loading, error, doJoin, onViewCompleted, liveStats, onBack, onCreate, TEAMS, GOLD, CYAN }) {
+function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetchRooms, loading, error, doJoin, onRequireName, onViewCompleted, liveStats, onBack, onCreate, TEAMS, GOLD, CYAN }) {
   const [activeTab, setActiveTab] = useState('waiting'); // Show joinable rooms first!
 
   // Filter logic
@@ -848,7 +848,7 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
                         </div>
                         <div className="rb-room-name" style={{ fontSize: 28, letterSpacing: 1 }}>{room.name || 'Mega Auction'}</div>
                         {isRivals && room.rivalsMatch && (
-                          <div style={{ marginTop: 8, fontSize: 11, color: '#94A3B8', letterSpacing: 1 }}>
+                        <div style={{ marginTop: 8, fontSize: 11, color: '#94A3B8', letterSpacing: 1 }}>
                             {room.rivalsMatch.homeTeam} VS {room.rivalsMatch.awayTeam}
                           </div>
                         )}
@@ -1071,8 +1071,13 @@ function RoomContent() {
   );
   const rivalsHomeTeam = roomMeta?.rivalsMatch?.homeTeam || selectedRivalsMatch?.homeTeam;
   const rivalsAwayTeam = roomMeta?.rivalsMatch?.awayTeam || selectedRivalsMatch?.awayTeam;
+  const rivalsHomePlayer = rivalsHomeTeam ? takenMap[rivalsHomeTeam] : null;
+  const rivalsAwayPlayer = rivalsAwayTeam ? takenMap[rivalsAwayTeam] : null;
   const activeRivalsMatch = roomMeta?.rivalsMatch || selectedRivalsMatch;
   const matchmakingElapsed = matchmakingStartedAt ? Math.max(0, 60 - Math.floor((nowMs - matchmakingStartedAt) / 1000)) : 60;
+  const formatDuelLabel = useCallback((teamId, playerName) => (
+    playerName ? `${teamId} (${playerName})` : teamId || ''
+  ), []);
 
   // ── Handlers ──
   const handleCreate = () => {
@@ -1396,6 +1401,9 @@ function RoomContent() {
                 <div>
                   <div style={{ color: TEAMS.find((team) => team.id === activeRivalsMatch.homeTeam)?.color || GOLD, fontSize: 12, fontWeight: 800, letterSpacing: 2 }}>HOME</div>
                   <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:42, letterSpacing:1.4 }}>{activeRivalsMatch.homeTeam}</div>
+                  <div style={{ color:'#94A3B8', fontSize:13, letterSpacing:1.2, marginTop:6 }}>
+                    {formatDuelLabel(activeRivalsMatch.homeTeam, rivalsHomePlayer)}
+                  </div>
                 </div>
               </div>
               <div className="rivals-vs-burst">
@@ -1405,6 +1413,9 @@ function RoomContent() {
                 <div>
                   <div style={{ color: TEAMS.find((team) => team.id === activeRivalsMatch.awayTeam)?.color || CYAN, fontSize: 12, fontWeight: 800, letterSpacing: 2 }}>AWAY</div>
                   <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:42, letterSpacing:1.4 }}>{activeRivalsMatch.awayTeam}</div>
+                  <div style={{ color:'#94A3B8', fontSize:13, letterSpacing:1.2, marginTop:6 }}>
+                    {formatDuelLabel(activeRivalsMatch.awayTeam, rivalsAwayPlayer)}
+                  </div>
                 </div>
                 <img src={`/assets/${activeRivalsMatch.awayTeam}.png`} alt={activeRivalsMatch.awayTeam} style={{ width:88, height:88, objectFit:'contain' }} />
               </div>
@@ -1547,7 +1558,14 @@ function RoomContent() {
                       <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#eee' }}>{r.name}</div>
                       <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#94A3B8', marginTop:2 }}>Host: {r.host} · {r.players}/10</div>
                     </div>
-                    <button className="rp-room-join-btn" onClick={() => { setJoinCode(r.code); setPhase('join-code'); }}>QUICK JOIN</button>
+                    <button className="rp-room-join-btn" onClick={() => {
+                      if (!name.trim()) {
+                        onRequireName?.();
+                        nameRef.current?.focus();
+                        return;
+                      }
+                      doJoin(r.code);
+                    }}>QUICK JOIN</button>
                   </div>
                 ))}
               </div>
@@ -1563,7 +1581,14 @@ function RoomContent() {
                       <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:16, color:'#aaa' }}>{r.name}</div>
                       <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:10, color:'#94A3B8', marginTop:2 }}>Code: {r.code}</div>
                     </div>
-                    <button className="rp-room-rejoin-btn" onClick={() => { setJoinCode(r.code); setPhase('join-code'); }}>REJOIN</button>
+                    <button className="rp-room-rejoin-btn" onClick={() => {
+                      if (!name.trim()) {
+                        onRequireName?.();
+                        nameRef.current?.focus();
+                        return;
+                      }
+                      doJoin(r.code);
+                    }}>REJOIN</button>
                   </div>
                 ))}
               </div>
@@ -1686,6 +1711,7 @@ function RoomContent() {
           loading={loading}
           error={error}
           doJoin={doJoin}
+          onRequireName={() => setError('Enter your name to join room')}
           onViewCompleted={viewCompletedRoom}
           liveStats={liveStats}
           onBack={() => setPhase('home')}

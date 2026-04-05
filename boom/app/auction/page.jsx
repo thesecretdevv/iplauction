@@ -14,6 +14,7 @@ const CYAN = '#22D3EE';
 const RIVALS_MAX_SQUAD_SIZE = 13;
 const RIVALS_MAX_OVERSEAS = 5;
 const DEFAULT_PURSE = 120;
+const GIPHY_API_KEY = 'uBg7NTfB0PiHDgwH9F6t0t0uDoFLFXqC';
 const PLAYER_PHOTOS = ALL_PLAYERS.reduce((acc, player) => {
   acc[player.name.toLowerCase()] = player.photo_url || player.image_url || null;
   return acc;
@@ -52,6 +53,22 @@ function playBidClick() {
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.12);
   } catch (_) {}
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M20.52 3.48A11.8 11.8 0 0 0 12.08 0C5.5 0 .16 5.34.16 11.92c0 2.1.55 4.14 1.58 5.93L0 24l6.31-1.65a11.92 11.92 0 0 0 5.77 1.48h.01c6.57 0 11.91-5.34 11.92-11.92a11.82 11.82 0 0 0-3.49-8.43Zm-8.44 18.34h-.01a9.9 9.9 0 0 1-5.04-1.38l-.36-.22-3.75.98 1-3.65-.24-.38a9.9 9.9 0 0 1-1.52-5.27c0-5.47 4.45-9.92 9.93-9.92 2.65 0 5.14 1.03 7.01 2.91A9.88 9.88 0 0 1 22 11.91c0 5.48-4.45 9.92-9.92 9.92Zm5.44-7.39c-.3-.15-1.77-.87-2.05-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.95 1.17-.17.2-.35.22-.65.08-.3-.15-1.26-.47-2.4-1.49-.88-.78-1.48-1.76-1.66-2.05-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.18.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.21-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.49 0 1.46 1.06 2.88 1.21 3.08.15.2 2.1 3.21 5.08 4.5.71.31 1.26.5 1.7.64.71.22 1.37.19 1.89.12.57-.09 1.77-.72 2.02-1.42.25-.7.25-1.29.18-1.42-.08-.12-.28-.2-.57-.35Z" />
+    </svg>
+  );
+}
+
+function TelegramIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M9.04 15.52 8.66 20.9c.54 0 .78-.23 1.06-.5l2.54-2.43 5.27 3.86c.97.53 1.65.25 1.91-.9L22.9 4.7c.34-1.4-.5-1.95-1.43-1.6L1.98 10.6c-1.33.52-1.31 1.26-.23 1.59l4.98 1.55L18.3 6.47c.55-.36 1.05-.16.63.2" />
+    </svg>
+  );
 }
 
 function formatCountdown(ms) {
@@ -166,7 +183,8 @@ function AuctionContent() {
     lobbyPlayers, myName, myTeamId, roomCode,
     lobbyMode, auctionMode, isSpectator, chatLog,
     playerId, setRoomCode, setLobbyPlayers, setIsHost, setMyName,
-    setPlayMode, setMultiGS, setLobbyMode, setIsSpectator, setRoomMeta
+    setPlayMode, setMultiGS, setLobbyMode, setIsSpectator, setRoomMeta,
+    handleRestart
   } = useGame();
 
   const searchParams = useSearchParams();
@@ -211,6 +229,24 @@ function AuctionContent() {
       ],
     });
   }, [closeDialog, emit]);
+  const openLeaveAuctionDialog = useCallback(() => {
+    setDialog({
+      title: 'Leave Auction?',
+      message: 'You will leave this live auction room and return to the lobby browser.',
+      tone: 'info',
+      actions: [
+        { label: 'Stay', variant: 'secondary', onClick: closeDialog },
+        {
+          label: 'Leave',
+          variant: 'danger',
+          onClick: () => {
+            closeDialog();
+            handleRestart('/room?action=browse');
+          },
+        },
+      ],
+    });
+  }, [closeDialog, handleRestart]);
   const handleTimerDurationChange = useCallback((duration) => {
     emit('set-timer-duration', { duration });
   }, [emit]);
@@ -370,7 +406,17 @@ function AuctionContent() {
   const isTimerLow  = !gs.isPaused && gs.timer <= 5;
   const configuredTimer = gs.timerDuration || 10;
 
-  const sortedTeams = [...displayTeams].sort((a, b) => (gs.purses[b.id] || 0) - (gs.purses[a.id] || 0));
+  const activeOwnedTeamIds = new Set(
+    (lobbyPlayers || [])
+      .filter((player) => !player.isSpectator && !player.offline && player.teamId)
+      .map((player) => player.teamId)
+  );
+  const sortedTeams = [...displayTeams].sort((a, b) => {
+    const aActive = activeOwnedTeamIds.has(a.id) ? 1 : 0;
+    const bActive = activeOwnedTeamIds.has(b.id) ? 1 : 0;
+    if (aActive !== bActive) return bActive - aActive;
+    return (gs.purses[b.id] || 0) - (gs.purses[a.id] || 0);
+  });
 
   return (
     <div className="ac-app-root" style={{ fontFamily: "'Barlow Condensed', sans-serif", background: BG, color: '#fff', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', overscrollBehavior: 'none', WebkitTapHighlightColor: 'transparent' }}>
@@ -459,7 +505,7 @@ function AuctionContent() {
         /* CENTER */
         .ac-center {
           flex:1; display:flex; flex-direction:column;
-          align-items:center; overflow:hidden; position:relative;
+          align-items:center; overflow:hidden; position:relative; min-height:0;
         }
 
         /* Player hero — scrollable area above bid strip */
@@ -469,6 +515,7 @@ function AuctionContent() {
           padding:12px 14px 4px; width:100%;
           overscroll-behavior: contain;
           overflow-anchor: none;
+          min-height:0;
         }
 
         /* Player compact pill on mobile */
@@ -587,8 +634,57 @@ function AuctionContent() {
         .ac-mob-tab.active { color:#fff; border-bottom-color:${GOLD}; }
 
         /* Tab content area — scrollable */
-        .ac-tab-content { width:100%; max-width:480px; padding:8px 0 20px; overscroll-behavior: contain; flex-shrink:0; }
+        .ac-mobile-dock {
+          display:none;
+        }
+        .ac-tab-content {
+          width:100%;
+          max-width:480px;
+          padding:8px 0 0;
+          overscroll-behavior: contain;
+          flex:1;
+          min-height:0;
+          overflow:hidden;
+          display:flex;
+          flex-direction:column;
+        }
+        .ac-mobile-panel-scroll {
+          flex:1;
+          min-height:0;
+          overflow-y:auto;
+          overscroll-behavior:contain;
+          padding-bottom:8px;
+        }
+        .ac-mobile-footer {
+          width:100%;
+          max-width:480px;
+          min-height:34px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          gap:10px;
+          padding:8px 12px calc(8px + env(safe-area-inset-bottom));
+          color:#6b7280;
+          font-size:10px;
+          letter-spacing:1.2px;
+          border-top:1px solid #171a22;
+          background:linear-gradient(180deg, rgba(8,8,8,0.96), rgba(8,8,8,1));
+          flex-shrink:0;
+        }
+        .ac-mobile-social {
+          width:22px;
+          height:22px;
+          border-radius:999px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          border:1px solid #242a36;
+          color:#cbd5e1;
+          background:#10131a;
+          flex-shrink:0;
+        }
         @media(min-width:861px){ .ac-tab-content { display:none !important; } }
+        @media(min-width:861px){ .ac-mobile-dock, .ac-mobile-footer { display:none !important; } }
 
         /* Team row in tab */
         .ac-team-tab-row {
@@ -755,7 +851,7 @@ function AuctionContent() {
             letter-spacing:1.2px;
           }
           .ac-scroll {
-            padding: 10px 12px 12px;
+            padding: 10px 12px 8px;
           }
           .ac-bid-area {
             min-height: 154px;
@@ -763,19 +859,30 @@ function AuctionContent() {
           .ac-bid-log {
             min-height: 110px;
           }
-          .ac-bid-row,
-          .ac-mob-tabs {
-            position: sticky;
-            bottom: 0;
-            z-index: 5;
-            background: ${BG};
+          .ac-mobile-dock {
+            display:flex;
+            flex-direction:column;
+            width:100%;
+            max-width:100%;
+            padding:0 12px 0;
+            gap:0;
+            flex:1;
+            min-height:0;
+            overflow:hidden;
+            background:${BG};
+          }
+          .ac-tab-content {
+            max-width:none;
           }
           .ac-bid-row {
+            max-width:none;
             padding-top: 8px;
-            margin-bottom: 0;
+            margin:0 0 4px;
           }
           .ac-mob-tabs {
-            padding-top: 6px;
+            max-width:none;
+            padding-top: 2px;
+            margin-bottom:0;
           }
         }
       `}</style>
@@ -864,6 +971,15 @@ function AuctionContent() {
                 </div>
               </>
             )}
+            {isMulti && !isHost && (
+              <button
+                className="ac-host-action ac-desktop-only danger"
+                onClick={openLeaveAuctionDialog}
+                style={{ height: 36 }}
+              >
+                LEAVE
+              </button>
+            )}
 
             <div className={`ac-timer-box${isTimerLow ? ' low' : ''}`}
               style={{ color: gs.isPaused ? '#555' : isTimerLow ? '#ef4444' : GOLD }}>
@@ -912,6 +1028,13 @@ function AuctionContent() {
             </button>
             <button className="ac-host-action danger" onClick={openEndAuctionDialog}>
               END AUCTION
+            </button>
+          </div>
+        )}
+        {isMulti && !isHost && (
+          <div className="ac-mobile-host-bar">
+            <button className="ac-host-action danger" onClick={openLeaveAuctionDialog}>
+              LEAVE AUCTION
             </button>
           </div>
         )}
@@ -1146,62 +1269,58 @@ function AuctionContent() {
                     })}
                   </div>
                 )}
-                {/* end bid log (ac-scroll stays open here to wrap tabs and bid row) */}
+                {/* end bid log */}
+              </div>{/* end ac-scroll */}
 
-              {/* ── INLINE BID ROW (mobile, not fixed) ── */}
-              <div className="ac-bid-row">
-                {/* Purse */}
-                <div className="ac-purse-label">
-                  Purse: <span className="ac-purse-val">₹{(gs.purses[effectiveMyTeamId]||0).toFixed(1)} Cr</span>
-                </div>
-                {/* BID BUTTON */}
-                {isSpectatorMode ? (
-                  <div className="ac-bid-btn" style={{ background:'rgba(129,196,248,0.08)', border:'1px solid rgba(129,196,248,0.2)', color:'#81C4F8' }}>
-                    <span style={{ fontSize:'0.9rem' }}>👁 SPECTATOR</span>
+              <div className="ac-mobile-dock">
+                {/* ── INLINE BID ROW (mobile, fixed dock) ── */}
+                <div className="ac-bid-row">
+                  <div className="ac-purse-label">
+                    Purse: <span className="ac-purse-val">₹{(gs.purses[effectiveMyTeamId]||0).toFixed(1)} Cr</span>
                   </div>
-                ) : iLeading ? (
-                  <div className="ac-bid-btn" style={{ background:`${myTeam?.color}20`, border:`2px solid ${myTeam?.color}80`, color:myTeam?.color }}>
-                    <span style={{ fontSize:'1.1rem', fontFamily:"'Bebas Neue'", letterSpacing:1 }}>✓ LEADING</span>
-                    <span className="ac-bid-btn-sub">{fmt(gs.currentBid)}</span>
-                  </div>
-                ) : (
-                  <button className="ac-bid-btn" onClick={handleBid} disabled={!canBid}
-                    style={{
-                      background: canBid ? `linear-gradient(135deg,${myTeam?.color}dd,${myTeam?.color}99)` : '#111',
-                      border: `2px solid ${canBid ? myTeam?.color : '#1e1e1e'}`,
-                      color: canBid ? '#000' : '#2a2a2a',
-                      boxShadow: canBid ? `0 4px 24px ${myTeam?.color}50` : 'none',
-                    }}>
-                    {canBid ? (
-                      <>
-                        <span style={{ fontSize:'1.25rem', fontFamily:"'Bebas Neue'", letterSpacing:2, color:'#000', fontWeight:900 }}>
-                          BID {fmt(nextPrice)}
+                  {isSpectatorMode ? (
+                    <div className="ac-bid-btn" style={{ background:'rgba(129,196,248,0.08)', border:'1px solid rgba(129,196,248,0.2)', color:'#81C4F8' }}>
+                      <span style={{ fontSize:'0.9rem' }}>👁 SPECTATOR</span>
+                    </div>
+                  ) : iLeading ? (
+                    <div className="ac-bid-btn" style={{ background:`${myTeam?.color}20`, border:`2px solid ${myTeam?.color}80`, color:myTeam?.color }}>
+                      <span style={{ fontSize:'1.1rem', fontFamily:"'Bebas Neue'", letterSpacing:1 }}>✓ LEADING</span>
+                      <span className="ac-bid-btn-sub">{fmt(gs.currentBid)}</span>
+                    </div>
+                  ) : (
+                    <button className="ac-bid-btn" onClick={handleBid} disabled={!canBid}
+                      style={{
+                        background: canBid ? `linear-gradient(135deg,${myTeam?.color}dd,${myTeam?.color}99)` : '#111',
+                        border: `2px solid ${canBid ? myTeam?.color : '#1e1e1e'}`,
+                        color: canBid ? '#000' : '#2a2a2a',
+                        boxShadow: canBid ? `0 4px 24px ${myTeam?.color}50` : 'none',
+                      }}>
+                      {canBid ? (
+                        <>
+                          <span style={{ fontSize:'1.25rem', fontFamily:"'Bebas Neue'", letterSpacing:2, color:'#000', fontWeight:900 }}>
+                            BID {fmt(nextPrice)}
+                          </span>
+                          <span className="ac-bid-btn-sub" style={{ color:'#00000088' }}>{fmtIncrement(gs.currentBid, nextPrice)}</span>
+                        </>
+                      ) : (
+                        <span style={{ fontSize:'0.85rem', fontFamily:"'Bebas Neue'", letterSpacing:1 }}>
+                          {player.overseas && osCount >= maxOverseas ? `MAX ${maxOverseas} OVERSEAS` : 'CANNOT BID'}
                         </span>
-                        <span className="ac-bid-btn-sub" style={{ color:'#00000088' }}>{fmtIncrement(gs.currentBid, nextPrice)}</span>
-                      </>
-                    ) : (
-                      <span style={{ fontSize:'0.85rem', fontFamily:"'Bebas Neue'", letterSpacing:1 }}>
-                        {player.overseas && osCount >= maxOverseas ? `MAX ${maxOverseas} OVERSEAS` : 'CANNOT BID'}
-                      </span>
-                    )}
-                  </button>
-                )}
-                {/* Menu — opens hamburger */}
-                <button className="ac-menu-btn" onClick={() => setShowHamburger(true)}>≡</button>
-              </div>
+                      )}
+                    </button>
+                  )}
+                  <button className="ac-menu-btn" onClick={() => setShowHamburger(true)}>≡</button>
+                </div>
 
-              {/* ── MOBILE TABS ── */}
-              <div className="ac-mob-tabs">
-                {[['chat','Chat'],['teams','Teams'],['settings','Settings']].map(([id,label]) => (
-                  <div key={id} className={`ac-mob-tab${mobileTab===id?' active':''}`}
-                    onClick={() => setMobileTab(id)}>{label}</div>
-                ))}
-              </div>
+                <div className="ac-mob-tabs">
+                  {[['chat','Chat'],['teams','Teams'],['settings','Settings']].map(([id,label]) => (
+                    <div key={id} className={`ac-mob-tab${mobileTab===id?' active':''}`}
+                      onClick={() => setMobileTab(id)}>{label}</div>
+                  ))}
+                </div>
 
-              {/* ── TAB CONTENT ── */}
-              <div className="ac-tab-content">
-
-                {/* TEAMS TAB */}
+                <div className="ac-tab-content">
+                  <div className="ac-mobile-panel-scroll">
                 {mobileTab === 'teams' && sortedTeams.map(team => {
                   const isLead = team.id === gs.currentBidder;
                   const isMe   = team.id === effectiveMyTeamId;
@@ -1253,7 +1372,6 @@ function AuctionContent() {
                   );
                 })}
 
-                {/* SETTINGS TAB */}
                 {mobileTab === 'settings' && (
                   <div style={{ padding:'4px 0' }}>
                     <div style={{ fontSize:10, letterSpacing:3, color:'#555', textTransform:'uppercase', marginBottom:14 }}>ROOM SETTINGS</div>
@@ -1301,12 +1419,18 @@ function AuctionContent() {
                   </div>
                 )}
                 {mobileTab === 'chat' && (
-                  <div style={{ height: 'clamp(320px, 46dvh, 440px)' }}>
+                  <div style={{ height: '100%' }}>
                     <ChatBox chatLog={chatLog} emit={emit} currentRoom={roomCode} isSpectator={isSpectatorMode} />
                   </div>
                 )}
+                  </div>
+                </div>
+                <div className="ac-mobile-footer">
+                  <span>Follow socials for more updates</span>
+                  <span className="ac-mobile-social"><WhatsAppIcon /></span>
+                  <span className="ac-mobile-social"><TelegramIcon /></span>
+                </div>
               </div>
-            </div>{/* end ac-scroll */}
             </>
           )}
         </div>
@@ -1595,6 +1719,10 @@ export default function AuctionPage() {
 // ── Chat Box Component ───────────────────────────────────────────────────────
 function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
   const [msg, setMsg] = useState("");
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [gifQuery, setGifQuery] = useState('');
+  const [gifResults, setGifResults] = useState([]);
+  const [gifLoading, setGifLoading] = useState(false);
   const endRef = useRef(null);
   const inputPlaceholder = isSpectator ? 'Watching live chat...' : 'Message...';
   const visibleMessages = useMemo(
@@ -1606,6 +1734,32 @@ function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [visibleMessages]);
 
+  useEffect(() => {
+    if (!showGifPicker || isSpectator) return undefined;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setGifLoading(true);
+      try {
+        const endpoint = gifQuery.trim()
+          ? `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&limit=18&rating=pg-13&q=${encodeURIComponent(gifQuery.trim())}`
+          : `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_API_KEY}&limit=18&rating=pg-13`;
+        const res = await fetch(endpoint, { signal: controller.signal });
+        const data = await res.json();
+        setGifResults(Array.isArray(data?.data) ? data.data : []);
+      } catch (_) {
+        if (!controller.signal.aborted) setGifResults([]);
+      } finally {
+        if (!controller.signal.aborted) setGifLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [gifQuery, showGifPicker, isSpectator]);
+
   const send = (e) => {
     e.preventDefault();
     if (!msg.trim() || !currentRoom) return;
@@ -1614,8 +1768,15 @@ function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
     setMsg('');
   };
 
+  const sendGif = (url) => {
+    if (!url || !currentRoom) return;
+    emit('send-chat', { text: url, isGif: true });
+    setShowGifPicker(false);
+    setGifQuery('');
+  };
+
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'linear-gradient(180deg, #0a0a0c 0%, #090b10 100%)', border:'1px solid #171a22', borderRadius:14, overflow:'hidden', boxShadow:'inset 0 1px 0 rgba(255,255,255,0.02)' }}>
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'linear-gradient(180deg, #0a0a0c 0%, #090b10 100%)', border:'1px solid #171a22', borderRadius:14, overflow:'hidden', boxShadow:'inset 0 1px 0 rgba(255,255,255,0.02)', minHeight:0 }}>
       <div style={{ flex:1, overflowY:'auto', padding:12, display:'flex', flexDirection:'column', gap:8, overscrollBehavior: 'contain' }}>
         {visibleMessages.length === 0 && (
           <div style={{ flex: 1, display: 'flex', flexDirection:'column', alignItems: 'center', justifyContent: 'center', color: '#4b5563', gap: 10, textAlign:'center', padding:'24px 18px' }}>
@@ -1643,10 +1804,66 @@ function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
         ))}
         <div ref={endRef} />
       </div>
+      {showGifPicker && !isSpectator && (
+        <div style={{ borderTop:'1px solid #1a1a1a', background:'#090b10', padding:'10px 10px 8px', display:'flex', flexDirection:'column', gap:10, minHeight:180, maxHeight:'42%' }}>
+          <div style={{ display:'flex', gap:8 }}>
+            <input
+              value={gifQuery}
+              onChange={(e) => setGifQuery(e.target.value)}
+              placeholder="Search GIFs"
+              style={{ flex:1, background:'#111', border:'1px solid #222833', color:'#fff', padding:'9px 12px', borderRadius:10, fontSize:13, outline:'none', minWidth:0 }}
+            />
+            <button type="button" onClick={() => { setShowGifPicker(false); setGifQuery(''); }} style={{ background:'#151922', color:'#9ca3af', border:'1px solid #242a36', borderRadius:10, padding:'0 12px', fontWeight:700, cursor:'pointer' }}>
+              CLOSE
+            </button>
+          </div>
+          <div style={{ flex:1, minHeight:0, overflowY:'auto', display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:8, overscrollBehavior:'contain' }}>
+            {gifLoading ? (
+              <div style={{ gridColumn:'1 / -1', display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b', fontSize:12, letterSpacing:1.2 }}>
+                Loading GIFs...
+              </div>
+            ) : gifResults.length === 0 ? (
+              <div style={{ gridColumn:'1 / -1', display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b', fontSize:12, letterSpacing:1.2, textAlign:'center', padding:'12px 0' }}>
+                No GIFs found right now.
+              </div>
+            ) : (
+              gifResults.map((gif) => {
+                const preview = gif?.images?.fixed_height_small?.url || gif?.images?.downsized?.url || gif?.images?.original?.url;
+                const sendUrl = gif?.images?.downsized?.url || gif?.images?.original?.url || preview;
+                if (!preview || !sendUrl) return null;
+                return (
+                  <button
+                    key={gif.id}
+                    type="button"
+                    onClick={() => sendGif(sendUrl)}
+                    style={{ background:'#111318', border:'1px solid #1f2430', borderRadius:10, overflow:'hidden', padding:0, cursor:'pointer', minHeight:74 }}
+                  >
+                    <img src={preview} alt={gif.title || 'GIF'} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
       <form onSubmit={send} style={{ display:'flex', borderTop:'1px solid #1a1a1a', padding:10, gap:8, background:'#080808' }}>
+        {!isSpectator && (
+          <button
+            type="button"
+            onClick={() => setShowGifPicker((prev) => !prev)}
+            style={{ background:showGifPicker ? '#22D3EE' : '#111', color:showGifPicker ? '#000' : '#22D3EE', border:'1px solid rgba(34,211,238,0.25)', minWidth:52, padding:'0 12px', borderRadius:10, fontWeight:800, cursor:'pointer', flexShrink:0 }}
+          >
+            GIF
+          </button>
+        )}
         <input value={msg} onChange={e=>setMsg(e.target.value)} placeholder={inputPlaceholder}
           style={{ flex:1, background:'#111', border:'1px solid #222833', color:'#fff', padding:'10px 12px', borderRadius:10, fontSize:13, outline:'none', minWidth:0, boxShadow:'inset 0 1px 0 rgba(255,255,255,0.02)' }} />
-        <button type="submit" disabled={!msg.trim()} style={{ background:'#22D3EE', color:'#000', border:'none', minWidth:58, padding:'0 14px', borderRadius:10, fontWeight:800, cursor:msg.trim()?'pointer':'not-allowed', opacity:msg.trim()?1:0.5, boxShadow:'0 8px 22px rgba(34,211,238,0.22)' }}>✓</button>
+        <button type="submit" disabled={!msg.trim()} style={{ background:'#22D3EE', color:'#000', border:'none', minWidth:58, padding:'0 14px', borderRadius:10, fontWeight:800, cursor:msg.trim()?'pointer':'not-allowed', opacity:msg.trim()?1:0.5, boxShadow:'0 8px 22px rgba(34,211,238,0.22)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M22 2 11 13" />
+            <path d="m22 2-7 20-4-9-9-4Z" />
+          </svg>
+        </button>
       </form>
     </div>
   );
