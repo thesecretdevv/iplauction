@@ -1208,9 +1208,14 @@ function RoomContent() {
         return;
       }
       if (typeof window !== 'undefined') {
-        localStorage.setItem('ipl_room_code',   code);
         localStorage.setItem('ipl_player_name', name.trim());
-        localStorage.setItem('ipl_play_mode',   'multi');
+        if (res.roomStatus === 'finished') {
+          localStorage.removeItem('ipl_room_code');
+          localStorage.removeItem('ipl_play_mode');
+        } else {
+          localStorage.setItem('ipl_room_code', code);
+          localStorage.setItem('ipl_play_mode', 'multi');
+        }
       }
       const hostP   = (res.players || []).find(p => p.id === res.hostId);
       const roomName = hostP ? `${hostP.name}'s Room` : `Room ${code}`;

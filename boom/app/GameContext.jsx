@@ -111,6 +111,12 @@ export function GameProvider({ children }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  function clearSavedMultiplayerSession() {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem("ipl_room_code");
+    localStorage.removeItem("ipl_play_mode");
+  }
+
   // Helper to build URLs with query params
   function buildUrl(path, params = {}) {
     const filtered = Object.entries(params).filter(([, v]) => v != null && v !== '');
@@ -187,15 +193,17 @@ export function GameProvider({ children }) {
               router.push(buildUrl('/auction', { room: res.gameState?.roomCode || savedRoom, mode: (res.auctionMode || 'MEGA').toUpperCase(), spectator: res.isSpectator ? 1 : undefined }));
             }
           } else if (res.roomStatus === "finished") {
+            clearSavedMultiplayerSession();
             setMultiGS(res.gameState);
-            router.push(buildUrl('/results', { room: savedRoom, mode: res.auctionMode }));
+            if (roomParam) {
+              router.push(buildUrl('/results', { room: savedRoom, mode: res.auctionMode }));
+            }
           } else if (pathname === '/room') {
              // If they were at home and chose a public room, stay on appropriate phase
              setAuctionMode(res.auctionMode || 'mega');
           }
         } else {
-          localStorage.removeItem("ipl_room_code");
-          localStorage.removeItem("ipl_play_mode");
+          clearSavedMultiplayerSession();
         }
       });
     } else if (savedPlayMode === "single") {
@@ -286,6 +294,7 @@ export function GameProvider({ children }) {
       });
     });
     const off4 = on("game-over", (gs) => {
+      clearSavedMultiplayerSession();
       startTransition(() => {
         setMultiGS(prev => mergeGameState(prev, gs));
         setRoomMeta(prev => ({
@@ -548,6 +557,7 @@ export function GameProvider({ children }) {
              // room/page.jsx uses 'lobby' phase locally.
           }
         } else if (res.roomStatus === "finished") {
+          clearSavedMultiplayerSession();
           setMultiGS(res.gameState);
           router.push(buildUrl('/results', { room: code, mode: res.auctionMode }));
         } else {

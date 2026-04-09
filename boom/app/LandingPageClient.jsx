@@ -91,15 +91,22 @@ const MARQUEE_NAMES = [
   'ISHAN KISHAN', 'JASPRIT BUMRAH'
 ];
 
-const LOCAL_GALLERY_IMAGES = ['/assets/Kohli.avif', '/assets/Boult.avif'];
-const GALLERY_ITEMS = MARQUEE_NAMES.map((name, index) => {
+function getGalleryImage(name, playerRecord) {
+  const upperName = String(name || '').toUpperCase();
+  if (playerRecord?.photo_url) return playerRecord.photo_url;
+  if (upperName.includes('KOHLI')) return '/assets/Kohli.avif';
+  if (upperName.includes('BOULT')) return '/assets/Boult.avif';
+  return '/assets/Kohli.avif';
+}
+
+const GALLERY_ITEMS = MARQUEE_NAMES.map((name) => {
   const nUpper = name.toUpperCase();
   const p = ALL_PLAYERS.find(pl => {
     const pUpper = pl.name.toUpperCase();
     return pUpper === nUpper || pUpper.includes(nUpper.split(' ')[1] || nUpper);
   });
   return {
-    image: LOCAL_GALLERY_IMAGES[index % LOCAL_GALLERY_IMAGES.length],
+    image: getGalleryImage(name, p),
     text: name,
     alt: `${p?.name || name} player card in IPL Auction Online`,
   };
