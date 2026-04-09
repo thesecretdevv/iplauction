@@ -145,6 +145,7 @@ function startRivalsAuction(room) {
         purse: RIVALS_PURSE,
         timerDuration: RIVALS_TIMER_SECONDS,
     });
+    markRoomDirty(room);
 }
 
 function isRoomOver(room) {
@@ -162,6 +163,13 @@ const finishedGames = [];
 // Grace period timers: Map<playerId, timeoutId>
 const disconnectTimers = new Map();
 const pendingPersistTimers = new Map();
+
+function markRoomDirty(room) {
+    if (!room) return 0;
+    room.revision = (room.revision || 0) + 1;
+    room.updatedAt = Date.now();
+    return room.revision;
+}
 
 // ─── REST endpoints ─────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
@@ -341,6 +349,18 @@ async function getFinishedRooms() {
 async function persistRoom(room) {
     if (!room) return;
     try {
+        const roomKey = `room:${room.code}`;
+        const localRevision = room.revision || 0;
+        const existing = await redis.get(roomKey);
+        if (existing) {
+            const existingData = typeof existing === 'string' ? JSON.parse(existing) : existing;
+            const existingRevision = existingData?.revision || 0;
+            if (existingRevision > localRevision) {
+                console.warn(`[REDIS] Skip stale persist for room ${room.code}: local revision ${localRevision}, remote revision ${existingRevision}`);
+                return;
+            }
+        }
+
         const data = {
             code: room.code,
             name: room.name,
@@ -357,10 +377,11 @@ async function persistRoom(room) {
             started: room.started || false,
             finishedAt: room.finishedAt || null,
             endReason: room.endReason || null,
-            updatedAt: Date.now()
+            revision: localRevision,
+            updatedAt: room.updatedAt || Date.now()
         };
         // Save room with 24-hour expiry
-        await redis.set(`room:${room.code}`, JSON.stringify(data), { ex: 3600 * 24 });
+        await redis.set(roomKey, JSON.stringify(data), { ex: 3600 * 24 });
         
         // Keep rooms discoverable only while someone is online.
         if (!data.isPrivate && !isRoomOver(data) && getVisiblePlayers(data).length > 0) {
@@ -384,6 +405,8 @@ async function getRoom(code) {
                     ...rData,
                     timerInterval: null 
                 };
+                room.revision = room.revision || 0;
+                room.updatedAt = room.updatedAt || Date.now();
                 room.roomType = room.roomType || 'standard';
                 room.activeTeamIds = Array.isArray(room.activeTeamIds) && room.activeTeamIds.length ? room.activeTeamIds : TEAM_IDS;
                 room.rivalsMatch = room.rivalsMatch || null;
@@ -487,6 +510,7 @@ function finishCurrent(room) {
         pushSystemMessage(room, `${player.name} was UNSOLD`);
     }
 
+    markRoomDirty(room);
     io.to(room.code).emit('game-state', getClientState(room));
     schedulePersistRoom(room, 50);
     setTimeout(() => advanceToNext(room), 2500);
@@ -512,6 +536,7 @@ function advanceToNext(room) {
     gs.bidLog = [];
     gs.currentSetName = np.setName;
 
+    markRoomDirty(room);
     io.to(room.code).emit('game-state', getClientState(room));
     schedulePersistRoom(room, 50);
 }
@@ -593,6 +618,7 @@ function finalizeRoom(room, { reason = 'completed' } = {}) {
         room.timerInterval = null;
     }
 
+    markRoomDirty(room);
     return true;
 }
 
@@ -605,6 +631,7 @@ function pushSystemMessage(room, text) {
         timestamp: Date.now()
     });
     if (room.chatLog.length > 200) room.chatLog.shift();
+    markRoomDirty(room);
 }
 
 function getBroadcastChatLog(room) {
@@ -696,6 +723,8 @@ io.on('connection', (socket) => {
             timerInterval: null,
             started: false,
             chatLog: [],
+            revision: 1,
+            updatedAt: Date.now(),
         };
         rooms.set(code, room);
         socket.join(code);
@@ -780,6 +809,7 @@ io.on('connection', (socket) => {
             room.players[playerId].socketId = socket.id;
             room.players[playerId].offline = false;
             room.players[playerId].name = playerName || room.players[playerId].name;
+            markRoomDirty(room);
             socket.join(roomCode);
             currentRoom = roomCode;
             currentPlayerId = playerId;
@@ -819,6 +849,7 @@ io.on('connection', (socket) => {
             isSpectator: false,
             offline: false,
         };
+        markRoomDirty(room);
 
         socket.join(roomCode);
         currentRoom = roomCode;
@@ -877,6 +908,7 @@ io.on('connection', (socket) => {
             room.players[playerId].socketId = socket.id;
             room.players[playerId].offline = false;
             room.players[playerId].name = playerName || room.players[playerId].name;
+            markRoomDirty(room);
             socket.join(code);
             currentRoom = code;
             currentPlayerId = playerId;
@@ -935,6 +967,7 @@ io.on('connection', (socket) => {
                     isSpectator: true,
                     offline: false,
                 };
+                markRoomDirty(room);
                 socket.join(code);
                 currentRoom = code;
                 currentPlayerId = playerId;
@@ -973,6 +1006,7 @@ io.on('connection', (socket) => {
                     isSpectator: false,
                     offline: false,
                 };
+                markRoomDirty(room);
                 socket.join(code);
                 currentRoom = code;
                 currentPlayerId = playerId;
@@ -1005,6 +1039,7 @@ io.on('connection', (socket) => {
                     isSpectator: true,
                     offline: false,
                 };
+                markRoomDirty(room);
                 socket.join(code);
                 currentRoom = code;
                 currentPlayerId = playerId;
@@ -1048,6 +1083,7 @@ io.on('connection', (socket) => {
                 isSpectator: false,
                 offline: false
             };
+            markRoomDirty(room);
             socket.join(code);
             currentRoom = code;
             currentPlayerId = playerId;
@@ -1091,6 +1127,7 @@ io.on('connection', (socket) => {
             isSpectator: isFull,
             offline: false
         };
+        markRoomDirty(room);
         socket.join(code);
         currentRoom = code;
         currentPlayerId = playerId;
@@ -1130,6 +1167,7 @@ io.on('connection', (socket) => {
         if (taken) return cb?.({ ok: false, error: 'Team already taken' });
 
         player.teamId = teamId;
+        markRoomDirty(room);
         const state = getLobbyState(room);
         io.to(currentRoom).emit('lobby-update', state);
         cb?.({ ok: true });
@@ -1143,6 +1181,7 @@ io.on('connection', (socket) => {
         if (!room || currentPlayerId !== room.hostId) return;
         if (room.roomType === 'rivals') return;
         room.auctionMode = mode;
+        markRoomDirty(room);
         const state = getLobbyState(room);
         io.to(currentRoom).emit('lobby-update', state);
         await persistRoom(room);
@@ -1154,6 +1193,13 @@ io.on('connection', (socket) => {
         const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId) return cb?.({ ok: false, error: 'Not host' });
         if (room.roomType === 'rivals') return cb?.({ ok: false, error: 'Rivals auctions start automatically when both players join' });
+        if (room.status === 'active' && room.started && room.gameState && !isRoomOver(room)) {
+            return cb?.({
+                ok: true,
+                alreadyStarted: true,
+                gameState: getClientState(room),
+            });
+        }
 
         // Only check non-spectator players for team selection
         const activePlayers = Object.values(room.players).filter(p => !p.isSpectator && !p.offline);
@@ -1166,6 +1212,7 @@ io.on('connection', (socket) => {
         room.started = true;
         room.status = 'active';
         room.gameState = createGameState(playerQueue);
+        markRoomDirty(room);
 
         io.to(currentRoom).emit('game-started', getClientState(room));
         startGameTick(room);
@@ -1181,6 +1228,7 @@ io.on('connection', (socket) => {
         const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
         room.gameState.isPaused = true;
+        markRoomDirty(room);
         io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: false }));
         await persistRoom(room);
     });
@@ -1190,6 +1238,7 @@ io.on('connection', (socket) => {
         const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
         room.gameState.isPaused = false;
+        markRoomDirty(room);
         io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: false }));
         await persistRoom(room);
     });
@@ -1212,6 +1261,7 @@ io.on('connection', (socket) => {
         const newD = Math.max(5, Math.min(60, parseInt(duration) || 10));
         room.gameState.timerDuration = newD;
         room.gameState.timer = newD;
+        markRoomDirty(room);
         io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: false }));
         await persistRoom(room);
     });
@@ -1233,6 +1283,7 @@ io.on('connection', (socket) => {
             timestamp: Date.now()
         });
         if (room.chatLog.length > 200) room.chatLog.shift();
+        markRoomDirty(room);
         io.to(currentRoom).emit('chat-update', getBroadcastChatLog(room));
         schedulePersistRoom(room, 250);
     });
@@ -1317,6 +1368,7 @@ io.on('connection', (socket) => {
         gs.currentBidder = teamId;
         gs.timer = gs.timerDuration || 10;
         gs.bidLog = [{ teamId, bid: nb, playerName: player.name }, ...gs.bidLog].slice(0, 7);
+        markRoomDirty(room);
 
         // Broadcast immediately — no setTimeout, no debounce
         io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: false }));
@@ -1342,6 +1394,7 @@ io.on('connection', (socket) => {
 
         gs.playingXI[teamId] = players;
         gs.selections[teamId] = true;
+        markRoomDirty(room);
 
         // Check if all non-spectator players have submitted
         const humanTeamIds = Object.values(room.players)
@@ -1409,6 +1462,7 @@ io.on('connection', (socket) => {
                 room.hostId = newHost.id;
                 if (room.players[newHost.id]) room.players[newHost.id].isHost = true;
                 if (room.players[currentPlayerId]) room.players[currentPlayerId].isHost = false;
+                markRoomDirty(room);
                 console.log(`[ROOM] Host transferred to ${newHost.name}`);
             }
         }
@@ -1430,6 +1484,7 @@ io.on('connection', (socket) => {
 
             if (r.status === 'lobby') {
                 delete r.players[currentPlayerId];
+                markRoomDirty(r);
                 console.log(`[ROOM] ${currentPlayerId} removed from ${currentRoom}`);
 
                 const remaining = Object.values(r.players).filter(p2 => !p2.offline);

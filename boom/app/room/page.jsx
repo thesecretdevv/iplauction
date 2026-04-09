@@ -25,24 +25,22 @@ const TEAMS = [
   { id:'LSG',  name:'Lucknow Super Giants',        short:'LSG',  color:'#81D4FA' },
 ];
 
+const TEAM_LOGOS = Object.fromEntries(TEAMS.map((team) => [team.id, `/assets/${team.id}.png`]));
+
 const MODE_OPTIONS = [
   {
     id: 'mega',
     accentColor: GOLD,
-    title: 'IPL MEGA Auction',
-    eyebrow: 'Full-scale auction room',
-    sub: 'Deep player pool, longer bidding battles, and full-squad strategy.',
-    chips: ['500+ players', 'Full season feel', 'Best for bigger rooms'],
-    footer: 'Build across the full auction list and manage a deeper roster.',
+    title: 'MEGA',
+    eyebrow: 'Full auction',
+    sub: 'Large player pool and classic room flow.',
   },
   {
     id: 'mini',
     accentColor: CYAN,
-    title: 'IPL MINI Auction',
-    eyebrow: 'Fast-track competitive mode',
-    sub: 'Shorter pool, quicker decisions, and stronger playing-XI pressure.',
-    chips: ['~200 players', 'Fast format', 'XI-first challenge'],
-    footer: 'Ideal for faster rooms where every bid changes the final XI balance.',
+    title: 'MINI',
+    eyebrow: 'Quick auction',
+    sub: 'Shorter pool with faster team-building.',
   },
 ];
 
@@ -285,10 +283,10 @@ const globalStyles = `
   .rp-toggle-card-sub   { font-family:'Courier Prime',monospace; font-size:9px; letter-spacing:1px; color:#888; }
   .rp-toggle-check { position:absolute; top:8px; right:10px; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; transition:all .18s; }
   .rp-toggle-card.mode-card {
-    min-height: 196px;
-    padding: 18px 16px 16px;
-    gap: 10px;
-    border-radius: 14px;
+    min-height: 138px;
+    padding: 16px 16px 14px;
+    gap: 8px;
+    border-radius: 12px;
     border: 1px solid #242424;
     border-left-width: 1px;
   }
@@ -353,80 +351,22 @@ const globalStyles = `
     flex-shrink:0;
   }
   .rp-toggle-card.mode-card .rp-toggle-card-title {
-    font-size: 1.45rem;
+    font-size: 1.6rem;
     line-height: .95;
     letter-spacing: .04em;
     max-width: 220px;
   }
   .rp-toggle-card.mode-card .rp-toggle-card-sub {
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: .8px;
-    line-height: 1.7;
-    color: #9aa3b2;
+    line-height: 1.55;
+    color: #8d97a7;
     position: relative;
     z-index: 1;
   }
-  .rp-toggle-mode-chips {
-    display:flex;
-    flex-wrap:wrap;
-    gap:8px;
-    position:relative;
-    z-index:1;
-  }
-  .rp-toggle-mode-chip {
-    padding:5px 9px;
-    border-radius:999px;
-    border:1px solid currentColor;
-    background:rgba(255,255,255,0.03);
-    font-family:'Barlow Condensed',sans-serif;
-    font-size:11px;
-    font-weight:700;
-    letter-spacing:.06em;
-    line-height:1;
-  }
-  .rp-toggle-mode-footer {
-    margin-top:auto;
-    padding-top:10px;
-    border-top:1px solid rgba(255,255,255,0.08);
-    font-family:'Barlow Condensed',sans-serif;
-    font-size:13px;
-    line-height:1.5;
-    color:#d2d8e2;
-    position:relative;
-    z-index:1;
-  }
-  .rp-mode-helper {
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:10px;
-    margin-top:12px;
-  }
-  .rp-mode-helper-card {
-    padding:12px 14px;
-    border-radius:10px;
-    border:1px solid #1d1d1d;
-    background:#0b0b0d;
-  }
-  .rp-mode-helper-label {
-    font-family:'Courier Prime',monospace;
-    font-size:9px;
-    letter-spacing:2px;
-    text-transform:uppercase;
-    color:#666;
-    margin-bottom:6px;
-  }
-  .rp-mode-helper-value {
-    font-family:'Bebas Neue',sans-serif;
-    font-size:1.05rem;
-    letter-spacing:.06em;
-    line-height:1;
-  }
   @media(max-width:600px) {
     .rp-toggle-card.mode-card {
-      min-height: 184px;
-    }
-    .rp-mode-helper {
-      grid-template-columns:1fr;
+      min-height: 130px;
     }
   }
 
@@ -592,10 +532,18 @@ const globalStyles = `
   }
   .franchise-tile:not(.ft-taken):hover { transform:translateY(-6px); }
   .franchise-tile.ft-mine  { transform:translateY(-4px); }
-  .franchise-tile.ft-taken { cursor:not-allowed; opacity:.5; filter:grayscale(0.8) brightness(0.7); }
+  .franchise-tile.ft-taken { cursor:not-allowed; opacity:.88; filter:saturate(.72); }
   .franchise-tile .taken-overlay {
-    position:absolute; inset:0; background:rgba(0,0,0,.4);
+    position:absolute; inset:0; background:rgba(8,8,8,.16);
     z-index:2;
+  }
+  .franchise-logo {
+    width:52px;
+    height:52px;
+    object-fit:contain;
+    display:block;
+    position:relative;
+    z-index:1;
   }
 
   .franchise-short { font-family:'Bebas Neue',sans-serif; font-size:1.4rem; letter-spacing:.04em; }
@@ -670,7 +618,7 @@ function ModeGlyph({ color, mode }) {
 }
 
 // ─── Toggle Card ────────────────────────────────────────────────────────────
-function ToggleCard({ selected, onSelect, accentColor = GOLD, title, sub, icon, eyebrow, chips, footer, modeId }) {
+function ToggleCard({ selected, onSelect, accentColor = GOLD, title, sub, icon, eyebrow, modeId }) {
   const cls = selected ? (accentColor === CYAN ? 'rp-toggle-card selected-cyan' : 'rp-toggle-card selected-gold') : 'rp-toggle-card';
   const isModeCard = !!modeId;
 
@@ -692,16 +640,6 @@ function ToggleCard({ selected, onSelect, accentColor = GOLD, title, sub, icon, 
             </div>
           </div>
           <div className="rp-toggle-card-sub">{sub}</div>
-          {!!chips?.length && (
-            <div className="rp-toggle-mode-chips">
-              {chips.map(chip => (
-                <span key={chip} className="rp-toggle-mode-chip" style={{ color: selected ? accentColor : '#7f8794' }}>
-                  {chip}
-                </span>
-              ))}
-            </div>
-          )}
-          {footer && <div className="rp-toggle-mode-footer">{footer}</div>}
         </>
       ) : (
         <>
@@ -1897,14 +1835,27 @@ function RoomContent() {
                         >
                           {taken && <div className="taken-overlay" />}
                           <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background: isMine ? t.color : `${t.color}40`, borderRadius:'8px 8px 0 0' }} />
-                          <div className="franchise-short" style={{ color: isMine ? t.color : taken ? '#333' : t.color }}>
+                          <img
+                            className="franchise-logo"
+                            src={TEAM_LOGOS[t.id]}
+                            alt={`${t.name} logo`}
+                            loading="lazy"
+                          />
+                          <div className="franchise-short" style={{ color: isMine ? t.color : taken ? '#6b7280' : t.color }}>
                             {t.short}
                           </div>
-                          <div className="franchise-name">{t.name}</div>
+                          <div className="franchise-name" style={{ color: isMine ? '#dbe5f1' : taken ? '#8b95a3' : '#94A3B8' }}>
+                            {t.name}
+                          </div>
 
                           {isMine && (
                             <div className="franchise-mine-badge" style={{ color: t.color, marginTop:4 }}>
                               ✓ YOUR PICK
+                            </div>
+                          )}
+                          {taken && (
+                            <div className="franchise-mine-badge" style={{ color:'#9ca3af', marginTop:4 }}>
+                              TAKEN
                             </div>
                           )}
                         </div>
