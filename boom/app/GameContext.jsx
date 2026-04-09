@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useRef, useReducer, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useReducer, useCallback, useMemo, startTransition } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { MEGA_SETS } from '../src/megaPlayers';
@@ -64,6 +64,29 @@ function createGameState(queue) {
   };
 }
 
+function mergeGameState(prev, next) {
+  if (!next) return prev;
+  if (!prev) return next;
+
+  return {
+    ...prev,
+    ...next,
+    playerQueue: next.playerQueue ?? prev.playerQueue,
+    purses: next.purses ?? prev.purses,
+    squads: next.squads ?? prev.squads,
+    playingXI: next.playingXI ?? prev.playingXI,
+    selections: next.selections ?? prev.selections,
+    bidLog: next.bidLog ?? prev.bidLog,
+    auctionLog: next.auctionLog ?? prev.auctionLog,
+    activeTeamIds: next.activeTeamIds ?? prev.activeTeamIds,
+    rivalsMatch: next.rivalsMatch ?? prev.rivalsMatch,
+    roomName: next.roomName ?? prev.roomName,
+    roomType: next.roomType ?? prev.roomType,
+    auctionMode: next.auctionMode ?? prev.auctionMode,
+    totalPlayers: next.totalPlayers ?? prev.totalPlayers,
+  };
+}
+
 // ── IPL Audio ──────────────────────────────────────────────────────────────────
 let _iplAudio = null;
 export function playIplTheme() {
@@ -81,13 +104,6 @@ export function stopIplTheme(fadeDuration = 2000) {
     if (a.volume > step) { a.volume = Math.max(0, a.volume - step); }
     else { a.pause(); a.currentTime = 0; clearInterval(fade); }
   }, 50);
-}
-
-// ── Google Fonts loader ────────────────────────────────────────────────────────
-if (typeof document !== "undefined" && !document.getElementById("ipl-gf")) {
-  const l = document.createElement("link"); l.id = "ipl-gf"; l.rel = "stylesheet";
-  l.href = "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap";
-  document.head.appendChild(l);
 }
 
 // ── Provider ───────────────────────────────────────────────────────────────────
@@ -110,6 +126,7 @@ export function GameProvider({ children }) {
   const tickRef = useRef(null);
   const [, forceUpdate] = useReducer(x => x + 1, 0);
   const prevTimerRef = useRef(10);
+  const lastMultiBidAtRef = useRef(0);
 
   // Multiplayer state
   const { emit, on } = useSocket();
@@ -242,13 +259,15 @@ export function GameProvider({ children }) {
       }));
     });
     const off2 = on("game-started", (gs) => {
-      setMultiGS(gs);
-      setRoomMeta(prev => ({
-        roomType: gs?.roomType || prev?.roomType || 'standard',
-        activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
-        rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
-        roomName: gs?.roomName || prev?.roomName || null,
-      }));
+      startTransition(() => {
+        setMultiGS(gs);
+        setRoomMeta(prev => ({
+          roomType: gs?.roomType || prev?.roomType || 'standard',
+          activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
+          rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
+          roomName: gs?.roomName || prev?.roomName || null,
+        }));
+      });
       if (gs?.roomType === 'rivals' && pathname === '/room') {
         router.push(buildUrl('/room', { action: 'rivals-found', room: roomCode || gs?.roomCode }));
         return;
@@ -256,30 +275,44 @@ export function GameProvider({ children }) {
       router.push(buildUrl('/auction', { room: roomCode || gs?.roomCode, mode: (lobbyMode || gs?.auctionMode || 'MEGA').toUpperCase() }));
     });
     const off3 = on("game-state", (gs) => {
-      setMultiGS(gs);
-      setRoomMeta(prev => ({
-        roomType: gs?.roomType || prev?.roomType || 'standard',
-        activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
-        rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
-        roomName: gs?.roomName || prev?.roomName || null,
-      }));
+      startTransition(() => {
+        setMultiGS(prev => mergeGameState(prev, gs));
+        setRoomMeta(prev => ({
+          roomType: gs?.roomType || prev?.roomType || 'standard',
+          activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
+          rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
+          roomName: gs?.roomName || prev?.roomName || null,
+        }));
+      });
     });
     const off4 = on("game-over", (gs) => {
-      setMultiGS(gs);
-      setRoomMeta(prev => ({
-        roomType: gs?.roomType || prev?.roomType || 'standard',
-        activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
-        rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
-        roomName: gs?.roomName || prev?.roomName || null,
-      }));
+      startTransition(() => {
+        setMultiGS(prev => mergeGameState(prev, gs));
+        setRoomMeta(prev => ({
+          roomType: gs?.roomType || prev?.roomType || 'standard',
+          activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
+          rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
+          roomName: gs?.roomName || prev?.roomName || null,
+        }));
+      });
       router.push(buildUrl('/results', { room: roomCode || gs?.roomCode, mode: (lobbyMode || gs?.auctionMode || 'MEGA').toUpperCase() }));
     });
     // Lightweight timer tick — only updates the timer field to avoid full re-render
     const off5 = on("timer-tick", ({ timer }) => {
-      setMultiGS(prev => prev ? { ...prev, timer } : prev);
+      startTransition(() => {
+        setMultiGS(prev => prev ? { ...prev, timer } : prev);
+      });
     });
     const off6 = on("chat-update", (logs) => {
-      setChatLog(logs);
+      startTransition(() => {
+        setChatLog(prev => {
+          const nextLogs = Array.isArray(logs) ? logs : [];
+          if (prev.length === nextLogs.length && prev[prev.length - 1]?.id === nextLogs[nextLogs.length - 1]?.id) {
+            return prev;
+          }
+          return nextLogs;
+        });
+      });
     });
     return () => { off1(); off2(); off3(); off4(); off5(); off6(); };
   }, [playMode, on, router, pathname, roomCode, lobbyMode]);
@@ -398,6 +431,9 @@ export function GameProvider({ children }) {
 
   function humanBid() {
     if (playMode === "multi") {
+      const now = Date.now();
+      if (now - lastMultiBidAtRef.current < 120) return;
+      lastMultiBidAtRef.current = now;
       emit("place-bid", {}, (res) => { });
       return;
     }

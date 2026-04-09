@@ -161,6 +161,7 @@ const rooms = new Map();
 const finishedGames = [];
 // Grace period timers: Map<playerId, timeoutId>
 const disconnectTimers = new Map();
+const pendingPersistTimers = new Map();
 
 // ─── REST endpoints ─────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
@@ -197,7 +198,7 @@ app.get('/api/rooms', async (req, res) => {
         }
 
         const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
-        const completedRooms = (await getFinishedRooms()).map(room => ({
+        const completedRooms = (await getFinishedRooms()).filter(room => !room.isPrivate).map(room => ({
             code: room.code,
             name: room.name,
             host: room.host,
@@ -275,10 +276,32 @@ async function removeFromFinishedIndex(code) {
 
 async function removeRoom(code) {
     if (!code) return;
+    clearScheduledPersist(code);
     rooms.delete(code.toUpperCase());
     await redis.del(`room:${code.toUpperCase()}`);
     await removeFromPublicIndex(code.toUpperCase());
     console.log(`[ROOM] ${code} fully removed from memory and Redis`);
+}
+
+function clearScheduledPersist(code) {
+    if (!code) return;
+    const ucCode = code.toUpperCase();
+    const pending = pendingPersistTimers.get(ucCode);
+    if (pending) {
+        clearTimeout(pending);
+        pendingPersistTimers.delete(ucCode);
+    }
+}
+
+function schedulePersistRoom(room, delayMs = 200) {
+    if (!room?.code) return;
+    const code = room.code.toUpperCase();
+    clearScheduledPersist(code);
+    const timerId = setTimeout(async () => {
+        pendingPersistTimers.delete(code);
+        await persistRoom(room);
+    }, delayMs);
+    pendingPersistTimers.set(code, timerId);
 }
 
 async function getFinishedRoomSnapshot(code) {
@@ -339,8 +362,8 @@ async function persistRoom(room) {
         // Save room with 24-hour expiry
         await redis.set(`room:${room.code}`, JSON.stringify(data), { ex: 3600 * 24 });
         
-        // Track in public index
-        if (!data.isPrivate && !isRoomOver(data)) {
+        // Keep rooms discoverable only while someone is online.
+        if (!data.isPrivate && !isRoomOver(data) && getVisiblePlayers(data).length > 0) {
             await addToPublicIndex(room.code);
         } else {
             await removeFromPublicIndex(room.code);
@@ -402,11 +425,13 @@ function createGameState(playerQueue, options = {}) {
     };
 }
 
-function getClientState(room) {
+function getClientState(room, options = {}) {
     const gs = room.gameState;
     if (!gs) return null;
-    return {
-        playerQueue: gs.playerQueue,
+    const includePlayerQueue = options.includePlayerQueue !== false;
+    const includeSelectionState = options.includeSelectionState !== false;
+
+    const payload = {
         currentIdx: gs.currentIdx,
         currentBid: gs.currentBid,
         currentBidder: gs.currentBidder,
@@ -417,18 +442,26 @@ function getClientState(room) {
         currentSetName: gs.currentSetName,
         purses: gs.purses,
         squads: gs.squads,
-        playingXI: gs.playingXI,
-        selections: gs.selections,
         bidLog: gs.bidLog,
         auctionLog: gs.auctionLog.slice(0, 20),
         auctionMode: room.auctionMode || 'mega',
-        totalPlayers: gs.playerQueue.length,
+        totalPlayers: gs.playerQueue?.length || 0,
         roomCode: room.code,
         roomType: room.roomType || 'standard',
         activeTeamIds: getActiveTeamIds(room),
         rivalsMatch: room.rivalsMatch || null,
         roomName: room.name,
     };
+
+    if (includePlayerQueue) {
+        payload.playerQueue = gs.playerQueue;
+    }
+    if (includeSelectionState) {
+        payload.playingXI = gs.playingXI;
+        payload.selections = gs.selections;
+    }
+
+    return payload;
 }
 
 function getLobbyState(room) {
@@ -455,6 +488,7 @@ function finishCurrent(room) {
     }
 
     io.to(room.code).emit('game-state', getClientState(room));
+    schedulePersistRoom(room, 50);
     setTimeout(() => advanceToNext(room), 2500);
 }
 
@@ -479,6 +513,7 @@ function advanceToNext(room) {
     gs.currentSetName = np.setName;
 
     io.to(room.code).emit('game-state', getClientState(room));
+    schedulePersistRoom(room, 50);
 }
 
 function saveFinishedGame(room, gs) {
@@ -510,6 +545,7 @@ function saveFinishedGame(room, gs) {
         name: room.name,
         host: room.players[room.hostId]?.name || "Unknown",
         mode: room.auctionMode || 'mega',
+        isPrivate: !!room.isPrivate,
         roomType: room.roomType || 'standard',
         activeTeamIds: getActiveTeamIds(room),
         rivalsMatch: room.rivalsMatch || null,
@@ -550,7 +586,7 @@ function finalizeRoom(room, { reason = 'completed' } = {}) {
     room.finishedAt = room.finishedAt || Date.now();
     room.endReason = room.endReason || reason;
 
-    if (!room.isPrivate) saveFinishedGame(room, gs);
+    saveFinishedGame(room, gs);
 
     if (room.timerInterval) {
         clearInterval(room.timerInterval);
@@ -569,7 +605,12 @@ function pushSystemMessage(room, text) {
         timestamp: Date.now()
     });
     if (room.chatLog.length > 200) room.chatLog.shift();
-    io.to(room.code).emit('chat-update', room.chatLog);
+}
+
+function getBroadcastChatLog(room) {
+    return (room.chatLog || [])
+        .filter(message => message?.type === 'text' || message?.type === 'gif')
+        .slice(-80);
 }
 
 function startGameTick(room) {
@@ -1140,7 +1181,7 @@ io.on('connection', (socket) => {
         const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
         room.gameState.isPaused = true;
-        io.to(currentRoom).emit('game-state', getClientState(room));
+        io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: false }));
         await persistRoom(room);
     });
 
@@ -1149,7 +1190,7 @@ io.on('connection', (socket) => {
         const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
         room.gameState.isPaused = false;
-        io.to(currentRoom).emit('game-state', getClientState(room));
+        io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: false }));
         await persistRoom(room);
     });
 
@@ -1171,7 +1212,7 @@ io.on('connection', (socket) => {
         const newD = Math.max(5, Math.min(60, parseInt(duration) || 10));
         room.gameState.timerDuration = newD;
         room.gameState.timer = newD;
-        io.to(currentRoom).emit('game-state', getClientState(room));
+        io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: false }));
         await persistRoom(room);
     });
 
@@ -1192,8 +1233,8 @@ io.on('connection', (socket) => {
             timestamp: Date.now()
         });
         if (room.chatLog.length > 200) room.chatLog.shift();
-        io.to(currentRoom).emit('chat-update', room.chatLog);
-        await persistRoom(room);
+        io.to(currentRoom).emit('chat-update', getBroadcastChatLog(room));
+        schedulePersistRoom(room, 250);
     });
 
     // ── Get Rooms (socket) ── pull from Redis
@@ -1222,7 +1263,7 @@ io.on('connection', (socket) => {
             }
             
             const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
-            const completedRooms = (await getFinishedRooms()).map(room => ({
+            const completedRooms = (await getFinishedRooms()).filter(room => !room.isPrivate).map(room => ({
                 code: room.code,
                 name: room.name,
                 host: room.host,
@@ -1277,14 +1318,11 @@ io.on('connection', (socket) => {
         gs.timer = gs.timerDuration || 10;
         gs.bidLog = [{ teamId, bid: nb, playerName: player.name }, ...gs.bidLog].slice(0, 7);
 
-        pushSystemMessage(room, `${player.name} (${TEAMS.find(t=>t.id===teamId)?.short || teamId}) bidded ${fmt(nb)}`);
-
         // Broadcast immediately — no setTimeout, no debounce
-        io.to(currentRoom).emit('game-state', getClientState(room));
+        io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: false }));
         cb?.({ ok: true, newBid: nb });
         
-        // Save to Redis (async)
-        persistRoom(room);
+        schedulePersistRoom(room, 200);
     });
 
     // ── Submit XI ──
@@ -1351,11 +1389,15 @@ io.on('connection', (socket) => {
         if (activePlayers.length === 0) {
             if (room.timerInterval) clearInterval(room.timerInterval);
             if (isRoomOver(room)) {
+                await persistRoom(room);
                 rooms.delete(currentRoom.toUpperCase());
                 console.log(`[ROOM] ${currentRoom} unloaded from memory and kept in Redis for replay`);
                 return;
             }
-            await removeRoom(currentRoom);
+
+            await persistRoom(room);
+            rooms.delete(currentRoom.toUpperCase());
+            console.log(`[ROOM] ${currentRoom} has no online players; kept in Redis so players can rejoin after a disconnect`);
             if (!room.isPrivate) broadcastRoomList();
             return;
         }

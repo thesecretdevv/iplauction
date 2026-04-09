@@ -9,7 +9,7 @@ export async function GET() {
 
   return new Response(icon, {
     headers: {
-      'Content-Type': 'image/png',
+      'Content-Type': 'image/x-icon',
       'Cache-Control': 'public, max-age=86400, immutable',
     },
   });

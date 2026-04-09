@@ -913,7 +913,7 @@ function AuctionContent() {
       />
 
       {/* ── TIMER PROGRESS BAR (top, full width) ── */}
-      <TimerBar timer={gs.timer} maxTimer={30} isPaused={gs.isPaused} />
+      <TimerBar timer={gs.timer} maxTimer={configuredTimer} isPaused={gs.isPaused} />
 
       {/* ── TOP BAR ── */}
       <div className="ac-top">
@@ -1717,7 +1717,7 @@ export default function AuctionPage() {
 }
 
 // ── Chat Box Component ───────────────────────────────────────────────────────
-function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
+const ChatBox = memo(function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
   const [msg, setMsg] = useState("");
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [gifQuery, setGifQuery] = useState('');
@@ -1726,13 +1726,13 @@ function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
   const endRef = useRef(null);
   const inputPlaceholder = isSpectator ? 'Watching live chat...' : 'Message...';
   const visibleMessages = useMemo(
-    () => (chatLog || []).filter(message => message?.type === 'text' || message?.type === 'gif'),
+    () => (chatLog || []).filter(message => message?.type === 'text' || message?.type === 'gif').slice(-80),
     [chatLog]
   );
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [visibleMessages]);
+    endRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+  }, [visibleMessages.length]);
 
   useEffect(() => {
     if (!showGifPicker || isSpectator) return undefined;
@@ -1867,4 +1867,4 @@ function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
       </form>
     </div>
   );
-}
+});

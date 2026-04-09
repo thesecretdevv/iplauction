@@ -52,6 +52,39 @@ function buildLeaderboardResults(gs, mode, teams) {
   return calculateLeaderboard(teamsPayload, mode);
 }
 
+function getResolvedTeamIds(gs, mode) {
+  if (Array.isArray(gs?.activeTeamIds) && gs.activeTeamIds.length > 0) {
+    return gs.activeTeamIds;
+  }
+
+  const isRivals = gs?.roomType === 'rivals' || String(mode || '').toLowerCase() === 'rivals';
+  if (isRivals) {
+    const participantTeamIds = Array.from(new Set(
+      (gs?.participants || [])
+        .map((player) => player?.teamId)
+        .filter(Boolean)
+    ));
+
+    if (participantTeamIds.length > 0) {
+      return participantTeamIds;
+    }
+
+    const teamsWithSquads = TEAMS
+      .map((team) => team.id)
+      .filter((teamId) => {
+        const squadSize = gs?.squads?.[teamId]?.length || 0;
+        const xiSize = gs?.playingXI?.[teamId]?.length || 0;
+        return squadSize > 0 || xiSize > 0;
+      });
+
+    if (teamsWithSquads.length > 0) {
+      return teamsWithSquads;
+    }
+  }
+
+  return TEAMS.map((team) => team.id);
+}
+
 export default function ResultsPage() {
   const router = useRouter();
   const { gs, isMulti, effectiveMyTeamId, handleRestart, lobbyMode, auctionMode } = useGame();
@@ -82,7 +115,16 @@ export default function ResultsPage() {
       })
       .then((data) => {
         if (cancelled) return;
-        setArchivedGs(data.gameState || null);
+        setArchivedGs(data.gameState ? {
+          ...data.gameState,
+          auctionMode: data.mode || data.gameState?.auctionMode || mode || null,
+          roomType: data.roomType || data.gameState?.roomType || null,
+          activeTeamIds: data.activeTeamIds || data.gameState?.activeTeamIds || null,
+          rivalsMatch: data.rivalsMatch || data.gameState?.rivalsMatch || null,
+          participants: data.participants || data.gameState?.participants || [],
+          roomCode: data.code || data.gameState?.roomCode || room,
+          roomName: data.name || data.gameState?.roomName || null,
+        } : null);
         setArchivedMode(data.mode || mode || null);
         setArchivedRoomCode(data.code || room);
         setLoadError('');
@@ -154,7 +196,7 @@ export default function ResultsPage() {
 // Results
 // ─────────────────────────────────────────────────────────────────────────────
 function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archivedRoomCode = null }) {
-  const activeTeamIds = gs?.activeTeamIds?.length ? gs.activeTeamIds : TEAMS.map((team) => team.id);
+  const activeTeamIds = getResolvedTeamIds(gs, mode);
   const displayTeams = TEAMS.filter((team) => activeTeamIds.includes(team.id));
   const isRivals = gs?.roomType === 'rivals' || String(mode || '').toLowerCase() === 'rivals';
   const rankings = buildLeaderboardResults(gs, mode, displayTeams);
