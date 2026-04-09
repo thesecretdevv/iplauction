@@ -848,6 +848,7 @@ function RoomContent() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [aMode,       setAMode]       = useState('mega');
+  const [squadLimit,  setSquadLimit]  = useState(15);
   const [serverRooms, setServerRooms] = useState([]);
   const [completedRooms, setCompletedRooms] = useState([]);
   const [recentRooms, setRecentRooms] = useState([]);
@@ -878,6 +879,16 @@ function RoomContent() {
       localStorage.setItem('ipl_player_name', name.trim());
     }
   }, [name]);
+
+  useEffect(() => {
+    if (roomMeta?.squadLimit) {
+      setSquadLimit(roomMeta.squadLimit);
+      return;
+    }
+    if (multiGS?.squadLimit) {
+      setSquadLimit(multiGS.squadLimit);
+    }
+  }, [multiGS?.squadLimit, roomMeta?.squadLimit]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -1043,8 +1054,10 @@ function RoomContent() {
         activeTeamIds: res.activeTeamIds || null,
         rivalsMatch: res.rivalsMatch || null,
         roomName,
+        squadLimit: res.squadLimit || 15,
       });
       emit('set-auction-mode', { mode: aMode });
+      emit('set-squad-limit', { squadLimit });
       setPhase('lobby');
     });
   };
@@ -1083,6 +1096,7 @@ function RoomContent() {
         activeTeamIds: res.activeTeamIds || [],
         rivalsMatch: res.rivalsMatch || selectedRivalsMatch,
         roomName,
+        squadLimit: res.squadLimit || 13,
       });
       setPhase('lobby');
     });
@@ -1118,6 +1132,7 @@ function RoomContent() {
         activeTeamIds: res.activeTeamIds || [],
         rivalsMatch: res.rivalsMatch || selectedRivalsMatch,
         roomName: `${selectedRivalsMatch.homeTeam} vs ${selectedRivalsMatch.awayTeam} Rivals`,
+        squadLimit: res.squadLimit || 13,
       });
       if (res.roomStatus === 'active' && res.gameState) {
         setMultiGS(res.gameState);
@@ -1170,6 +1185,7 @@ function RoomContent() {
         activeTeamIds: res.activeTeamIds || null,
         rivalsMatch: res.rivalsMatch || null,
         roomName: res.roomName || null,
+        squadLimit: res.squadLimit || null,
       });
       if (res.roomStatus === 'active') {
         setMultiGS(res.gameState);
@@ -1192,8 +1208,17 @@ function RoomContent() {
   };
 
   const changeMode = (m) => {
-    setAMode(m); setLobbyMode(m);
+    const recommendedLimit = 15;
+    setAMode(m);
+    setLobbyMode(m);
+    setSquadLimit(recommendedLimit);
     emit('set-auction-mode', { mode: m });
+    emit('set-squad-limit', { squadLimit: recommendedLimit });
+  };
+
+  const changeSquadLimit = (limit) => {
+    setSquadLimit(limit);
+    emit('set-squad-limit', { squadLimit: limit });
   };
 
   const runStartAuction = () => {
@@ -1583,18 +1608,41 @@ function RoomContent() {
                 <div className="rp-toggle-grid">
                   <ToggleCard
                     selected={aMode === 'mega'}
-                    onSelect={() => setAMode('mega')}
+                    onSelect={() => { setAMode('mega'); setSquadLimit(15); }}
                     accentColor={GOLD}
                     title="MEGA"
                     sub="500+ players · Full season"
                   />
                   <ToggleCard
                     selected={aMode === 'mini'}
-                    onSelect={() => setAMode('mini')}
+                    onSelect={() => { setAMode('mini'); setSquadLimit(15); }}
                     accentColor={CYAN}
                     title="MINI"
                     sub="~200 players · Fast format"
                   />
+                </div>
+                <label className="rp-label" style={{ marginTop: 16 }}>Squad Limit</label>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:10 }}>
+                  {[15, 20, 25].map((limit) => (
+                    <button
+                      key={limit}
+                      type="button"
+                      onClick={() => setSquadLimit(limit)}
+                      style={{
+                        padding:'13px 0',
+                        borderRadius:12,
+                        border:`1px solid ${squadLimit === limit ? GOLD : '#262626'}`,
+                        background:squadLimit === limit ? `${GOLD}12` : '#111',
+                        color:squadLimit === limit ? GOLD : '#cbd5e1',
+                        fontFamily:"'Bebas Neue',sans-serif",
+                        fontSize:24,
+                        letterSpacing:2,
+                        cursor:'pointer',
+                      }}
+                    >
+                      {limit}
+                    </button>
+                  ))}
                 </div>
               </>
             )}
@@ -1721,10 +1769,35 @@ function RoomContent() {
                       />
                     ))}
                   </div>
+                  <div className="lobby-section-label">SQUAD LIMIT</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:8, marginBottom:18 }}>
+                    {[15, 20, 25].map((limit) => (
+                      <button
+                        key={limit}
+                        type="button"
+                        onClick={() => changeSquadLimit(limit)}
+                        style={{
+                          padding:'10px 0',
+                          borderRadius:10,
+                          border:`1px solid ${squadLimit === limit ? GOLD : '#232323'}`,
+                          background:squadLimit === limit ? `${GOLD}14` : '#101010',
+                          color:squadLimit === limit ? GOLD : '#cbd5e1',
+                          fontFamily:"'Bebas Neue',sans-serif",
+                          fontSize:20,
+                          letterSpacing:2,
+                          cursor:'pointer',
+                        }}
+                      >
+                        {limit}
+                      </button>
+                    ))}
+                  </div>
                 </>
               ) : (
                 <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:12, color:'#888', marginBottom:16 }}>
                   Mode: <span style={{ color: (lobbyMode || aMode) === 'mega' ? GOLD : CYAN }}>{(lobbyMode || aMode || 'mega') === 'mega' ? 'IPL MEGA Auction' : 'IPL MINI Auction'}</span>
+                  <br />
+                  Squad Limit: <span style={{ color: GOLD }}>{squadLimit}</span> players
                 </div>
               )}
 

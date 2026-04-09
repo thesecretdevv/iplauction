@@ -33,7 +33,7 @@ function buildLeaderboardResults(gs, mode, teams) {
     const rawXI = gs.playingXI?.[team.id] || [];
 
     let xi;
-    if (rawXI.length >= 1 && rawXI.length <= 11) {
+    if (rawXI.length === 11) {
       xi = rawXI.map((player) => (typeof player === 'string' ? player : player.name));
     } else if (squad.length > 0) {
       xi = selectPlayingXI(squad, mode).map((player) => player.name);
@@ -50,6 +50,14 @@ function buildLeaderboardResults(gs, mode, teams) {
   });
 
   return calculateLeaderboard(teamsPayload, mode);
+}
+
+function normalizeRole(role) {
+  const value = String(role || '').toUpperCase();
+  if (value.includes('WK')) return 'wicket_keeper';
+  if (value.includes('BOWL')) return 'bowler';
+  if (value.includes('AR')) return 'all_rounder';
+  return 'batsman';
 }
 
 function getResolvedTeamIds(gs, mode) {
@@ -122,6 +130,7 @@ export default function ResultsPage() {
           activeTeamIds: data.activeTeamIds || data.gameState?.activeTeamIds || null,
           rivalsMatch: data.rivalsMatch || data.gameState?.rivalsMatch || null,
           participants: data.participants || data.gameState?.participants || [],
+          squadLimit: data.squadLimit || data.gameState?.squadLimit || null,
           roomCode: data.code || data.gameState?.roomCode || room,
           roomName: data.name || data.gameState?.roomName || null,
         } : null);
@@ -220,7 +229,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
 
   // Edge-case: player may have submitted <11 or exactly 10 players.
   // If rawXI has ≥ 1 and ≤ 11 players, respect it; otherwise fall back to selectPlayingXI.
-  const playingXI = rawXI.length >= 1 && rawXI.length <= 11
+  const playingXI = rawXI.length === 11
     ? rawXI
     : fullSquad.length > 0
       ? selectPlayingXI(fullSquad, mode)
@@ -281,9 +290,10 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
   }, []);
 
   // ── Calculation ──
-  const batCount = playingXI.filter(p => p.role === 'batsman').length;
-  const bowlCount = playingXI.filter(p => p.role === 'bowler').length;
-  const wkCount = playingXI.filter(p => p.role === 'wicket_keeper').length;
+  const normalizedXI = playingXI.map((player) => ({ ...player, role: normalizeRole(player?.role) }));
+  const batCount = normalizedXI.filter(p => p.role === 'batsman').length;
+  const bowlCount = normalizedXI.filter(p => p.role === 'bowler').length;
+  const wkCount = normalizedXI.filter(p => p.role === 'wicket_keeper').length;
   const isDisqualified = playingXI.length < 11 || batCount < 2 || bowlCount < 2 || wkCount < 1;
 
   return (

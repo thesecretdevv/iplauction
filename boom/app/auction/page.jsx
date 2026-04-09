@@ -250,10 +250,43 @@ function AuctionContent() {
   const handleTimerDurationChange = useCallback((duration) => {
     emit('set-timer-duration', { duration });
   }, [emit]);
+  const openRulesDialog = useCallback(() => {
+    const currentSquadLimit = gs?.squadLimit || (isRivals ? RIVALS_MAX_SQUAD_SIZE : 15);
+    const overseasLimit = isRivals ? RIVALS_MAX_OVERSEAS : 4;
+    setDialog({
+      title: 'Auction Rules',
+      message: [
+        `Squad limit: each team can buy up to ${currentSquadLimit} players.`,
+        'Final XI: every team must submit exactly 11 players after the auction ends.',
+        'Minimum XI rules: at least 2 batters, 2 bowlers, and 1 wicketkeeper are required.',
+        `Overseas rule: keep the final XI within ${overseasLimit} overseas players.`,
+        'If the host finalizes results before everyone submits, the game auto-picks the best available XI from each remaining squad.',
+        'Teams that fail the XI rules will be marked disqualified in results.',
+      ].join('\n\n'),
+      tone: 'info',
+      actions: [{ label: 'OK', onClick: closeDialog }],
+    });
+  }, [closeDialog, gs?.squadLimit, isRivals]);
+  const handleSquadLimitChange = useCallback((limit) => {
+    emit('set-squad-limit', { squadLimit: limit });
+  }, [emit]);
+  const handleFinalizeSelection = useCallback(() => {
+    emit('finalize-selection', {}, (res) => {
+      if (!res?.ok) {
+        setDialog({
+          title: 'Cannot Finalize Results',
+          message: res?.error || 'Something went wrong while finalizing the selection phase.',
+          tone: 'info',
+          actions: [{ label: 'OK', onClick: closeDialog }],
+        });
+      }
+    });
+  }, [closeDialog, emit]);
   const handleHostPauseToggle = useCallback(() => {
     emit(gs?.isPaused ? 'resume-game' : 'pause-game');
   }, [emit, gs?.isPaused]);
   const timerOptions = [5, 10, 15, 20, 25];
+  const squadLimitOptions = [15, 20, 25];
 
   const upcomingPlayers = useMemo(
     () => playerQueue.slice(currentIdx + 1),
@@ -354,24 +387,18 @@ function AuctionContent() {
   }
 
   if (gs.phase === 'selection') {
-    const isMini = currentMode?.toLowerCase() === 'mini';
-    if (isMini && !gs.selections[effectiveMyTeamId]) {
-      // Auto-submit all 11 players for mini auction
-      const mySquad = gs.squads[effectiveMyTeamId] || [];
-      setTimeout(() => submitXI(mySquad.slice(0, 11)), 500);
-      return (
-        <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-          <div style={{ color: GOLD, fontFamily: "'Bebas Neue'", fontSize: 28, letterSpacing: 4 }}>AUCTION COMPLETE</div>
-          <div style={{ color: '#555', fontSize: 13, letterSpacing: 2 }}>FINALIZING YOUR SQUAD...</div>
-        </div>
-      );
-    }
     return (
       <SelectionScreen
         mySquad={gs.squads[effectiveMyTeamId] || []}
         onSubmit={submitXI}
         submitted={isMulti ? gs.selections[effectiveMyTeamId] : false}
         playersNeeded={11}
+        isHost={isHost}
+        emit={emit}
+        activeTeams={(lobbyPlayers || []).filter(player => !player.isSpectator && player.teamId)}
+        selections={gs.selections || {}}
+        onFinalizeSelection={handleFinalizeSelection}
+        squadLimit={gs.squadLimit || 15}
       />
     );
   }
@@ -393,7 +420,7 @@ function AuctionContent() {
   
   // Dynamic limits based on mode
   const isMini      = gs.auctionMode?.toLowerCase() === 'mini';
-  const maxSquadSize= isRivals ? RIVALS_MAX_SQUAD_SIZE : (isMini ? 11 : ((gs.playerQueue?.length || 0) <= 200 ? 15 : 25));
+  const maxSquadSize= isRivals ? RIVALS_MAX_SQUAD_SIZE : (gs.squadLimit || 15);
   const maxOverseas = isRivals ? RIVALS_MAX_OVERSEAS : (isMini ? 4 : 8);
 
   const canBid      = gs.phase === 'bidding'
@@ -941,6 +968,11 @@ function AuctionContent() {
                 </span>
               </div>
             )}
+
+            <button className="ac-top-btn ac-desktop-only" onClick={openRulesDialog} style={{ marginLeft: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>INFO</span>
+              <span style={{ background: `${GOLD}22`, color: GOLD, padding: '2px 6px', borderRadius: 999, fontSize: 9 }}>(i)</span>
+            </button>
             
             <button className="ac-top-btn ac-desktop-only" onClick={() => setShowUpcoming(true)} style={{ marginLeft: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>UPCOMING PLAYERS</span>
@@ -994,6 +1026,12 @@ function AuctionContent() {
               ☰
             </button>
           </div>
+        </div>
+
+        <div className="ac-mobile-host-bar" style={{ paddingTop: 0 }}>
+          <button className="ac-host-action" onClick={openRulesDialog}>
+            INFO (i)
+          </button>
         </div>
 
         {isRivals && rivalsMatch && (
@@ -1085,6 +1123,40 @@ function AuctionContent() {
                       }}
                     >
                       {t}s
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ background:'#0f0f12', border:'1px solid #1c1c1c', borderRadius:12, padding:'14px', marginTop:12 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom:10 }}>
+                  <div>
+                    <div style={{ color:'#ddd', fontSize:15, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}>👥 Squad Limit</div>
+                    <div style={{ color:'#555', fontSize:11, marginTop:3 }}>Change how many players each franchise can buy before the auction ends.</div>
+                  </div>
+                  <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:24, letterSpacing:1 }}>{gs.squadLimit || maxSquadSize}</div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:8 }}>
+                  {squadLimitOptions.map((limit) => (
+                    <button
+                      key={limit}
+                      onClick={() => {
+                        handleSquadLimitChange(limit);
+                        closeDesktopSettings();
+                      }}
+                      style={{
+                        padding:'10px 0',
+                        background: (gs.squadLimit || maxSquadSize) === limit ? GOLD : '#18181b',
+                        color: (gs.squadLimit || maxSquadSize) === limit ? '#000' : '#bbb',
+                        border:`1px solid ${(gs.squadLimit || maxSquadSize) === limit ? GOLD : '#2a2a2a'}`,
+                        borderRadius:8,
+                        fontFamily:"'Barlow Condensed'",
+                        fontWeight:700,
+                        fontSize:14,
+                        cursor:'pointer',
+                      }}
+                    >
+                      {limit}
                     </button>
                   ))}
                 </div>
@@ -1640,8 +1712,19 @@ function AuctionContent() {
 }
 
 // ── Playing XI Selection ──────────────────────────────────────────────────────
-function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11 }) {
+function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isHost = false, activeTeams = [], selections = {}, onFinalizeSelection, squadLimit = 15 }) {
   const [selected, setSelected] = useState([]);
+
+  useEffect(() => {
+    if (!Array.isArray(mySquad) || mySquad.length === 0) {
+      setSelected([]);
+      return;
+    }
+    setSelected((prev) => {
+      if (prev.length > 0) return prev;
+      return [...mySquad].sort((a, b) => (b.soldFor || 0) - (a.soldFor || 0)).slice(0, playersNeeded);
+    });
+  }, [mySquad, playersNeeded]);
   const toggle = (p) => setSelected(prev =>
     prev.find(x => x.name === p.name)
       ? prev.filter(x => x.name !== p.name)
@@ -1653,23 +1736,32 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11 }) {
     const batters = selected.filter(p => p.role.includes('BAT')).length;
     const bowlers = selected.filter(p => p.role.includes('BOWL')).length;
     const wks = selected.filter(p => p.role.includes('WK')).length;
-    const ars = selected.filter(p => p.role.includes('AR')).length;
 
     if (batters < 2) return "Must have at least 2 Batsmen";
     if (bowlers < 2) return "Must have at least 2 Bowlers";
     if (wks < 1) return "Must have at least 1 Wicketkeeper";
-    if (ars < 1) return "Must have at least 1 All-Rounder";
 
     return null;
   };
 
   const validationError = getValidationErrors();
   const canSubmit = validationError === null;
+  const submittedCount = activeTeams.filter((player) => selections[player.teamId]).length;
+  const totalTeams = activeTeams.length;
   if (submitted) return (
     <div style={{ minHeight:'100vh', background:BG, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ textAlign:'center' }}>
+      <div style={{ textAlign:'center', maxWidth: 560, padding: '0 20px' }}>
         <div style={{ fontFamily:"'Bebas Neue'", fontSize:48, color:GOLD, letterSpacing:6 }}>XI SUBMITTED!</div>
-        <div style={{ color:'#555', fontSize:14, marginTop:12, letterSpacing:3 }}>WAITING FOR OTHER TEAMS…</div>
+        <div style={{ color:'#94A3B8', fontSize:14, marginTop:12, letterSpacing:2 }}>WAITING FOR OTHER TEAMS…</div>
+        <div style={{ color:'#555', fontSize:12, marginTop:10, letterSpacing:1.5 }}>{submittedCount}/{totalTeams || 0} teams submitted</div>
+        {isHost && (
+          <button
+            onClick={onFinalizeSelection}
+            style={{ marginTop: 22, background:`linear-gradient(135deg,${GOLD},#9a7610)`, border:`1px solid ${GOLD}`, borderRadius:8, padding:'14px 28px', color:'#000', fontWeight:900, fontSize:15, letterSpacing:3, cursor:'pointer', fontFamily:"'Barlow Condensed'" }}
+          >
+            FINALIZE RESULTS NOW
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1677,7 +1769,11 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11 }) {
     <div style={{ minHeight:'100vh', background:BG, padding:'24px 16px' }}>
       <div style={{ textAlign:'center', marginBottom:24 }}>
         <div style={{ fontFamily:"'Bebas Neue'", fontSize:'clamp(28px,6vw,48px)', color:GOLD, letterSpacing:4 }}>SELECT YOUR PLAYING XI</div>
-        <div style={{ color:'#555', fontSize:12, letterSpacing:3, marginTop:6 }}>{selected.length}/{playersNeeded} selected</div>
+        <div style={{ color:'#555', fontSize:12, letterSpacing:3, marginTop:6 }}>{selected.length}/{playersNeeded} selected · Squad limit {squadLimit}</div>
+        <div style={{ color:'#94A3B8', fontSize:12, lineHeight:1.7, marginTop:10 }}>
+          Auction is over. Pick your final XI now. Once every active team submits, results will open automatically.
+          {isHost ? ' If someone leaves, you can still finalize results and the game will auto-pick the best available XI for teams that did not submit.' : ''}
+        </div>
       </div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:10, maxWidth:900, margin:'0 auto 24px' }}>
         {mySquad.map((p,i) => {
@@ -1699,10 +1795,25 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11 }) {
             ⚠️ {validationError.toUpperCase()}
           </div>
         )}
-        <button onClick={() => canSubmit && onSubmit(selected)} disabled={!canSubmit}
-          style={{ background:canSubmit?`linear-gradient(135deg,${GOLD},#9a7610)`:'#111', border:`1px solid ${canSubmit?GOLD:'#333'}`, borderRadius:6, padding:'14px 48px', color:canSubmit?'#000':'#555', fontWeight:900, fontSize:16, letterSpacing:4, cursor:canSubmit?'pointer':'not-allowed', fontFamily:"'Barlow Condensed'" }}>
+        <div style={{ display:'flex', justifyContent:'center', gap:12, flexWrap:'wrap' }}>
+          <button onClick={() => canSubmit && onSubmit(selected)} disabled={!canSubmit}
+            style={{ background:canSubmit?`linear-gradient(135deg,${GOLD},#9a7610)`:'#111', border:`1px solid ${canSubmit?GOLD:'#333'}`, borderRadius:6, padding:'14px 48px', color:canSubmit?'#000':'#555', fontWeight:900, fontSize:16, letterSpacing:4, cursor:canSubmit?'pointer':'not-allowed', fontFamily:"'Barlow Condensed'" }}>
           SUBMIT PLAYING XI
-        </button>
+          </button>
+          {isHost && (
+            <button
+              onClick={onFinalizeSelection}
+              style={{ background:'transparent', border:`1px solid ${CYAN}66`, borderRadius:6, padding:'14px 28px', color:CYAN, fontWeight:900, fontSize:15, letterSpacing:3, cursor:'pointer', fontFamily:"'Barlow Condensed'" }}
+            >
+              HOST FINALIZE
+            </button>
+          )}
+        </div>
+        {totalTeams > 0 && (
+          <div style={{ color:'#555', fontSize:12, marginTop:14, letterSpacing:1.5 }}>
+            {submittedCount}/{totalTeams} active teams already submitted
+          </div>
+        )}
       </div>
     </div>
   );

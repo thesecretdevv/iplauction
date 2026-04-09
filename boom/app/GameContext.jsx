@@ -58,8 +58,11 @@ function createGameState(queue) {
     playerQueue: queue, currentIdx: 0,
     currentBid: queue[0].base, currentBidder: null,
     timer: 10, phase: "bidding", currentSetName: queue[0].setName,
+    timerDuration: 10, squadLimit: 15,
     purses: Object.fromEntries(TEAMS.map(t => [t.id, 120])),
     squads: Object.fromEntries(TEAMS.map(t => [t.id, []])),
+    playingXI: Object.fromEntries(TEAMS.map(t => [t.id, []])),
+    selections: Object.fromEntries(TEAMS.map(t => [t.id, false])),
     bidLog: [], auctionLog: [],
   };
 }
@@ -84,6 +87,8 @@ function mergeGameState(prev, next) {
     roomType: next.roomType ?? prev.roomType,
     auctionMode: next.auctionMode ?? prev.auctionMode,
     totalPlayers: next.totalPlayers ?? prev.totalPlayers,
+    timerDuration: next.timerDuration ?? prev.timerDuration,
+    squadLimit: next.squadLimit ?? prev.squadLimit,
   };
 }
 
@@ -255,7 +260,7 @@ export function GameProvider({ children }) {
   // Socket listeners for multiplayer
   useEffect(() => {
     if (playMode !== "multi") return;
-    const off1 = on("lobby-update", ({ players, auctionMode: m, hostId, roomType, activeTeamIds, rivalsMatch, roomName }) => {
+    const off1 = on("lobby-update", ({ players, auctionMode: m, hostId, roomType, activeTeamIds, rivalsMatch, roomName, squadLimit }) => {
       setLobbyPlayers(players);
       if (m) setLobbyMode(m);
       if (hostId) setIsHost(hostId === playerId);
@@ -264,6 +269,7 @@ export function GameProvider({ children }) {
         activeTeamIds: activeTeamIds || prev?.activeTeamIds || null,
         rivalsMatch: rivalsMatch || prev?.rivalsMatch || null,
         roomName: roomName || prev?.roomName || null,
+        squadLimit: squadLimit || prev?.squadLimit || null,
       }));
     });
     const off2 = on("game-started", (gs) => {
@@ -274,6 +280,7 @@ export function GameProvider({ children }) {
           activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
           rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
           roomName: gs?.roomName || prev?.roomName || null,
+          squadLimit: gs?.squadLimit || prev?.squadLimit || null,
         }));
       });
       if (gs?.roomType === 'rivals' && pathname === '/room') {
@@ -290,6 +297,7 @@ export function GameProvider({ children }) {
           activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
           rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
           roomName: gs?.roomName || prev?.roomName || null,
+          squadLimit: gs?.squadLimit || prev?.squadLimit || null,
         }));
       });
     });
@@ -302,6 +310,7 @@ export function GameProvider({ children }) {
           activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,
           rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
           roomName: gs?.roomName || prev?.roomName || null,
+          squadLimit: gs?.squadLimit || prev?.squadLimit || null,
         }));
       });
       router.push(buildUrl('/results', { room: roomCode || gs?.roomCode, mode: (lobbyMode || gs?.auctionMode || 'MEGA').toUpperCase() }));
@@ -452,7 +461,7 @@ export function GameProvider({ children }) {
     const osCount = gs.squads[gs.myTeamId].filter(p => p.overseas).length;
     const playerOnAuction = gs.playerQueue[gs.currentIdx];
     const isMiniMode = (playMode === 'multi' ? lobbyMode === 'mini' : auctionMode === 'mini');
-    const maxSquadSize = isMiniMode ? 11 : ((gs.playerQueue?.length || 0) <= 200 ? 15 : 25);
+    const maxSquadSize = gs.squadLimit || 15;
     if (gs.purses[gs.myTeamId] < nb || gs.squads[gs.myTeamId].length >= maxSquadSize || (playerOnAuction.overseas && osCount >= 8)) return;
     gs.currentBid = nb; gs.currentBidder = gs.myTeamId; gs.timer = 10;
     gs.bidLog = [{ teamId: gs.myTeamId, bid: nb, isMe: true }, ...gs.bidLog].slice(0, 7);
@@ -519,6 +528,7 @@ export function GameProvider({ children }) {
         activeTeamIds: res.activeTeamIds || null,
         rivalsMatch: res.rivalsMatch || null,
         roomName: null,
+        squadLimit: res.squadLimit || null,
       });
       router.push(buildUrl(`/lobby/${res.code}`, { public: !isPrivate }));
     });
@@ -543,6 +553,7 @@ export function GameProvider({ children }) {
           activeTeamIds: res.activeTeamIds || null,
           rivalsMatch: res.rivalsMatch || null,
           roomName: res.roomName || null,
+          squadLimit: res.squadLimit || null,
         });
 
         if (res.roomStatus === "active") {
@@ -576,6 +587,11 @@ export function GameProvider({ children }) {
         const message = res?.error || "Cannot start";
         if (options.onError) options.onError(message);
         else alert(message);
+        return;
+      }
+      if (res?.alreadyStarted && res?.gameState) {
+        setMultiGS(res.gameState);
+        router.push(buildUrl('/auction', { room: roomCode || res.gameState?.roomCode, mode: (lobbyMode || res.gameState?.auctionMode || 'MEGA').toUpperCase() }));
         return;
       }
       stopIplTheme(2000);

@@ -253,7 +253,7 @@ export function selectPlayingXI(squad, mode = 'mini') {
   const bestWkIndex = ratedSquad.findIndex(p => p.role.includes('WK'));
   if (bestWkIndex !== -1) {
     const wk = ratedSquad[bestWkIndex];
-    if (wk.country !== 'India') overseasCount++;
+    if (wk.overseas || wk.country !== 'India') overseasCount++;
     wkCount++;
     playingXI.push(wk);
     ratedSquad.splice(bestWkIndex, 1);
@@ -263,15 +263,24 @@ export function selectPlayingXI(squad, mode = 'mini') {
   for (const p of ratedSquad) {
     if (playingXI.length >= 11) break;
     
-    if (p.country !== 'India' && overseasCount >= 4) {
+    const isOverseas = !!p.overseas || p.country !== 'India';
+    if (isOverseas && overseasCount >= 4) {
       continue; // skip if overseas limit reached
     }
 
-    if (p.country !== 'India') overseasCount++;
+    if (isOverseas) overseasCount++;
     playingXI.push(p);
   }
 
   return playingXI;
+}
+
+function normalizeRole(role) {
+  const value = String(role || '').toUpperCase();
+  if (value.includes('WK')) return 'wicket_keeper';
+  if (value.includes('BOWL')) return 'bowler';
+  if (value.includes('AR')) return 'all_rounder';
+  return 'batsman';
 }
 
 export function calculateLeaderboard(teams, mode = 'mini') {
@@ -289,14 +298,15 @@ export function calculateLeaderboard(teams, mode = 'mini') {
       playingXI = [];
     }
 
-    const playerScores = playingXI.map(playerName => {
+    const playerScores = playingXI.map(playerEntry => {
+      const playerName = typeof playerEntry === 'string' ? playerEntry : playerEntry?.name;
       const rating = getPlayerRating(playerName, mode);
       // We need roles to check disqualification
       const pRecord = ALL_PLAYERS.find(p => p.name.toLowerCase() === (playerName||'').toLowerCase());
       return {
         name: playerName,
         rating,
-        role: pRecord?.role || 'batsman'
+        role: normalizeRole(playerEntry?.role || pRecord?.role)
       };
     });
 
@@ -319,9 +329,10 @@ export function calculateLeaderboard(teams, mode = 'mini') {
     };
   });
 
-  // Sort descending by total score, but push disqualified to bottom? 
-  // User didn't specify, but I'll keeping sorting by score.
-  return results.sort((a, b) => b.totalScore - a.totalScore);
+  return results.sort((a, b) => {
+    if (a.isDisqualified !== b.isDisqualified) return a.isDisqualified ? 1 : -1;
+    return b.totalScore - a.totalScore;
+  });
 }
 
 // ============================================================

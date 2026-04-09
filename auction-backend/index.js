@@ -112,6 +112,7 @@ function getLobbyStatePayload(room) {
     return {
         players: Object.values(room.players).map(player => ({ ...player, socketId: undefined })),
         auctionMode: room.auctionMode,
+        squadLimit: room.squadLimit,
         hostId: room.hostId,
         roomType: room.roomType || 'standard',
         activeTeamIds: getActiveTeamIds(room),
@@ -141,17 +142,18 @@ function startRivalsAuction(room) {
     room.started = true;
     room.status = 'active';
     room.auctionMode = 'rivals';
+    room.squadLimit = RIVALS_MAX_SQUAD_SIZE;
     room.gameState = createGameState(playerQueue, {
         purse: RIVALS_PURSE,
         timerDuration: RIVALS_TIMER_SECONDS,
+        squadLimit: RIVALS_MAX_SQUAD_SIZE,
     });
     markRoomDirty(room);
 }
 
 function isRoomOver(room) {
     return room?.status === 'finished'
-        || room?.gameState?.phase === 'finished'
-        || room?.gameState?.phase === 'selection';
+        || room?.gameState?.phase === 'finished';
 }
 
 const FINISHED_ROOM_TTL_SECONDS = 60 * 60 * 48;
@@ -163,6 +165,12 @@ const finishedGames = [];
 // Grace period timers: Map<playerId, timeoutId>
 const disconnectTimers = new Map();
 const pendingPersistTimers = new Map();
+
+function getDefaultSquadLimit(auctionMode) {
+    const normalized = String(auctionMode || '').toLowerCase();
+    if (normalized === 'rivals') return RIVALS_MAX_SQUAD_SIZE;
+    return 15;
+}
 
 function markRoomDirty(room) {
     if (!room) return 0;
@@ -368,6 +376,7 @@ async function persistRoom(room) {
             status: room.status, 
             isPrivate: room.isPrivate || false,
             auctionMode: room.auctionMode || 'mega',
+            squadLimit: room.squadLimit || getDefaultSquadLimit(room.auctionMode),
             roomType: room.roomType || 'standard',
             activeTeamIds: getActiveTeamIds(room),
             rivalsMatch: room.rivalsMatch || null,
@@ -408,6 +417,7 @@ async function getRoom(code) {
                 room.revision = room.revision || 0;
                 room.updatedAt = room.updatedAt || Date.now();
                 room.roomType = room.roomType || 'standard';
+                room.squadLimit = room.squadLimit || getDefaultSquadLimit(room.auctionMode);
                 room.activeTeamIds = Array.isArray(room.activeTeamIds) && room.activeTeamIds.length ? room.activeTeamIds : TEAM_IDS;
                 room.rivalsMatch = room.rivalsMatch || null;
                 if (isRoomOver(room)) {
@@ -429,6 +439,7 @@ async function getRoom(code) {
 function createGameState(playerQueue, options = {}) {
     const purse = options.purse || 120;
     const timerDuration = options.timerDuration || 10;
+    const squadLimit = options.squadLimit || 15;
     return {
         playerQueue,
         currentIdx: 0,
@@ -438,6 +449,7 @@ function createGameState(playerQueue, options = {}) {
         timerDuration,
         phase: "bidding",
         currentSetName: playerQueue[0]?.setName || "",
+        squadLimit,
         purses: Object.fromEntries(TEAMS.map(t => [t.id, purse])),
         squads: Object.fromEntries(TEAMS.map(t => [t.id, []])),
         playingXI: Object.fromEntries(TEAMS.map(t => [t.id, []])),
@@ -463,6 +475,7 @@ function getClientState(room, options = {}) {
         isPaused: gs.isPaused || false,
         phase: gs.phase,
         currentSetName: gs.currentSetName,
+        squadLimit: gs.squadLimit || room.squadLimit || getDefaultSquadLimit(room.auctionMode),
         purses: gs.purses,
         squads: gs.squads,
         bidLog: gs.bidLog,
@@ -522,8 +535,9 @@ function advanceToNext(room) {
 
     const nextIdx = gs.currentIdx + 1;
     if (nextIdx >= gs.playerQueue.length) {
-        finalizeRoom(room, { reason: 'completed' });
-        io.to(room.code).emit('game-over', getClientState(room));
+        startSelectionPhase(room, { reason: 'completed' });
+        io.to(room.code).emit('game-state', getClientState(room));
+        schedulePersistRoom(room, 50);
         return;
     }
 
@@ -541,6 +555,58 @@ function advanceToNext(room) {
     schedulePersistRoom(room, 50);
 }
 
+function autoPickPlayingXI(squad = [], limit = 11) {
+    return [...(squad || [])]
+        .sort((a, b) => (b.soldFor || 0) - (a.soldFor || 0))
+        .slice(0, limit);
+}
+
+function startSelectionPhase(room, { reason = 'completed' } = {}) {
+    const gs = room?.gameState;
+    if (!gs || gs.phase === 'selection' || gs.phase === 'finished') return false;
+
+    if (!gs.playingXI) gs.playingXI = Object.fromEntries(TEAMS.map(t => [t.id, []]));
+    if (!gs.selections) gs.selections = Object.fromEntries(TEAMS.map(t => [t.id, false]));
+
+    const humanTeamIds = new Set(
+        Object.values(room.players || {})
+            .filter(player => !player.isSpectator && player.teamId)
+            .map(player => player.teamId)
+    );
+
+    TEAMS.forEach((team) => {
+        if (!Array.isArray(gs.playingXI[team.id])) gs.playingXI[team.id] = [];
+        if (!humanTeamIds.has(team.id)) {
+            gs.playingXI[team.id] = autoPickPlayingXI(gs.squads?.[team.id] || []);
+            gs.selections[team.id] = true;
+        }
+    });
+
+    gs.phase = 'selection';
+    gs.currentBidder = null;
+    gs.bidLog = [];
+    gs.timer = 0;
+    room.status = 'active';
+    room.endReason = room.endReason || reason;
+    pushSystemMessage(room, 'Auction complete. Final Playing XI selection is now open.');
+    markRoomDirty(room);
+    return true;
+}
+
+function finalizeSelection(room, { reason = 'completed' } = {}) {
+    const gs = room?.gameState;
+    if (!gs) return false;
+
+    TEAMS.forEach((team) => {
+        if (!Array.isArray(gs.playingXI?.[team.id]) || gs.playingXI[team.id].length === 0) {
+            gs.playingXI[team.id] = autoPickPlayingXI(gs.squads?.[team.id] || []);
+        }
+        gs.selections[team.id] = true;
+    });
+
+    return finalizeRoom(room, { reason });
+}
+
 function saveFinishedGame(room, gs) {
     const existingIdx = finishedGames.findIndex(game => game.id === room.code);
     if (existingIdx !== -1) finishedGames.splice(existingIdx, 1);
@@ -551,6 +617,7 @@ function saveFinishedGame(room, gs) {
         roomType: room.roomType || 'standard',
         activeTeamIds: getActiveTeamIds(room),
         rivalsMatch: room.rivalsMatch || null,
+        squadLimit: room.squadLimit || gs.squadLimit || getDefaultSquadLimit(room.auctionMode),
         participants: getRoomParticipantSummary(room),
         date: new Date().toISOString(),
         finishedAt: room.finishedAt || Date.now(),
@@ -574,6 +641,7 @@ function saveFinishedGame(room, gs) {
         roomType: room.roomType || 'standard',
         activeTeamIds: getActiveTeamIds(room),
         rivalsMatch: room.rivalsMatch || null,
+        squadLimit: room.squadLimit || gs.squadLimit || getDefaultSquadLimit(room.auctionMode),
         participants: getRoomParticipantSummary(room),
         status: 'finished',
         finishedAt: room.finishedAt || Date.now(),
@@ -719,6 +787,7 @@ io.on('connection', (socket) => {
                 }
             },
             auctionMode: isRivalsRoom ? 'rivals' : null,
+            squadLimit: isRivalsRoom ? RIVALS_MAX_SQUAD_SIZE : getDefaultSquadLimit('mega'),
             gameState: null,
             timerInterval: null,
             started: false,
@@ -737,6 +806,7 @@ io.on('connection', (socket) => {
             ok: true,
             code,
             players: state.players,
+            squadLimit: room.squadLimit,
             roomType: room.roomType,
             activeTeamIds: room.activeTeamIds,
             rivalsMatch: room.rivalsMatch,
@@ -794,10 +864,13 @@ io.on('connection', (socket) => {
                     }
                 },
                 auctionMode: 'rivals',
+                squadLimit: RIVALS_MAX_SQUAD_SIZE,
                 gameState: null,
                 timerInterval: null,
                 started: false,
                 chatLog: [],
+                revision: 1,
+                updatedAt: Date.now(),
             };
             rooms.set(code, room);
             createdRoom = true;
@@ -824,6 +897,7 @@ io.on('connection', (socket) => {
                 roomStatus: room.status,
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
+                squadLimit: room.squadLimit,
                 roomType: room.roomType,
                 activeTeamIds: getActiveTeamIds(room),
                 rivalsMatch: room.rivalsMatch,
@@ -877,6 +951,7 @@ io.on('connection', (socket) => {
             roomStatus: room.status,
             hostId: room.hostId,
             auctionMode: room.auctionMode,
+            squadLimit: room.squadLimit,
             roomType: room.roomType,
             activeTeamIds: getActiveTeamIds(room),
             rivalsMatch: room.rivalsMatch,
@@ -926,6 +1001,7 @@ io.on('connection', (socket) => {
                 roomStatus: isRoomOver(room) ? 'finished' : room.status,
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
+                squadLimit: room.squadLimit,
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
                 rivalsMatch: room.rivalsMatch || null,
@@ -947,6 +1023,7 @@ io.on('connection', (socket) => {
                 roomStatus: 'finished',
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
+                squadLimit: room.squadLimit,
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
                 rivalsMatch: room.rivalsMatch || null,
@@ -983,6 +1060,7 @@ io.on('connection', (socket) => {
                     roomStatus: room.status,
                     hostId: room.hostId,
                     auctionMode: room.auctionMode,
+                    squadLimit: room.squadLimit,
                     roomType: room.roomType || 'standard',
                     activeTeamIds: getActiveTeamIds(room),
                     rivalsMatch: room.rivalsMatch || null,
@@ -1022,6 +1100,7 @@ io.on('connection', (socket) => {
                     roomStatus: room.status,
                     hostId: room.hostId,
                     auctionMode: room.auctionMode,
+                    squadLimit: room.squadLimit,
                     roomType: room.roomType || 'standard',
                     activeTeamIds: getActiveTeamIds(room),
                     rivalsMatch: room.rivalsMatch || null,
@@ -1108,6 +1187,7 @@ io.on('connection', (socket) => {
                 roomStatus: room.status,
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
+                squadLimit: room.squadLimit,
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
                 rivalsMatch: room.rivalsMatch || null,
@@ -1143,6 +1223,7 @@ io.on('connection', (socket) => {
             roomStatus: room.status,
             hostId: room.hostId,
             auctionMode: room.auctionMode,
+            squadLimit: room.squadLimit,
             roomType: room.roomType || 'standard',
             activeTeamIds: getActiveTeamIds(room),
             rivalsMatch: room.rivalsMatch || null,
@@ -1181,10 +1262,33 @@ io.on('connection', (socket) => {
         if (!room || currentPlayerId !== room.hostId) return;
         if (room.roomType === 'rivals') return;
         room.auctionMode = mode;
+        room.squadLimit = getDefaultSquadLimit(mode);
         markRoomDirty(room);
         const state = getLobbyState(room);
         io.to(currentRoom).emit('lobby-update', state);
         await persistRoom(room);
+    });
+
+    socket.on('set-squad-limit', async ({ squadLimit }, cb) => {
+        if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
+        const room = await getRoom(currentRoom);
+        if (!room || currentPlayerId !== room.hostId || room.roomType === 'rivals') return cb?.({ ok: false, error: 'Only the host can change the squad limit' });
+        const nextLimit = [15, 20, 25].includes(Number(squadLimit)) ? Number(squadLimit) : null;
+        if (!nextLimit) return cb?.({ ok: false, error: 'Invalid squad limit' });
+
+        room.squadLimit = nextLimit;
+        if (room.gameState) {
+            room.gameState.squadLimit = nextLimit;
+        }
+        markRoomDirty(room);
+
+        const state = getLobbyState(room);
+        io.to(currentRoom).emit('lobby-update', state);
+        if (room.gameState) {
+            io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: room.gameState.phase === 'selection' }));
+        }
+        await persistRoom(room);
+        cb?.({ ok: true, squadLimit: nextLimit });
     });
 
     // ── Start Game ──
@@ -1211,7 +1315,11 @@ io.on('connection', (socket) => {
 
         room.started = true;
         room.status = 'active';
-        room.gameState = createGameState(playerQueue);
+        room.squadLimit = room.squadLimit || getDefaultSquadLimit(room.auctionMode);
+        room.gameState = createGameState(playerQueue, {
+            timerDuration: 10,
+            squadLimit: room.squadLimit,
+        });
         markRoomDirty(room);
 
         io.to(currentRoom).emit('game-started', getClientState(room));
@@ -1248,8 +1356,8 @@ io.on('connection', (socket) => {
         const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
         pushSystemMessage(room, `Auction ended early by ${room.players[currentPlayerId]?.name || 'the host'}`);
-        finalizeRoom(room, { reason: 'host-ended-early' });
-        io.to(currentRoom).emit('game-over', getClientState(room));
+        startSelectionPhase(room, { reason: 'host-ended-early' });
+        io.to(currentRoom).emit('game-state', getClientState(room));
         await persistRoom(room);
         if (!room.isPrivate) broadcastRoomList();
     });
@@ -1354,7 +1462,7 @@ io.on('connection', (socket) => {
 
         const isMini = room.auctionMode && room.auctionMode.toLowerCase() === 'mini';
         const isRivals = room.roomType === 'rivals' || room.auctionMode === 'rivals';
-        const maxSquadSize = isRivals ? RIVALS_MAX_SQUAD_SIZE : (isMini ? 11 : ((gs.playerQueue?.length || 0) <= 200 ? 15 : 25));
+        const maxSquadSize = isRivals ? RIVALS_MAX_SQUAD_SIZE : (gs.squadLimit || room.squadLimit || getDefaultSquadLimit(room.auctionMode || (isMini ? 'mini' : 'mega')));
         const maxOverseas = isRivals ? RIVALS_MAX_OVERSEAS : (isMini ? 4 : 8);
 
         if (gs.squads[teamId].length >= maxSquadSize) return cb?.({ ok: false, error: 'Squad full (' + maxSquadSize + ' max)' });
@@ -1404,17 +1512,7 @@ io.on('connection', (socket) => {
         const allSubmitted = humanTeamIds.every(tid => gs.selections[tid]);
 
         if (allSubmitted) {
-            // Auto-fill XI for AI/unowned teams
-            TEAMS.forEach(t => {
-                if (!gs.selections[t.id]) {
-                    gs.playingXI[t.id] = [...gs.squads[t.id]]
-                        .sort((a, b) => (b.soldFor || 0) - (a.soldFor || 0))
-                        .slice(0, 11);
-                    gs.selections[t.id] = true;
-                }
-            });
-
-            finalizeRoom(room, { reason: 'completed' });
+            finalizeSelection(room, { reason: room.endReason || 'completed' });
             io.to(currentRoom).emit('game-over', getClientState(room));
             if (!room.isPrivate) broadcastRoomList();
             await persistRoom(room);
@@ -1423,6 +1521,20 @@ io.on('connection', (socket) => {
             await persistRoom(room);
         }
 
+        cb?.({ ok: true });
+    });
+
+    socket.on('finalize-selection', async (cb) => {
+        if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
+        const room = await getRoom(currentRoom);
+        if (!room || currentPlayerId !== room.hostId || !room.gameState) return cb?.({ ok: false, error: 'Only the host can finalize results' });
+        if (room.gameState.phase !== 'selection') return cb?.({ ok: false, error: 'Selection phase is not active' });
+
+        pushSystemMessage(room, `Results were finalized by ${room.players[currentPlayerId]?.name || 'the host'}`);
+        finalizeSelection(room, { reason: room.endReason || 'completed' });
+        io.to(currentRoom).emit('game-over', getClientState(room));
+        await persistRoom(room);
+        if (!room.isPrivate) broadcastRoomList();
         cb?.({ ok: true });
     });
 
