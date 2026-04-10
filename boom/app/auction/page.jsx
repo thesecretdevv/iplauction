@@ -203,6 +203,8 @@ function AuctionContent() {
   const [dialog, setDialog] = useState(null);
   const playerQueue = gs?.playerQueue ?? [];
   const currentIdx = gs?.currentIdx ?? -1;
+  const currentMode = (isMulti ? lobbyMode : auctionMode) || gs?.auctionMode || 'mega';
+  const isRivals = gs?.roomType === 'rivals' || currentMode?.toLowerCase() === 'rivals';
 
   const handleBid = useCallback(() => {
     playBidClick();
@@ -292,7 +294,6 @@ function AuctionContent() {
     () => playerQueue.slice(currentIdx + 1),
     [playerQueue, currentIdx]
   );
-  const currentMode = (isMulti ? lobbyMode : auctionMode) || gs?.auctionMode || 'mega';
   const resultsQuery = new URLSearchParams();
   if (currentMode) resultsQuery.set('mode', String(currentMode).toUpperCase());
   if (isMulti && (roomCode || gs?.roomCode)) resultsQuery.set('room', roomCode || gs?.roomCode);
@@ -411,7 +412,6 @@ function AuctionContent() {
   const stats       = pRecord?.stats || {};
   const activeTeamIds = gs?.activeTeamIds?.length ? gs.activeTeamIds : TEAMS.map(t => t.id);
   const displayTeams = TEAMS.filter(t => activeTeamIds.includes(t.id));
-  const isRivals    = gs?.roomType === 'rivals' || currentMode?.toLowerCase() === 'rivals';
   const rivalsMatch = gs?.rivalsMatch || null;
   const rivalsCountdown = rivalsMatch?.startAt ? formatCountdown(new Date(rivalsMatch.startAt).getTime() - Date.now()) : null;
   const myTeam      = TEAMS.find(t => t.id === effectiveMyTeamId);
