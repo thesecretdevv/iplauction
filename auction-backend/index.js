@@ -13,6 +13,7 @@ import {
     RIVALS_PURSE,
     RIVALS_TIMER_SECONDS,
 } from '../shared/rivalsSchedule.mjs';
+import { verifyAdminCredentials } from '../shared/adminAuth.mjs';
 
 const require = createRequire(import.meta.url);
 const ALL_PLAYERS = require('../boom/app/data/Players.json');
@@ -23,7 +24,7 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Vary', 'Origin');
     res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Admin-Username, X-Admin-Password');
     if (req.method === 'OPTIONS') {
         return res.sendStatus(204);
     }
@@ -179,6 +180,51 @@ function markRoomDirty(room) {
     return room.revision;
 }
 
+function isAdminRequest(req) {
+    return verifyAdminCredentials(
+        req.header('x-admin-username') || '',
+        req.header('x-admin-password') || ''
+    );
+}
+
+function requireAdmin(req, res) {
+    if (isAdminRequest(req)) return true;
+    res.status(401).json({ error: 'Unauthorized' });
+    return false;
+}
+
+function getHostName(room) {
+    return room?.players?.[room?.hostId]?.name || 'Unknown';
+}
+
+function summarizeRoom(room, { source = 'active' } = {}) {
+    const visiblePlayers = getVisiblePlayers(room);
+    const activePlayers = getActivePlayers(room);
+
+    return {
+        code: room.code,
+        name: room.name,
+        source,
+        status: isRoomOver(room) ? 'finished' : room.status,
+        mode: room.auctionMode || 'mega',
+        isPrivate: !!room.isPrivate,
+        roomType: room.roomType || 'standard',
+        activeTeamIds: getActiveTeamIds(room),
+        rivalsMatch: room.rivalsMatch || null,
+        host: getHostName(room),
+        playerCount: activePlayers.length,
+        spectatorCount: visiblePlayers.filter(player => player.isSpectator).length,
+        visiblePlayerCount: visiblePlayers.length,
+        started: !!room.started,
+        finishedAt: room.finishedAt || null,
+        updatedAt: room.updatedAt || null,
+        squadLimit: room.squadLimit || getDefaultSquadLimit(room.auctionMode),
+        currentPhase: room.gameState?.phase || null,
+        currentPlayer: room.gameState?.playerQueue?.[room.gameState?.currentIdx]?.name || null,
+        participants: getRoomParticipantSummary(room),
+    };
+}
+
 // ─── REST endpoints ─────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
     res.send('🏏 IPL Auction Server is running!');
@@ -274,6 +320,107 @@ app.get('/api/rooms/:code', async (req, res) => {
     });
 });
 
+app.get('/api/admin/rooms', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+
+    try {
+        res.setHeader('Cache-Control', 'no-store');
+
+        const activeCodes = new Set([
+            ...Array.from(rooms.keys()),
+            ...await redis.smembers('public_rooms'),
+        ]);
+
+        const activeRooms = [];
+        for (const code of activeCodes) {
+            const room = await getRoom(code);
+            if (!room) continue;
+            activeRooms.push(summarizeRoom(room, { source: 'active' }));
+        }
+
+        const finishedSnapshots = await getFinishedRooms();
+        const finishedRooms = finishedSnapshots.map((snapshot) => ({
+            code: snapshot.code,
+            name: snapshot.name,
+            source: 'finished',
+            status: 'finished',
+            mode: snapshot.mode || 'mega',
+            isPrivate: !!snapshot.isPrivate,
+            roomType: snapshot.roomType || 'standard',
+            activeTeamIds: snapshot.activeTeamIds || TEAM_IDS,
+            rivalsMatch: snapshot.rivalsMatch || null,
+            host: snapshot.host || 'Unknown',
+            playerCount: snapshot.players || 0,
+            spectatorCount: snapshot.spectators || 0,
+            visiblePlayerCount: (snapshot.players || 0) + (snapshot.spectators || 0),
+            started: true,
+            finishedAt: snapshot.finishedAt || null,
+            updatedAt: snapshot.finishedAt || null,
+            squadLimit: snapshot.squadLimit || getDefaultSquadLimit(snapshot.mode),
+            currentPhase: snapshot.gameState?.phase || 'finished',
+            currentPlayer: null,
+            participants: snapshot.participants || [],
+        }));
+
+        activeRooms.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+        res.json({
+            active: activeRooms,
+            finished: finishedRooms,
+        });
+    } catch (e) {
+        console.error('[ADMIN] Room list error:', e);
+        res.status(500).json({ error: 'Failed to fetch admin rooms' });
+    }
+});
+
+app.delete('/api/admin/rooms/:code', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+
+    const code = req.params.code?.toUpperCase();
+    if (!code) {
+        return res.status(400).json({ error: 'Missing room code' });
+    }
+
+    try {
+        const room = await getRoom(code);
+        let removedActive = false;
+        let removedFinished = false;
+
+        if (room) {
+            if (room.timerInterval) {
+                clearInterval(room.timerInterval);
+                room.timerInterval = null;
+            }
+            clearScheduledPersist(code);
+            rooms.delete(code);
+            await redis.del(`room:${code}`);
+            await removeFromPublicIndex(code);
+            removedActive = true;
+        }
+
+        const finishedSnapshot = await getFinishedRoomSnapshot(code);
+        if (finishedSnapshot) {
+            await deleteFinishedRoomSnapshot(code);
+            removedFinished = true;
+        }
+
+        if (!removedActive && !removedFinished) {
+            return res.status(404).json({ error: 'Room not found' });
+        }
+
+        res.json({
+            ok: true,
+            code,
+            removedActive,
+            removedFinished,
+        });
+    } catch (e) {
+        console.error('[ADMIN] Room delete error:', e);
+        res.status(500).json({ error: 'Failed to delete room' });
+    }
+});
+
 // ─── Persistence ────────────────────────────────────────────────────────────
 
 // Helper to keep track of public rooms in a central index
@@ -351,6 +498,17 @@ async function getFinishedRooms() {
     } catch (e) {
         console.error("[REDIS] Finished rooms fetch error:", e);
         return [];
+    }
+}
+
+async function deleteFinishedRoomSnapshot(code) {
+    if (!code) return;
+    const ucCode = code.toUpperCase();
+    try {
+        await redis.del(`finished_room:${ucCode}`);
+        await removeFromFinishedIndex(ucCode);
+    } catch (e) {
+        console.error('[REDIS] Finished room delete error:', e);
     }
 }
 
