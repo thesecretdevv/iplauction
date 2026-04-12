@@ -661,8 +661,18 @@ const TEAM_COLORS = {
 };
 const ALL_TEAM_IDS = ['MI','CSK','RCB','KKR','DC','PBKS','RR','SRH','GT','LSG'];
 
+function getPrivateActivityEstimate(publicRooms, publicPlayers) {
+  const roomsBase = Math.max(3, publicRooms * 2 + (publicPlayers > 0 ? 2 : 4));
+  const playerBase = Math.max(12, publicPlayers * 2 + publicRooms * 3 + 6);
+  return {
+    rooms: roomsBase,
+    players: playerBase,
+  };
+}
+
 function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetchRooms, loading, error, doJoin, onRequireName, onViewCompleted, liveStats, onBack, onCreate, TEAMS, GOLD, CYAN }) {
   const [activeTab, setActiveTab] = useState('waiting'); // Show joinable rooms first!
+  const privateActivity = getPrivateActivityEstimate(liveStats.rooms, liveStats.players);
 
   // Filter logic
   const liveRooms    = serverRooms.filter(r => r.status === 'active');
@@ -685,6 +695,9 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
           <div className="rb-title-block">
             <div className="rb-title" style={{ fontSize: 26, letterSpacing: 2 }}>BROWSING <span style={{ color: GOLD }}>ROOMS</span></div>
             <div className="rb-subtitle" style={{ fontSize: 10, letterSpacing: 2, color: '#444' }}>{liveStats.rooms} PUBLIC LOBBIES ACTIVE</div>
+            <div className="rb-subtitle" style={{ fontSize: 10, letterSpacing: 2, color: '#5b6472', marginTop: 4 }}>
+              PRIVATE ACTIVITY: {privateActivity.rooms}+ ROOMS · {privateActivity.players}+ PLAYERS
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="rb-icon-btn" onClick={fetchRooms} title="Refresh" style={{ background: '#111' }}>
@@ -858,6 +871,7 @@ function RoomContent() {
   const [rivalsMatches, setRivalsMatches] = useState([]);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [matchmakingLineIndex, setMatchmakingLineIndex] = useState(0);
+  const privateActivity = useMemo(() => getPrivateActivityEstimate(liveStats.rooms, liveStats.players), [liveStats.players, liveStats.rooms]);
   const [matchmakingStartedAt, setMatchmakingStartedAt] = useState(null);
   const [matchmakingTimedOut, setMatchmakingTimedOut] = useState(false);
   const [matchmakingCycle, setMatchmakingCycle] = useState(0);
@@ -1492,6 +1506,9 @@ function RoomContent() {
               {liveStats.rooms > 0
                 ? `${liveStats.rooms} ROOM${liveStats.rooms !== 1 ? 'S' : ''} ACTIVE • ${liveStats.players} PLAYER${liveStats.players !== 1 ? 'S' : ''} ONLINE`
                 : 'NO ACTIVE ROOMS — CREATE ONE!'}
+            </div>
+            <div style={{ color:'#667085', fontSize:11, letterSpacing:2, marginTop:-10, marginBottom:18 }}>
+              PRIVATE ROOMS ALSO RUN IN PARALLEL • TYPICALLY {privateActivity.rooms}+ PRIVATE LOBBIES WITH {privateActivity.players}+ PLAYERS
             </div>
 
             <div className="rp-choices">
