@@ -4,6 +4,10 @@
 // expert rankings, and IPL 2026 pre-season analysis
 // 
 import ALL_PLAYERS from './Players.json';
+
+const PLAYER_RECORDS_BY_NAME = new Map(
+  ALL_PLAYERS.map((player) => [String(player.name || '').toLowerCase(), player])
+);
 // 
 // Rating Scale:
 //   90-100 → Elite / World Class
@@ -38,12 +42,12 @@ export const PLAYER_RATINGS = {
   "Angkrish Raghuvanshi": 81,
   "Aiden Markram": 81,
   "David Miller": 81,
-  "Devdutt Padikkal": 81,
+  "Devdutt Padikkal": 83,
   "Sherfane Rutherford": 81,
   "Shimron Hetmyer": 80,
   "Will Jacks": 80,
   "Steve Smith": 80,
-  "Vaibhav Suryavanshi": 80,
+  "Vaibhav Suryavanshi": 84,
   "Ayush Mhatre": 80,
   "Naman Dhir": 80,
   "Digvesh Rathi": 80,
@@ -133,13 +137,13 @@ export const PLAYER_RATINGS = {
   "Ishan Kishan": 89,
   "Rishabh Pant": 88,
   "Jos Buttler": 91,
-  "KL Rahul": 88,
+  "KL Rahul": 89,
   "Heinrich Klaasen": 86,
   "Quinton De Kock": 86,
-  "Phil Salt": 86,
+  "Phil Salt": 87,
   "Travis Head": 89,
   "Jitesh Sharma": 83,
-  "MS Dhoni": 82,
+  "MS Dhoni": 84,
   "Jonny Bairstow": 80,
   "Prabhsimran Singh": 80,
   "Rahmanullah Gurbaz": 79,
@@ -209,7 +213,8 @@ export function getPlayerRating(playerName, mode = 'mini') {
     "Digvesh Singh":       "Digvesh Rathi",
     "Gurnoor Singh Brar":  "Gurnoor Brar",
     "Lungi Ngidi":         "Lungisani Ngidi",
-    "Lhuan-dre Pretorius": "Lhuan-Dre Pretorious",
+    "Lhuan-dre Pretorius": "Lhuan-Dre Pretorius",
+    "Lhuan-Dre Pretorious": "Lhuan-Dre Pretorius",
     "Rasikh Dar":          "Rasikh Salam",
     "Sai Kishore":         "R. Sai Kishore",
     "Yash Raj Punia":      "Yash Raj Punja",
@@ -230,6 +235,10 @@ export function getPlayerRating(playerName, mode = 'mini') {
   return 50;
 }
 
+function isOverseasPlayer(player) {
+  return !!player?.overseas || String(player?.country || '').toLowerCase() !== 'india';
+}
+
 // ──────────────────────────────────────────────────────────────
 // LEADERBOARD FUNCTION
 // Pass in an array of { teamName, squad: [ {name, role, country}, ...] } or { teamName, playingXI: [playerName, ...] }
@@ -247,14 +256,12 @@ export function selectPlayingXI(squad, mode = 'mini') {
 
   let playingXI = [];
   let overseasCount = 0;
-  let wkCount = 0;
   
   // First, ensure we get at least 1 WK
-  const bestWkIndex = ratedSquad.findIndex(p => p.role.includes('WK'));
+  const bestWkIndex = ratedSquad.findIndex(p => normalizeRole(p?.role) === 'wicket_keeper');
   if (bestWkIndex !== -1) {
     const wk = ratedSquad[bestWkIndex];
-    if (wk.overseas || wk.country !== 'India') overseasCount++;
-    wkCount++;
+    if (isOverseasPlayer(wk)) overseasCount++;
     playingXI.push(wk);
     ratedSquad.splice(bestWkIndex, 1);
   }
@@ -263,7 +270,7 @@ export function selectPlayingXI(squad, mode = 'mini') {
   for (const p of ratedSquad) {
     if (playingXI.length >= 11) break;
     
-    const isOverseas = !!p.overseas || p.country !== 'India';
+    const isOverseas = isOverseasPlayer(p);
     if (isOverseas && overseasCount >= 4) {
       continue; // skip if overseas limit reached
     }
@@ -301,7 +308,7 @@ export function calculateLeaderboard(teams, mode = 'mini') {
       const playerName = typeof playerEntry === 'string' ? playerEntry : playerEntry?.name;
       const rating = getPlayerRating(playerName, mode);
       // We need roles to check disqualification
-      const pRecord = ALL_PLAYERS.find(p => p.name.toLowerCase() === (playerName||'').toLowerCase());
+      const pRecord = PLAYER_RECORDS_BY_NAME.get((playerName || '').toLowerCase());
       return {
         name: playerName,
         rating,
@@ -480,6 +487,8 @@ export const MEGA_PLAYER_RATINGS = {
   "Himmat Singh":          64,
   "Kumar Kushagra":        64,
   "Kwena Maphaka":         74,
+  "Lhuan-dre Pretorius":   64,
+  "Lhuan-Dre Pretorius":   64,
   "Lhuan-Dre Pretorious":  64,
   "M. Siddharth":          64,
   "Madhav Tiwari":         62,
@@ -803,7 +812,7 @@ export const MEGA_PLAYER_RATINGS = {
   // FA4
   "Jason Behrendorff":   73,
   "Joshua Tongue":       63,
-  "Matthew Potts":       7,
+  "Matthew Potts":       72,
   "Nahid Rana":          60,
   "Olly Stone":          62,
   "Sandeep Warrier":     72,
