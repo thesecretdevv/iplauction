@@ -290,11 +290,10 @@ export function calculateLeaderboard(teams, mode = 'mini') {
     const squad = team.squad || []; // Array of complete player objects
     let playingXI = team.playingXI;
     
-    if (!playingXI && squad.length > 0) {
+    if ((!Array.isArray(playingXI) || playingXI.length === 0) && squad.length > 0) {
       // Need to Auto-select playing XI
-      const selectedObj = selectPlayingXI(squad, mode);
-      playingXI = selectedObj.map(p => p.name);
-    } else if (!playingXI) {
+      playingXI = selectPlayingXI(squad, mode);
+    } else if (!Array.isArray(playingXI)) {
       playingXI = [];
     }
 

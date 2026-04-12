@@ -530,7 +530,7 @@ export function GameProvider({ children }) {
         roomName: null,
         squadLimit: res.squadLimit || null,
       });
-      router.push(buildUrl(`/lobby/${res.code}`, { public: !isPrivate }));
+      router.push(buildUrl('/room', { action: 'lobby', room: res.code, public: !isPrivate }));
     });
   }
 
@@ -572,7 +572,7 @@ export function GameProvider({ children }) {
           setMultiGS(res.gameState);
           router.push(buildUrl('/results', { room: code, mode: res.auctionMode }));
         } else {
-          router.push(buildUrl(`/lobby/${code}`, { mode: res.auctionMode }));
+          router.push(buildUrl('/room', { action: 'lobby', room: code, mode: res.auctionMode }));
         }
       } else {
         alert(res.error || "Failed to join room");

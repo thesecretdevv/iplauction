@@ -33,10 +33,10 @@ function buildLeaderboardResults(gs, mode, teams) {
     const rawXI = gs.playingXI?.[team.id] || [];
 
     let xi;
-    if (rawXI.length === 11) {
-      xi = rawXI.map((player) => (typeof player === 'string' ? player : player.name));
+    if (rawXI.length > 0 && rawXI.length <= 11) {
+      xi = rawXI;
     } else if (squad.length > 0) {
-      xi = selectPlayingXI(squad, mode).map((player) => player.name);
+      xi = selectPlayingXI(squad, mode);
     } else {
       xi = [];
     }
@@ -229,7 +229,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
 
   // Edge-case: player may have submitted <11 or exactly 10 players.
   // If rawXI has ≥ 1 and ≤ 11 players, respect it; otherwise fall back to selectPlayingXI.
-  const playingXI = rawXI.length === 11
+  const playingXI = rawXI.length > 0 && rawXI.length <= 11
     ? rawXI
     : fullSquad.length > 0
       ? selectPlayingXI(fullSquad, mode)

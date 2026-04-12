@@ -45,6 +45,7 @@ const MODE_OPTIONS = [
 ];
 
 function getPhaseFromAction(action) {
+  if (action === 'lobby') return 'lobby';
   if (action === 'rivals') return 'rivals';
   if (action === 'rivals-searching') return 'rivals-searching';
   if (action === 'rivals-found') return 'rivals-found';
@@ -1013,7 +1014,7 @@ function RoomContent() {
   }, [rivalsMatches, rivalsMatchKey, todayKey, nowMs]);
 
   const isRivalsLobby = roomMeta?.roomType === 'rivals';
-  const myLobbyPlayer = lobbyPlayers.find((p) => p.name === myName || p.id === playerId);
+  const myLobbyPlayer = lobbyPlayers.find((p) => p.id === playerId) || lobbyPlayers.find((p) => p.name === myName);
   const myTeamId  = myLobbyPlayer?.teamId;
   const takenMap  = Object.fromEntries(
     lobbyPlayers.filter(p => p.teamId).map(p => [p.teamId, p.name])
@@ -2038,12 +2039,14 @@ function RoomContent() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', alignItems: 'center' }}>
                {!myTeamId ? (
                  <div className="lobby-waiting">⏳ Select your franchise to join the auction…</div>
+               ) : !multiGS ? (
+                 <div className="lobby-waiting">⏳ Host will start the auction once everyone is ready…</div>
                ) : (
                  <button
                    className="lobby-start-btn"
                    onClick={() => router.push(`/auction?room=${roomCode}${isSpectator?'&spectator=1':''}`)}
                  >
-                   {multiGS ? 'ENTER AUCTION →' : 'WAITING FOR HOST…'}
+                   ENTER AUCTION →
                  </button>
                )}
             </div>

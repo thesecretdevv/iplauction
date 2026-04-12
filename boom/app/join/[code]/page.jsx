@@ -52,7 +52,12 @@ export default function JoinPage() {
           setMultiGS(res.gameState);
           router.push(`/results?room=${code}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}`);
         } else {
-          router.push(`/lobby/${code}${res.auctionMode ? `?mode=${res.auctionMode}` : ''}`);
+          const params = new URLSearchParams({
+            action: 'lobby',
+            room: code,
+          });
+          if (res.auctionMode) params.set('mode', res.auctionMode);
+          router.push(`/room?${params.toString()}`);
         }
       } else {
         setError(res.error === 'Room not found' ? 'Room not found or already expired.' : (res.error || "Failed to join room"));
