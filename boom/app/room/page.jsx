@@ -32,15 +32,15 @@ const MODE_OPTIONS = [
     id: 'mega',
     accentColor: GOLD,
     title: 'MEGA',
-    eyebrow: 'Full auction',
-    sub: 'Large player pool and classic room flow.',
+    eyebrow: null,
+    sub: '500+ players',
   },
   {
     id: 'mini',
-    accentColor: CYAN,
+    accentColor: GREEN,
     title: 'MINI',
-    eyebrow: 'Quick auction',
-    sub: 'Shorter pool with faster team-building.',
+    eyebrow: null,
+    sub: '200 players',
   },
 ];
 
@@ -279,7 +279,7 @@ const globalStyles = `
   }
   .rp-toggle-card:hover { border-color:#333; background:#111; }
   .rp-toggle-card.selected-gold { border-color:${GOLD}; border-left-color:${GOLD}; background:rgba(232,184,75,.07); }
-  .rp-toggle-card.selected-cyan { border-color:${CYAN}; border-left-color:${CYAN}; background:rgba(34,211,238,.07); }
+  .rp-toggle-card.selected-cyan { border-color:${GREEN}; border-left-color:${GREEN}; background:rgba(74,222,128,.07); }
   .rp-toggle-card-title { font-family:'Bebas Neue',sans-serif; font-size:1.1rem; letter-spacing:.08em; color:#fff; }
   .rp-toggle-card-sub   { font-family:'Courier Prime',monospace; font-size:9px; letter-spacing:1px; color:#888; }
   .rp-toggle-check { position:absolute; top:8px; right:10px; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; transition:all .18s; }
@@ -316,20 +316,18 @@ const globalStyles = `
     box-shadow: 0 14px 36px rgba(232,184,75,0.16);
   }
   .rp-toggle-card.mode-card.selected-cyan {
-    background: linear-gradient(180deg, rgba(34,211,238,0.14), rgba(34,211,238,0.05));
-    box-shadow: 0 14px 36px rgba(34,211,238,0.14);
+    background: linear-gradient(180deg, rgba(74,222,128,0.14), rgba(74,222,128,0.05));
+    box-shadow: 0 14px 36px rgba(74,222,128,0.14);
   }
   .rp-toggle-card.mode-card .rp-toggle-check {
     top: 12px;
     right: 12px;
   }
   .rp-toggle-mode-header {
-    display:flex;
-    align-items:flex-start;
-    justify-content:space-between;
-    gap:14px;
+    display:block;
     position:relative;
     z-index:1;
+    margin-bottom:2px;
   }
   .rp-toggle-mode-eyebrow {
     font-family:'Courier Prime',monospace;
@@ -340,28 +338,17 @@ const globalStyles = `
     line-height:1.5;
     margin-bottom:4px;
   }
-  .rp-toggle-mode-icon {
-    width:42px;
-    height:42px;
-    border-radius:12px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    border:1px solid currentColor;
-    background:rgba(255,255,255,0.03);
-    flex-shrink:0;
-  }
   .rp-toggle-card.mode-card .rp-toggle-card-title {
-    font-size: 1.6rem;
+    font-size: 2rem;
     line-height: .95;
-    letter-spacing: .04em;
+    letter-spacing: .06em;
     max-width: 220px;
   }
   .rp-toggle-card.mode-card .rp-toggle-card-sub {
-    font-size: 11px;
-    letter-spacing: .8px;
-    line-height: 1.55;
-    color: #8d97a7;
+    font-size: 13px;
+    letter-spacing: 1px;
+    line-height: 1.35;
+    color: #a8b1bf;
     position: relative;
     z-index: 1;
   }
@@ -597,37 +584,18 @@ function CheckIcon({ color = GOLD }) {
   );
 }
 
-function ModeGlyph({ color, mode }) {
-  if (mode === 'mini') {
-    return (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M6 15L10 11L13 14L18 8" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M15 8H18V11" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M5 19H19" stroke={color} strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M4 18V10" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M10 18V6" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M16 18V12" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M20 18V8" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 // ─── Toggle Card ────────────────────────────────────────────────────────────
 function ToggleCard({ selected, onSelect, accentColor = GOLD, title, sub, icon, eyebrow, modeId }) {
-  const cls = selected ? (accentColor === CYAN ? 'rp-toggle-card selected-cyan' : 'rp-toggle-card selected-gold') : 'rp-toggle-card';
+  const cls = selected ? (accentColor === GOLD ? 'rp-toggle-card selected-gold' : 'rp-toggle-card selected-cyan') : 'rp-toggle-card';
   const isModeCard = !!modeId;
 
   return (
     <div className={`${cls}${isModeCard ? ' mode-card' : ''}`} onClick={onSelect}>
-      <div className="rp-toggle-check">
-        {selected && <CheckIcon color={accentColor} />}
-      </div>
+      {!isModeCard && (
+        <div className="rp-toggle-check">
+          {selected && <CheckIcon color={accentColor} />}
+        </div>
+      )}
 
       {isModeCard ? (
         <>
@@ -635,9 +603,6 @@ function ToggleCard({ selected, onSelect, accentColor = GOLD, title, sub, icon, 
             <div>
               {eyebrow && <div className="rp-toggle-mode-eyebrow">{eyebrow}</div>}
               <div className="rp-toggle-card-title" style={{ color: selected ? accentColor : '#f2f4f8' }}>{title}</div>
-            </div>
-            <div className="rp-toggle-mode-icon" style={{ color: selected ? accentColor : '#666' }}>
-              <ModeGlyph color={selected ? accentColor : '#666'} mode={modeId} />
             </div>
           </div>
           <div className="rp-toggle-card-sub">{sub}</div>
