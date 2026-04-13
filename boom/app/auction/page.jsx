@@ -6,7 +6,7 @@ import { useGame, fmt, nextBid } from '../GameContext';
 import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from '../../src/MultiScreens';
 import { StatsModal } from '../../src/StatsModal';
 import { SquadModal } from '../../src/SquadModal';
-import ALL_PLAYERS from '../data/Players.json';
+import { getPlayerRecord } from '../data/playerRatings';
 import AppDialog from '../components/AppDialog';
 
 const kohliImg = '/assets/Kohli.avif';
@@ -15,13 +15,11 @@ const RIVALS_MAX_SQUAD_SIZE = 13;
 const RIVALS_MAX_OVERSEAS = 5;
 const DEFAULT_PURSE = 120;
 const GIPHY_API_KEY = 'uBg7NTfB0PiHDgwH9F6t0t0uDoFLFXqC';
-const PLAYER_PHOTOS = ALL_PLAYERS.reduce((acc, player) => {
-  acc[player.name.toLowerCase()] = player.photo_url || player.image_url || null;
-  return acc;
-}, {});
+const WHATSAPP_COMMUNITY_URL = 'https://whatsapp.com/channel/0029VbCeqwJ90x2z9PRli10E';
 
 function getPlayerPhoto(name) {
-  return PLAYER_PHOTOS[(name || '').toLowerCase()] || null;
+  const record = getPlayerRecord(name);
+  return record?.photo_url || record?.image_url || null;
 }
 
 const StatRow = ({ label, val }) => (
@@ -207,7 +205,6 @@ function AuctionContent() {
   const isRivals = gs?.roomType === 'rivals' || currentMode?.toLowerCase() === 'rivals';
 
   const handleBid = useCallback(() => {
-    playBidClick();
     humanBid();
   }, [humanBid]);
   const closeUpcomingModal = useCallback(() => setShowUpcoming(false), []);
@@ -314,6 +311,34 @@ function AuctionContent() {
     return groups;
   }, [upcomingPlayers]);
 
+  const teamOwnerMap = useMemo(() => new Map(
+    (lobbyPlayers || [])
+      .filter((entry) => !entry.isSpectator && entry.teamId && entry.name)
+      .map((entry) => [entry.teamId, entry.name])
+  ), [lobbyPlayers]);
+  const getTeamOwnerName = useCallback((teamId) => teamOwnerMap.get(teamId) || '', [teamOwnerMap]);
+  const getTeamLabel = useCallback((team, { short = false } = {}) => {
+    if (!team) return '';
+    const base = short ? team.short : team.name;
+    const owner = getTeamOwnerName(team.id);
+    return owner ? `${base} (${owner})` : base;
+  }, [getTeamOwnerName]);
+  const lastBidSignatureRef = useRef(null);
+
+  useEffect(() => {
+    const latestBid = gs?.bidLog?.[0];
+    const queueIdx = gs?.currentIdx ?? -1;
+    const signature = latestBid ? `${queueIdx}:${latestBid.teamId}:${latestBid.bid}` : `${queueIdx}:none`;
+    if (lastBidSignatureRef.current === null) {
+      lastBidSignatureRef.current = signature;
+      return;
+    }
+    if (latestBid && signature !== lastBidSignatureRef.current) {
+      playBidClick();
+    }
+    lastBidSignatureRef.current = signature;
+  }, [gs?.currentIdx, gs?.bidLog]);
+
   useEffect(() => {
     if (gs?.phase !== 'finished') return;
     router.replace(resultsHref);
@@ -407,7 +432,7 @@ function AuctionContent() {
   if (gs.phase === 'finished') { return null; }
 
   const player      = gs.playerQueue[gs.currentIdx];
-  const pRecord     = ALL_PLAYERS.find(p => p.name.toLowerCase() === player.name.toLowerCase());
+  const pRecord     = getPlayerRecord(player.name);
   const photoUrl    = pRecord?.photo_url || null;
   const stats       = pRecord?.stats || {};
   const activeTeamIds = gs?.activeTeamIds?.length ? gs.activeTeamIds : TEAMS.map(t => t.id);
@@ -416,7 +441,13 @@ function AuctionContent() {
   const rivalsCountdown = rivalsMatch?.startAt ? formatCountdown(new Date(rivalsMatch.startAt).getTime() - Date.now()) : null;
   const myTeam      = TEAMS.find(t => t.id === effectiveMyTeamId);
   const bidderTeam  = gs.currentBidder ? TEAMS.find(t => t.id === gs.currentBidder) : null;
-  const osCount     = (gs.squads[effectiveMyTeamId] || []).filter(p => p.overseas).length;
+  const mySquad     = gs.squads[effectiveMyTeamId] || [];
+  const osCount     = mySquad.filter(p => p.overseas).length;
+  const mySpent     = DEFAULT_PURSE - (gs.purses[effectiveMyTeamId] || 0);
+  const squadRoleOrder = ['BAT', 'WK', 'AR', 'BOWL'];
+  const mySquadByRole = squadRoleOrder
+    .map((role) => [role, mySquad.filter((squadPlayer) => squadPlayer.role === role)])
+    .filter(([, players]) => players.length > 0);
   
   // Dynamic limits based on mode
   const isMini      = gs.auctionMode?.toLowerCase() === 'mini';
@@ -596,6 +627,91 @@ function AuctionContent() {
         .ac-log-row { display:flex; justify-content:space-between; align-items:center;
           padding:5px 8px; border-radius:4px; margin-bottom:2px; }
 
+        .ac-desktop-squad {
+          display:none;
+          width:100%;
+          max-width:960px;
+          margin-top:18px;
+          background:linear-gradient(180deg, rgba(15,15,18,0.96), rgba(9,9,12,0.96));
+          border:1px solid ${BORDER};
+          border-radius:16px;
+          overflow:hidden;
+          box-shadow:0 18px 48px rgba(0,0,0,0.35);
+          flex-shrink:0;
+        }
+        .ac-desktop-squad-head {
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:16px;
+          padding:16px 18px 12px;
+          border-bottom:1px solid ${BORDER};
+        }
+        .ac-desktop-squad-meta {
+          display:grid;
+          grid-template-columns:repeat(3, minmax(116px, 1fr));
+          gap:10px;
+          min-width:378px;
+        }
+        .ac-desktop-squad-stat {
+          background:#101216;
+          border:1px solid #1f2430;
+          border-radius:10px;
+          padding:10px 12px;
+          text-align:center;
+        }
+        .ac-desktop-squad-body {
+          padding:14px 18px 18px;
+          max-height:280px;
+          overflow-y:auto;
+        }
+        .ac-desktop-squad-grid {
+          display:grid;
+          grid-template-columns:repeat(2, minmax(0, 1fr));
+          gap:12px;
+        }
+        .ac-desktop-squad-col {
+          background:#0d0f14;
+          border:1px solid #181d26;
+          border-radius:12px;
+          padding:12px;
+        }
+        .ac-desktop-squad-player {
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:10px;
+          padding:8px 0;
+          border-bottom:1px solid #171b22;
+        }
+        .ac-desktop-squad-player:last-child { border-bottom:none; }
+        .ac-desktop-squad-player-main {
+          display:flex;
+          align-items:center;
+          gap:10px;
+          min-width:0;
+          flex:1;
+        }
+        .ac-desktop-squad-avatar {
+          width:34px;
+          height:34px;
+          border-radius:999px;
+          overflow:hidden;
+          flex-shrink:0;
+          border:1px solid #2a3342;
+          background:#12161d;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+        }
+        .ac-desktop-squad-empty {
+          color:#4b5563;
+          text-align:center;
+          padding:26px 12px;
+          font-size:13px;
+          letter-spacing:.5px;
+        }
+
         /* SOLD / UNSOLD overlay */
         .ac-phase-overlay {
           flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -729,6 +845,13 @@ function AuctionContent() {
           padding:5px 0; border-bottom:1px solid #161616; font-size:13px;
         }
         .ac-player-bought-row:last-child { border-bottom:none; }
+        .ac-player-bought-main {
+          display:flex;
+          align-items:center;
+          gap:8px;
+          min-width:0;
+          flex:1;
+        }
 
         /* RIGHT sidebar — hidden on mobile */
         .ac-right {
@@ -854,6 +977,23 @@ function AuctionContent() {
            .ac-host-controls { display:flex; align-items:center; gap:8px; }
            .ac-top-main { padding: 0 24px; min-height: 56px; gap: 12px; }
            .ac-desktop-settings { right: 24px; }
+           .ac-desktop-squad { display:block; }
+           .ac-sheet-bg { z-index:58; backdrop-filter:blur(10px); }
+           .ac-sheet {
+             z-index:59;
+             top:76px;
+             bottom:auto;
+             left:50%;
+             right:auto;
+             width:min(980px, calc(100vw - 48px));
+             max-height:min(78vh, 760px);
+             border:1px solid ${BORDER};
+             border-radius:20px;
+             transform:translateX(-50%);
+             box-shadow:0 28px 80px rgba(0,0,0,0.55);
+           }
+           .ac-sheet-header { padding:14px 18px; }
+           .ac-sheet-body { padding:16px 18px 20px; }
 
            /* Desktop Navbar Enhancements */
            .ac-top-brand { font-size: 20px; letter-spacing: 3px; margin-right: 8px; }
@@ -885,6 +1025,9 @@ function AuctionContent() {
           }
           .ac-bid-log {
             min-height: 110px;
+          }
+          .ac-desktop-squad-grid {
+            grid-template-columns:1fr;
           }
           .ac-mobile-dock {
             display:flex;
@@ -977,6 +1120,18 @@ function AuctionContent() {
             <button className="ac-top-btn ac-desktop-only" onClick={() => setShowUpcoming(true)} style={{ marginLeft: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>UPCOMING PLAYERS</span>
               <span style={{ background: 'rgba(34,211,238,0.2)', padding: '2px 6px', borderRadius: 4, fontSize: 9 }}>{upcomingPlayers.length}</span>
+            </button>
+
+            <button
+              className="ac-top-btn ac-top-btn-gold ac-desktop-only"
+              onClick={() => {
+                setHamburgerTab('upcoming');
+                setShowHamburger(true);
+              }}
+              style={{ marginLeft: 6, display: 'flex', alignItems: 'center', gap: 8 }}
+            >
+              <span style={{ fontSize: 13, lineHeight: 1 }}>☰</span>
+              <span>MARKET TABS</span>
             </button>
           </div>
 
@@ -1213,7 +1368,7 @@ function AuctionContent() {
                   const t = displayTeams.find(t => t.id === b.teamId) || TEAMS.find(t => t.id === b.teamId);
                   return (
                     <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'4px 8px', borderRadius:4, background:i===0?`${t?.color}18`:'transparent', marginBottom:2, border:i===0?`1px solid ${t?.color}30`:'none' }}>
-                      <span style={{ color:t?.color, fontWeight:700, fontSize:12 }}>{t?.short}</span>
+                      <span style={{ color:t?.color, fontWeight:700, fontSize:12 }}>{t ? getTeamLabel(t, { short: true }) : b.teamId}</span>
                       <span style={{ color:i===0?'#fff':'#666', fontSize:12, fontWeight:700 }}>{fmt(b.bid)}</span>
                     </div>
                   );
@@ -1231,7 +1386,7 @@ function AuctionContent() {
               {gs.phase === 'sold' ? (
                 <>
                   <div className="ac-sold-text" style={{ color:GOLD, textShadow:`0 0 60px ${GOLD}, 0 0 120px ${GOLD}44` }}>SOLD!</div>
-                  <div style={{ color:bidderTeam?.color, fontSize:18, fontWeight:700, letterSpacing:2, marginTop:8 }}>{bidderTeam?.name}</div>
+                  <div style={{ color:bidderTeam?.color, fontSize:18, fontWeight:700, letterSpacing:2, marginTop:8 }}>{bidderTeam ? getTeamLabel(bidderTeam) : ''}</div>
                   <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:32, letterSpacing:4, marginTop:4 }}>{fmt(gs.currentBid)}</div>
                 </>
               ) : (
@@ -1275,7 +1430,7 @@ function AuctionContent() {
                   {bidderTeam ? (
                     <div className="ac-leading-pill" style={{ background:`${bidderTeam.color}14`, border:`1px solid ${bidderTeam.color}40` }}>
                       <div style={{ width:8,height:8,borderRadius:'50%',background:bidderTeam.color,boxShadow:`0 0 8px ${bidderTeam.color}` }} />
-                      <span style={{ color:bidderTeam.color, fontWeight:700, fontSize:14 }}>{bidderTeam.name}</span>
+                      <span style={{ color:bidderTeam.color, fontWeight:700, fontSize:14 }}>{getTeamLabel(bidderTeam)}</span>
                       <span style={{ color:'#555', fontSize:13 }}>leading</span>
                     </div>
                   ) : (
@@ -1332,7 +1487,7 @@ function AuctionContent() {
                         <div key={i} className="ac-log-row" style={{ background:i===0?`${t?.color}12`:'transparent', animation:i===0?'rowIn .2s ease':'none', opacity:Math.max(.1,1-i*.2) }}>
                           <div style={{ display:'flex', alignItems:'center', gap:7 }}>
                             <div style={{ width:6,height:6,borderRadius:'50%',background:t?.color }} />
-                            <span style={{ color:t?.color, fontWeight:700, fontSize:13 }}>{t?.short}</span>
+                            <span style={{ color:t?.color, fontWeight:700, fontSize:13 }}>{t ? getTeamLabel(t, { short: true }) : b.teamId}</span>
                             {b.teamId === effectiveMyTeamId && <span style={{ fontSize:9, background:`${t?.color}33`, color:t?.color, padding:'1px 5px', borderRadius:6 }}>YOU</span>}
                           </div>
                           <span style={{ color:GOLD, fontWeight:700, fontSize:13 }}>{fmt(b.bid)}</span>
@@ -1341,6 +1496,91 @@ function AuctionContent() {
                     })}
                   </div>
                 )}
+
+                <div className="ac-desktop-squad">
+                  <div className="ac-desktop-squad-head">
+                    <div>
+                      <div style={{ fontFamily:"'Bebas Neue'", fontSize:28, letterSpacing:2, color:myTeam?.color || GOLD }}>
+                        {myTeam ? getTeamLabel(myTeam, { short: true }) : 'YOUR TEAM'} SQUAD
+                      </div>
+                      <div style={{ color:'#6b7280', fontSize:12, letterSpacing:1.1, marginTop:4 }}>
+                        Your own buys stay visible here, while the franchise rail on the right still opens every team.
+                      </div>
+                    </div>
+                    <div className="ac-desktop-squad-meta">
+                      <div className="ac-desktop-squad-stat">
+                        <div style={{ color:'#6b7280', fontSize:10, letterSpacing:1.6 }}>PLAYERS</div>
+                        <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:26, letterSpacing:1, whiteSpace:'nowrap' }}>{mySquad.length}/{maxSquadSize}</div>
+                      </div>
+                      <div className="ac-desktop-squad-stat">
+                        <div style={{ color:'#6b7280', fontSize:10, letterSpacing:1.6 }}>OVERSEAS</div>
+                        <div style={{ color:'#a78bfa', fontFamily:"'Bebas Neue'", fontSize:26, letterSpacing:1, whiteSpace:'nowrap' }}>{osCount}/{maxOverseas}</div>
+                      </div>
+                      <div className="ac-desktop-squad-stat">
+                        <div style={{ color:'#6b7280', fontSize:10, letterSpacing:1.6 }}>SPENT</div>
+                        <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:24, letterSpacing:1, whiteSpace:'nowrap' }}>{fmt(mySpent)}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="ac-desktop-squad-body squad-scroller">
+                    {mySquad.length === 0 ? (
+                      <div className="ac-desktop-squad-empty">No players bought yet. As soon as you win bids, your squad will build out here automatically.</div>
+                    ) : (
+                      <div className="ac-desktop-squad-grid">
+                        {mySquadByRole.map(([role, rolePlayers]) => (
+                          <div key={role} className="ac-desktop-squad-col">
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                <span style={{ fontSize:18 }}>{ROLE_EMOJI[role]}</span>
+                                <span style={{ color:ROLE_C[role], fontWeight:800, fontSize:13, letterSpacing:1.4 }}>{ROLE_L[role].toUpperCase()}</span>
+                              </div>
+                              <span style={{ color:'#6b7280', fontSize:11 }}>{rolePlayers.length}</span>
+                            </div>
+
+                            {rolePlayers.map((squadPlayer, index) => (
+                              <div key={`${role}-${squadPlayer.name}-${index}`} className="ac-desktop-squad-player">
+                                <div className="ac-desktop-squad-player-main">
+                                  <div className="ac-desktop-squad-avatar">
+                                    {getPlayerPhoto(squadPlayer.name) ? (
+                                      <img
+                                        src={getPlayerPhoto(squadPlayer.name)}
+                                        alt={squadPlayer.name}
+                                        style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top' }}
+                                      />
+                                    ) : (
+                                      <span style={{ fontSize:15 }}>{ROLE_EMOJI[role]}</span>
+                                    )}
+                                  </div>
+                                  <div style={{ minWidth:0, flex:1 }}>
+                                    <div style={{ color:'#e5e7eb', fontSize:14, fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                                      {squadPlayer.name}
+                                    </div>
+                                    <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4 }}>
+                                      {squadPlayer.overseas && (
+                                        <span style={{ fontSize:9, background:'#6366f120', color:'#818cf8', padding:'2px 6px', borderRadius:999, letterSpacing:1 }}>
+                                          OS
+                                        </span>
+                                      )}
+                                      <span style={{ color:'#4b5563', fontSize:10, letterSpacing:1.2 }}>
+                                        {squadPlayer.setName || 'Auction buy'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div style={{ flexShrink:0, textAlign:'right' }}>
+                                  <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:20, letterSpacing:1, whiteSpace:'nowrap' }}>
+                                    {fmt(squadPlayer.soldFor || squadPlayer.base)}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 {/* end bid log */}
               </div>{/* end ac-scroll */}
 
@@ -1409,7 +1649,7 @@ function AuctionContent() {
                         <img src={`/assets/${team.id}.png`} style={{ width:24, height:24, objectFit:'contain' }} alt="" />
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                            <span style={{ fontWeight:700, color: isMe ? team.color : '#ddd', fontSize:15, letterSpacing:.5 }}>{team.short}</span>
+                            <span style={{ fontWeight:700, color: isMe ? team.color : '#ddd', fontSize:15, letterSpacing:.5 }}>{getTeamLabel(team, { short: true })}</span>
                             {isMe && <span style={{ fontSize:9, background:`${team.color}22`, color:team.color, padding:'1px 5px', borderRadius:3, letterSpacing:1 }}>YOU</span>}
                             {isLead && <span style={{ fontSize:9, background:'#ef444418', color:'#ef4444', padding:'1px 5px', borderRadius:3, letterSpacing:1 }}>LEADING</span>}
                           </div>
@@ -1431,8 +1671,21 @@ function AuctionContent() {
                                 <div style={{ fontSize:9, letterSpacing:2, color:ROLE_C[role], fontWeight:700, marginBottom:4 }}>{ROLE_L[role].toUpperCase()}</div>
                                 {players.map((p,i) => (
                                   <div key={i} className="ac-player-bought-row">
-                                    <span style={{ color:'#ccc' }}>{p.name}</span>
-                                    <span style={{ color:GOLD, fontWeight:700 }}>{fmt(p.soldFor||p.base)}</span>
+                                    <div className="ac-player-bought-main">
+                                      <div className="ac-desktop-squad-avatar" style={{ width:28, height:28 }}>
+                                        {getPlayerPhoto(p.name) ? (
+                                          <img
+                                            src={getPlayerPhoto(p.name)}
+                                            alt={p.name}
+                                            style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top' }}
+                                          />
+                                        ) : (
+                                          <span style={{ fontSize:12 }}>{ROLE_EMOJI[role]}</span>
+                                        )}
+                                      </div>
+                                      <span style={{ color:'#ccc', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.name}</span>
+                                    </div>
+                                    <span style={{ color:GOLD, fontWeight:700, whiteSpace:'nowrap' }}>{fmt(p.soldFor||p.base)}</span>
                                   </div>
                                 ))}
                               </div>
@@ -1498,8 +1751,8 @@ function AuctionContent() {
                   </div>
                 </div>
                 <div className="ac-mobile-footer">
-                  <span>Follow socials for more updates</span>
-                  <span className="ac-mobile-social"><WhatsAppIcon /></span>
+                  <span>Join the community</span>
+                  <a className="ac-mobile-social" href={WHATSAPP_COMMUNITY_URL} target="_blank" rel="noreferrer" aria-label="Join WhatsApp community" style={{ color: 'inherit', textDecoration: 'none' }}><WhatsAppIcon /></a>
                   <span className="ac-mobile-social"><TelegramIcon /></span>
                 </div>
               </div>
@@ -1521,7 +1774,7 @@ function AuctionContent() {
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                       <img src={`/assets/${team.id}.png`} style={{ width: 18, height: 18, objectFit: 'contain' }} alt="" />
-                      <span style={{ fontWeight:700, color:'#ddd', fontSize:13, letterSpacing:.5 }}>{team.short}</span>
+                      <span style={{ fontWeight:700, color:'#ddd', fontSize:13, letterSpacing:.5 }}>{getTeamLabel(team, { short: true })}</span>
                       {isMe && <span style={{ fontSize:9, color:team.color }}>YOU</span>}
                     </div>
                     <div style={{ textAlign:'right' }}>
@@ -1540,6 +1793,17 @@ function AuctionContent() {
           {/* DESKTOP CHAT AREA */}
           <div style={{ flex: 1, borderTop: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', minHeight: '40%' }}>
             <div style={{ padding:'6px 12px', fontSize:9, letterSpacing:3, color:'#22D3EE', borderBottom:`1px solid ${BORDER}`, flexShrink:0 }}>LIVE CHAT</div>
+            <div style={{ padding:'8px 12px', borderBottom:`1px solid ${BORDER}`, flexShrink:0 }}>
+              <a
+                href={WHATSAPP_COMMUNITY_URL}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display:'inline-flex', alignItems:'center', gap:8, color:'#25D366', textDecoration:'none', fontSize:11, letterSpacing:1.5, fontWeight:700 }}
+              >
+                <WhatsAppIcon />
+                JOIN WHATSAPP COMMUNITY
+              </a>
+            </div>
             <div style={{ flex: 1, overflow: 'hidden' }}>
                <ChatBox chatLog={chatLog} emit={emit} currentRoom={roomCode} isSpectator={isSpectatorMode} />
             </div>
@@ -1556,7 +1820,7 @@ function AuctionContent() {
           return (
             <div key={i} className="ac-ticker-item">
               <span>{item.player.name}</span>
-              {item.sold ? (<><span style={{ color:GOLD }}>→</span><span style={{ color:t?.color, fontWeight:900 }}>{item.bidder}</span><span style={{ color:'#ddd', fontWeight:700 }}>{fmt(item.price)}</span></>) : <span style={{ color:'#ef4444', fontWeight:700 }}>UNSOLD</span>}
+              {item.sold ? (<><span style={{ color:GOLD }}>→</span><span style={{ color:t?.color, fontWeight:900 }}>{t ? getTeamLabel(t, { short: true }) : item.bidder}</span><span style={{ color:'#ddd', fontWeight:700 }}>{fmt(item.price)}</span></>) : <span style={{ color:'#ef4444', fontWeight:700 }}>UNSOLD</span>}
             </div>
           );
         })}
@@ -1581,7 +1845,7 @@ function AuctionContent() {
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                       <img src={`/assets/${team.id}.png`} style={{ width: 22, height: 22, objectFit: 'contain' }} alt="" />
-                      <span style={{ fontWeight:700, color:'#ddd', fontSize:16, letterSpacing:.5 }}>{team.short}</span>
+                      <span style={{ fontWeight:700, color:'#ddd', fontSize:16, letterSpacing:.5 }}>{getTeamLabel(team, { short: true })}</span>
                       <span style={{ fontSize:12, color:'#555' }}>{team.name}</span>
                       {isMe && <span style={{ fontSize:10, color:team.color }}>★ YOU</span>}
                       {isLead && <span style={{ fontSize:10, color:team.color, letterSpacing:2 }}>LEADING</span>}
@@ -1657,7 +1921,7 @@ function AuctionContent() {
                           <div style={{ fontSize:10, color:ROLE_C[item.player.role], marginTop:2 }}>{ROLE_L[item.player.role]}</div>
                         </div>
                         <div style={{ textAlign:'right' }}>
-                          <div style={{ color:t?.color, fontWeight:700, fontSize:12 }}>{t?.short}</div>
+                          <div style={{ color:t?.color, fontWeight:700, fontSize:12 }}>{t ? getTeamLabel(t, { short: true }) : item.bidder}</div>
                           <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:15 }}>{fmt(item.price)}</div>
                         </div>
                       </div>

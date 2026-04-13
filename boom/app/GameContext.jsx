@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useRef, useReducer, use
 import { useRouter, usePathname } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { MEGA_SETS } from '../src/megaPlayers';
+import { MEGA_AUCTION_SET_ORDER } from './data/playerRatings';
 import { useSocket, playPulse, playSaleSound } from '../src/useSocket';
 import { TEAMS } from '../src/MultiScreens';
 import confetti from 'canvas-confetti';
@@ -21,10 +22,14 @@ const shuffle = arr => { const a = [...arr]; for (let i = a.length - 1; i > 0; i
 const getIncrement = p => p < 2 ? 0.10 : p < 5 ? 0.20 : p < 10 ? 0.25 : 0.50;
 export const fmt = c => c >= 1 ? `₹${c.toFixed(2)} Cr` : `₹${Math.round(c * 100)} L`;
 export const nextBid = c => +(c + getIncrement(c)).toFixed(2);
+const normalizePlayerName = (name) => String(name || '').replace(/\s*\(WK\)/gi, '').replace(/\./g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+const MEGA_PLAYER_LOOKUP = new Map(
+  MEGA_SETS.flatMap((set) => set.players).map((player) => [normalizePlayerName(player.name), player])
+);
 
 function buildMiniPlayers() {
   const byRole = { BAT: [], BOWL: [], AR: [], WK: [] };
-  for (const set of MEGA_SETS) {
+  for (const set of getMegaSetsForAuction()) {
     for (const player of set.players) {
       if (byRole[player.role]) byRole[player.role].push({ ...player, setName: "Mini Auction" });
     }
@@ -46,11 +51,21 @@ export function buildQueue(mode) {
     return shuffle(miniPool).map((p, i) => ({ ...p, id: i, setName: p.setName || "Mini Auction" }));
   }
   const queue = [];
-  for (const set of MEGA_SETS) {
+  for (const set of getMegaSetsForAuction()) {
     const s = shuffle(set.players);
     s.forEach((p, i) => queue.push({ ...p, id: queue.length + i, setName: set.name }));
   }
   return queue;
+}
+
+function getMegaSetsForAuction() {
+  return MEGA_AUCTION_SET_ORDER.map(({ setName, playerNames }, index) => ({
+    id: MEGA_SETS.find((set) => set.name === setName)?.id || `SET-${index + 1}`,
+    name: setName,
+    players: playerNames
+      .map((playerName) => MEGA_PLAYER_LOOKUP.get(normalizePlayerName(playerName)))
+      .filter(Boolean),
+  })).filter((set) => set.players.length > 0);
 }
 
 function createGameState(queue) {

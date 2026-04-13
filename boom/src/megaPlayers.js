@@ -19,6 +19,7 @@ export const MEGA_SETS = [
             p("Sam Curran", "AR", O, 2), p("Sanju Samson", "WK", I, 2), p("Shimron Hetmyer", "BAT", O, 2), p("Shivam Dube", "AR", I, 2),
             p("Shreyas Iyer", "BAT", I, 2), p("Shubman Gill", "BAT", I, 2), p("Sunil Narine", "AR", O, 2), p("Suryakumar Yadav", "BAT", I, 2),
             p("Tim David", "BAT", O, 2), p("Travis Head", "BAT", O, 2), p("Trent Boult", "BOWL", O, 2), p("Varun Chakravarthy", "BOWL", I, 2),
+            p("Yashasvi Jaiswal", "BAT", I, 2),
             p("Virat Kohli", "BAT", I, 2), p("Will Jacks", "AR", O, 2), p("Yuzvendra Chahal", "BOWL", I, 2),
         ]
     },
