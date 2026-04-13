@@ -8,6 +8,10 @@ const CYAN = '#22D3EE';
 export const metadata = {
   title: '404 | IPL Auction Online',
   description: 'The page you requested was not found. Head back into IPL Auction Online and jump into a room.',
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function NotFound() {
