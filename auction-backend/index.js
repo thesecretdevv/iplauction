@@ -98,6 +98,22 @@ function getActivePlayers(room) {
     return Object.values(room?.players || {}).filter(player => !player.isSpectator && !player.offline);
 }
 
+function getParticipantPlayers(room) {
+    return Object.values(room?.players || {}).filter(player => !player.isSpectator);
+}
+
+function getClaimedTeamIds(room) {
+    return new Set(
+        getParticipantPlayers(room)
+            .map((player) => player.teamId)
+            .filter(Boolean)
+    );
+}
+
+function getAvailableTeamIds(room) {
+    return getActiveTeamIds(room).filter((teamId) => !getClaimedTeamIds(room).has(teamId));
+}
+
 function getRoomParticipantSummary(room) {
     return Object.values(room?.players || {})
         .filter(player => !player.isSpectator)
@@ -1121,7 +1137,7 @@ io.on('connection', (socket) => {
     });
 
     // ── Join Room ──
-    socket.on('join-room', async ({ code, playerName, playerId }, cb) => {
+    socket.on('join-room', async ({ code, playerName, playerId, preferredRole }, cb) => {
         if (!playerId) return cb?.({ ok: false, error: 'Missing Player ID' });
 
         const room = await getRoom(code);
@@ -1162,6 +1178,7 @@ io.on('connection', (socket) => {
                 squadLimit: room.squadLimit,
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
+                availableTeamIds: getAvailableTeamIds(room),
                 rivalsMatch: room.rivalsMatch || null,
                 isSpectator: room.players[playerId].isSpectator,
                 gameState: room.status !== 'lobby' ? getClientState(room) : null
@@ -1184,6 +1201,7 @@ io.on('connection', (socket) => {
                 squadLimit: room.squadLimit,
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
+                availableTeamIds: [],
                 rivalsMatch: room.rivalsMatch || null,
                 isSpectator: true,
                 gameState: getClientState(room)
@@ -1221,18 +1239,19 @@ io.on('connection', (socket) => {
                     squadLimit: room.squadLimit,
                     roomType: room.roomType || 'standard',
                     activeTeamIds: getActiveTeamIds(room),
+                    availableTeamIds: [],
                     rivalsMatch: room.rivalsMatch || null,
                     isSpectator: true,
                     gameState: getClientState(room)
                 });
             }
 
-            const takenTeams = new Set(Object.values(room.players).map(p => p.teamId).filter(Boolean));
-            const availableTeams = TEAMS.filter(t => !takenTeams.has(t.id));
-            const activeHumanPlayers = Object.values(room.players).filter(p => !p.isSpectator && !p.offline);
+            const wantsSpectator = preferredRole === 'spectator';
+            const availableTeamIds = getAvailableTeamIds(room);
+            const participantCount = getParticipantPlayers(room).length;
 
-            // If there's an available team AND room isn't full (10 players)
-            if (availableTeams.length > 0 && activeHumanPlayers.length < 10) {
+            // If there's an available team and the user wants to play, let them join and choose a team.
+            if (!wantsSpectator && availableTeamIds.length > 0 && participantCount < getRoomPlayerLimit(room)) {
                 room.players[playerId] = {
                     id: playerId,
                     socketId: socket.id,
@@ -1261,6 +1280,7 @@ io.on('connection', (socket) => {
                     squadLimit: room.squadLimit,
                     roomType: room.roomType || 'standard',
                     activeTeamIds: getActiveTeamIds(room),
+                    availableTeamIds,
                     rivalsMatch: room.rivalsMatch || null,
                     isSpectator: false,
                     gameState: getClientState(room)
@@ -1295,6 +1315,7 @@ io.on('connection', (socket) => {
                     auctionMode: room.auctionMode,
                     roomType: room.roomType || 'standard',
                     activeTeamIds: getActiveTeamIds(room),
+                    availableTeamIds,
                     rivalsMatch: room.rivalsMatch || null,
                     isSpectator: true,
                     gameState: getClientState(room)
@@ -1303,8 +1324,9 @@ io.on('connection', (socket) => {
         }
 
         // ── Full room fallback ──
-        const activePlayersCount = getActivePlayers(room).length;
-        const isFull = activePlayersCount >= getRoomPlayerLimit(room);
+        const wantsSpectator = preferredRole === 'spectator';
+        const participantCount = getParticipantPlayers(room).length;
+        const isFull = participantCount >= getRoomPlayerLimit(room);
 
         if (room.roomType === 'rivals' && !isFull) {
             const assignedTeamId = getActiveTeamIds(room).find(teamId =>
@@ -1348,6 +1370,7 @@ io.on('connection', (socket) => {
                 squadLimit: room.squadLimit,
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
+                availableTeamIds: getAvailableTeamIds(room),
                 rivalsMatch: room.rivalsMatch || null,
                 assignedTeamId,
                 isSpectator: false,
@@ -1362,18 +1385,18 @@ io.on('connection', (socket) => {
             name: playerName || `Player ${Object.keys(room.players).length + 1}`,
             teamId: null,
             isHost: false,
-            isSpectator: isFull,
+            isSpectator: wantsSpectator || isFull,
             offline: false
         };
         markRoomDirty(room);
         socket.join(code);
         currentRoom = code;
         currentPlayerId = playerId;
-        console.log(`[ROOM] ${playerName || 'Player'} (${playerId}) joined ${code}${isFull ? ' AS SPECTATOR (Room Full)' : ''}`);
+        console.log(`[ROOM] ${playerName || 'Player'} (${playerId}) joined ${code}${wantsSpectator || isFull ? ' AS SPECTATOR' : ''}`);
 
         const state = getLobbyState(room);
         io.to(code).emit('lobby-update', state);
-        pushSystemMessage(room, `${playerName || 'Player'} joined${isFull ? ' as spectator' : ''}`);
+        pushSystemMessage(room, `${playerName || 'Player'} joined${wantsSpectator || isFull ? ' as spectator' : ''}`);
         cb?.({
             ok: true,
             code,
@@ -1384,8 +1407,9 @@ io.on('connection', (socket) => {
             squadLimit: room.squadLimit,
             roomType: room.roomType || 'standard',
             activeTeamIds: getActiveTeamIds(room),
+            availableTeamIds: getAvailableTeamIds(room),
             rivalsMatch: room.rivalsMatch || null,
-            isSpectator: isFull
+            isSpectator: wantsSpectator || isFull
         });
 
         await persistRoom(room);
@@ -1402,7 +1426,7 @@ io.on('connection', (socket) => {
         const player = room.players[currentPlayerId];
         if (!player || player.isSpectator) return cb?.({ ok: false, error: 'Spectators cannot select teams' });
 
-        const taken = Object.values(room.players).some(p => p.teamId === teamId && p.id !== currentPlayerId && !p.offline);
+        const taken = Object.values(room.players).some(p => p.teamId === teamId && p.id !== currentPlayerId && !p.isSpectator);
         if (taken) return cb?.({ ok: false, error: 'Team already taken' });
 
         player.teamId = teamId;
@@ -1411,6 +1435,63 @@ io.on('connection', (socket) => {
         io.to(currentRoom).emit('lobby-update', state);
         cb?.({ ok: true });
         await persistRoom(room);
+    });
+
+    socket.on('kick-player', async ({ targetPlayerId }, cb) => {
+        if (!currentRoom || !currentPlayerId || !targetPlayerId) return cb?.({ ok: false, error: 'Missing player to kick' });
+        const room = await getRoom(currentRoom);
+        if (!room) return cb?.({ ok: false, error: 'Room not found' });
+        if (currentPlayerId !== room.hostId) return cb?.({ ok: false, error: 'Only the host can kick players' });
+        if (targetPlayerId === room.hostId) return cb?.({ ok: false, error: 'The host cannot kick themselves' });
+        if (room.roomType === 'rivals' && room.status === 'active') {
+            return cb?.({ ok: false, error: 'Active Rivals players cannot be kicked mid-match' });
+        }
+
+        const target = room.players[targetPlayerId];
+        if (!target) return cb?.({ ok: false, error: 'Player not found in this room' });
+
+        if (disconnectTimers.has(targetPlayerId)) {
+            clearTimeout(disconnectTimers.get(targetPlayerId));
+            disconnectTimers.delete(targetPlayerId);
+        }
+
+        const kickedName = target.name || 'Player';
+        const kickedSocket = target.socketId ? io.sockets.sockets.get(target.socketId) : null;
+
+        delete room.players[targetPlayerId];
+        markRoomDirty(room);
+        pushSystemMessage(room, `${kickedName} was removed by the host`);
+
+        const visiblePlayers = getVisiblePlayers(room);
+        if (visiblePlayers.length === 0 && room.status === 'lobby') {
+            if (room.timerInterval) {
+                clearInterval(room.timerInterval);
+                room.timerInterval = null;
+            }
+            await removeRoom(currentRoom);
+            if (!room.isPrivate) broadcastRoomList();
+            cb?.({ ok: true, kickedPlayerId: targetPlayerId });
+            if (kickedSocket) {
+                kickedSocket.emit('room-kicked', { code: currentRoom, message: 'You were removed from the room by the host.' });
+                setTimeout(() => kickedSocket.disconnect(true), 50);
+            }
+            return;
+        }
+
+        const state = getLobbyState(room);
+        io.to(currentRoom).emit('lobby-update', state);
+        if (room.gameState) {
+            io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: room.gameState.phase === 'selection' }));
+        }
+        await persistRoom(room);
+        if (!room.isPrivate) broadcastRoomList();
+
+        if (kickedSocket) {
+            kickedSocket.emit('room-kicked', { code: currentRoom, message: 'You were removed from the room by the host.' });
+            setTimeout(() => kickedSocket.disconnect(true), 50);
+        }
+
+        cb?.({ ok: true, kickedPlayerId: targetPlayerId });
     });
 
     // ── Set Auction Mode ──

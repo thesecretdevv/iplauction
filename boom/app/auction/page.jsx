@@ -281,6 +281,36 @@ function AuctionContent() {
       }
     });
   }, [closeDialog, emit]);
+  const handleKickPlayer = useCallback((player) => {
+    if (!player?.id) return;
+    setDialog({
+      title: `Kick ${player.name}?`,
+      message: player.teamId
+        ? `${player.name} will be removed from this room and their franchise slot will open for someone else to take over.`
+        : `${player.name} will be removed from this room immediately.`,
+      tone: 'danger',
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onClick: closeDialog },
+        {
+          label: 'Kick Player',
+          variant: 'danger',
+          onClick: () => {
+            closeDialog();
+            emit('kick-player', { targetPlayerId: player.id }, (res) => {
+              if (!res?.ok) {
+                setDialog({
+                  title: 'Could Not Kick Player',
+                  message: res?.error || 'Something went wrong while removing this player.',
+                  tone: 'info',
+                  actions: [{ label: 'OK', onClick: closeDialog }],
+                });
+              }
+            });
+          },
+        },
+      ],
+    });
+  }, [closeDialog, emit]);
   const handleHostPauseToggle = useCallback(() => {
     emit(gs?.isPaused ? 'resume-game' : 'pause-game');
   }, [emit, gs?.isPaused]);
@@ -324,6 +354,10 @@ function AuctionContent() {
     return owner ? `${base} (${owner})` : base;
   }, [getTeamOwnerName]);
   const lastBidSignatureRef = useRef(null);
+  const manageablePlayers = useMemo(
+    () => (lobbyPlayers || []).filter((player) => !player.isHost),
+    [lobbyPlayers]
+  );
 
   useEffect(() => {
     const latestBid = gs?.bidLog?.[0];
@@ -374,7 +408,12 @@ function AuctionContent() {
       });
 
       if (res.roomStatus === 'active' && res.gameState) {
-        setMultiGS(res.gameState);
+        const me = (res.players || []).find((player) => player.id === playerId);
+        if (res.isSpectator || me?.teamId) {
+          setMultiGS(res.gameState);
+        } else {
+          router.replace(`/room?action=lobby&room=${res.code || roomFromQuery}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}`);
+        }
       } else if (res.roomStatus === 'finished') {
         setMultiGS(res.gameState);
         router.replace(`/results?room=${res.code || roomFromQuery}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}`);
@@ -435,8 +474,35 @@ function AuctionContent() {
   const pRecord     = getPlayerRecord(player.name);
   const photoUrl    = pRecord?.photo_url || null;
   const stats       = pRecord?.stats || {};
-  const activeTeamIds = gs?.activeTeamIds?.length ? gs.activeTeamIds : TEAMS.map(t => t.id);
-  const displayTeams = TEAMS.filter(t => activeTeamIds.includes(t.id));
+  const claimedTeamIds = useMemo(() => new Set(
+    (lobbyPlayers || [])
+      .filter((entry) => !entry.isSpectator && entry.teamId)
+      .map((entry) => entry.teamId)
+  ), [lobbyPlayers]);
+  const teamsWithAuctionState = useMemo(() => new Set(
+    TEAMS
+      .filter((team) => {
+        const squadCount = gs?.squads?.[team.id]?.length || 0;
+        const purseLeft = gs?.purses?.[team.id];
+        const hasSpent = typeof purseLeft === 'number' ? purseLeft < DEFAULT_PURSE : false;
+        const hasSelection = !!gs?.selections?.[team.id];
+        const hasBidHistory = (gs?.bidLog || []).some((bid) => bid.teamId === team.id);
+        const hasSaleHistory = (gs?.auctionLog || []).some((item) => item.bidder === team.id);
+        const isCurrentBidder = gs?.currentBidder === team.id;
+        return squadCount > 0 || hasSpent || hasSelection || hasBidHistory || hasSaleHistory || isCurrentBidder;
+      })
+      .map((team) => team.id)
+  ), [gs?.auctionLog, gs?.bidLog, gs?.currentBidder, gs?.purses, gs?.selections, gs?.squads]);
+  const displayTeamIds = useMemo(() => {
+    if (!isMulti) return TEAMS.map((team) => team.id);
+    const ids = new Set([
+      ...claimedTeamIds,
+      ...teamsWithAuctionState,
+      ...(effectiveMyTeamId ? [effectiveMyTeamId] : []),
+    ]);
+    return ids.size > 0 ? Array.from(ids) : (gs?.activeTeamIds?.length ? gs.activeTeamIds : []);
+  }, [claimedTeamIds, effectiveMyTeamId, gs?.activeTeamIds, isMulti, teamsWithAuctionState]);
+  const displayTeams = TEAMS.filter((team) => displayTeamIds.includes(team.id));
   const rivalsMatch = gs?.rivalsMatch || null;
   const rivalsCountdown = rivalsMatch?.startAt ? formatCountdown(new Date(rivalsMatch.startAt).getTime() - Date.now()) : null;
   const myTeam      = TEAMS.find(t => t.id === effectiveMyTeamId);
@@ -1316,6 +1382,40 @@ function AuctionContent() {
                   ))}
                 </div>
               </div>
+
+              <div style={{ background:'#0f0f12', border:'1px solid #1c1c1c', borderRadius:12, padding:'14px', marginTop:12 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom:10 }}>
+                  <div>
+                    <div style={{ color:'#ddd', fontSize:15, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}>🚫 Player Control</div>
+                    <div style={{ color:'#555', fontSize:11, marginTop:3 }}>Remove unknown players and free their room slot.</div>
+                  </div>
+                  <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:24, letterSpacing:1 }}>{manageablePlayers.length}</div>
+                </div>
+                <div style={{ display:'grid', gap:8, maxHeight:220, overflowY:'auto' }}>
+                  {manageablePlayers.length === 0 ? (
+                    <div style={{ color:'#666', fontSize:12, textAlign:'center', padding:'10px 0' }}>No kickable players right now.</div>
+                  ) : manageablePlayers.map((player) => {
+                    const team = player.teamId ? TEAMS.find((entry) => entry.id === player.teamId) : null;
+                    return (
+                      <div key={player.id} style={{ display:'flex', alignItems:'center', gap:10, justifyContent:'space-between', border:'1px solid #1f2937', borderRadius:10, padding:'10px 12px', background:'rgba(255,255,255,0.02)' }}>
+                        <div style={{ minWidth:0, flex:1 }}>
+                          <div style={{ color:'#e5e7eb', fontSize:13, fontWeight:700 }}>{player.name}</div>
+                          <div style={{ color:team?.color || '#64748b', fontSize:10, letterSpacing:1.1, marginTop:4 }}>
+                            {player.isSpectator ? 'SPECTATOR' : team ? `${team.short} PLAYER` : 'WAITING FOR TEAM'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleKickPlayer(player)}
+                          style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #7f1d1d', background:'#2a0d0d', color:'#fca5a5', fontWeight:800, fontSize:11, letterSpacing:1, cursor:'pointer' }}
+                        >
+                          KICK
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </>
         )}
@@ -1741,6 +1841,41 @@ function AuctionContent() {
                         <span style={{ color:'#22c55e', fontFamily:"'Bebas Neue'", fontSize:20, letterSpacing:1 }}>₹120 Cr</span>
                       </div>
                     </div>
+                    {isHost && (
+                      <div style={{ background:'#0f0f12', border:'1px solid #1c1c1c', borderRadius:10, padding:'14px', marginTop:10 }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                          <div>
+                            <div style={{ color:'#ddd', fontSize:14, fontWeight:700 }}>🚫 Kick Players</div>
+                            <div style={{ color:'#555', fontSize:10, marginTop:2 }}>Remove unknown players from the live room.</div>
+                          </div>
+                          <span style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:20, letterSpacing:1 }}>{manageablePlayers.length}</span>
+                        </div>
+                        <div style={{ display:'grid', gap:8 }}>
+                          {manageablePlayers.length === 0 ? (
+                            <div style={{ color:'#666', fontSize:12, textAlign:'center', padding:'8px 0' }}>No kickable players right now.</div>
+                          ) : manageablePlayers.map((player) => {
+                            const team = player.teamId ? TEAMS.find((entry) => entry.id === player.teamId) : null;
+                            return (
+                              <div key={player.id} style={{ display:'flex', alignItems:'center', gap:10, justifyContent:'space-between', border:'1px solid #1f2937', borderRadius:10, padding:'10px 12px', background:'rgba(255,255,255,0.02)' }}>
+                                <div style={{ minWidth:0, flex:1 }}>
+                                  <div style={{ color:'#e5e7eb', fontSize:13, fontWeight:700 }}>{player.name}</div>
+                                  <div style={{ color:team?.color || '#64748b', fontSize:10, letterSpacing:1.1, marginTop:4 }}>
+                                    {player.isSpectator ? 'SPECTATOR' : team ? `${team.short} PLAYER` : 'WAITING FOR TEAM'}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleKickPlayer(player)}
+                                  style={{ padding:'7px 10px', borderRadius:8, border:'1px solid #7f1d1d', background:'#2a0d0d', color:'#fca5a5', fontWeight:800, fontSize:11, letterSpacing:1, cursor:'pointer' }}
+                                >
+                                  KICK
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {mobileTab === 'chat' && (
@@ -1989,22 +2124,37 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
       return [...mySquad].sort((a, b) => (b.soldFor || 0) - (a.soldFor || 0)).slice(0, playersNeeded);
     });
   }, [mySquad, playersNeeded]);
-  const toggle = (p) => setSelected(prev =>
-    prev.find(x => x.name === p.name)
-      ? prev.filter(x => x.name !== p.name)
+
+  const toggle = (p) => setSelected((prev) =>
+    prev.find((x) => x.name === p.name)
+      ? prev.filter((x) => x.name !== p.name)
       : prev.length < playersNeeded ? [...prev, p] : prev
   );
 
+  const getRoleCategory = useCallback((role) => {
+    const value = String(role || '').toUpperCase();
+    if (value.includes('WK') || value.includes('KEEP')) return 'wk';
+    if (value.includes('BOWL')) return 'bowl';
+    if (value.includes('BAT')) return 'bat';
+    if (value.includes('AR') || value.includes('ROUND')) return 'ar';
+    return 'other';
+  }, []);
+
+  const selectedNames = useMemo(() => new Set(selected.map((p) => p.name)), [selected]);
+
+  const roleSummary = useMemo(() => {
+    return selected.reduce((acc, player) => {
+      const category = getRoleCategory(player.role);
+      acc[category] = (acc[category] || 0) + 1;
+      return acc;
+    }, { bat: 0, bowl: 0, wk: 0, ar: 0, other: 0 });
+  }, [getRoleCategory, selected]);
+
   const getValidationErrors = () => {
     if (selected.length !== playersNeeded) return `Select ${playersNeeded} players.`;
-    const batters = selected.filter(p => p.role.includes('BAT')).length;
-    const bowlers = selected.filter(p => p.role.includes('BOWL')).length;
-    const wks = selected.filter(p => p.role.includes('WK')).length;
-
-    if (batters < 2) return "Must have at least 2 Batsmen";
-    if (bowlers < 2) return "Must have at least 2 Bowlers";
-    if (wks < 1) return "Must have at least 1 Wicketkeeper";
-
+    if (roleSummary.bat < 2) return 'Must have at least 2 Batsmen';
+    if (roleSummary.bowl < 2) return 'Must have at least 2 Bowlers';
+    if (roleSummary.wk < 1) return 'Must have at least 1 Wicketkeeper';
     return null;
   };
 
@@ -2012,6 +2162,42 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
   const canSubmit = validationError === null;
   const submittedCount = activeTeams.filter((player) => selections[player.teamId]).length;
   const totalTeams = activeTeams.length;
+  const playersLeft = Math.max(playersNeeded - selected.length, 0);
+  const roleTargets = [
+    { key: 'bat', label: 'Batters', count: roleSummary.bat, min: 2, color: '#60A5FA' },
+    { key: 'bowl', label: 'Bowlers', count: roleSummary.bowl, min: 2, color: '#F97316' },
+    { key: 'wk', label: 'Wicketkeepers', count: roleSummary.wk, min: 1, color: '#34D399' },
+    { key: 'ar', label: 'All-rounders', count: roleSummary.ar, min: 0, color: '#C084FC' },
+  ];
+  const selectionRules = [
+    `Select exactly ${playersNeeded} players from your squad.`,
+    'Minimum balance required: 2 batters, 2 bowlers, 1 wicketkeeper.',
+    'Tap any player card to add or remove them from the XI.',
+    'Your submitted XI is locked for results once you confirm.',
+  ];
+  const enrichedSquad = useMemo(() => {
+    return [...(mySquad || [])]
+      .map((player) => ({
+        ...player,
+        photoUrl: getPlayerPhoto(player.name),
+        roleCategory: getRoleCategory(player.role),
+        isSelected: selectedNames.has(player.name),
+      }))
+      .sort((a, b) => {
+        if (a.isSelected !== b.isSelected) return a.isSelected ? -1 : 1;
+        return (b.soldFor || b.base || 0) - (a.soldFor || a.base || 0);
+      });
+  }, [getRoleCategory, mySquad, selectedNames]);
+  const selectedOrdered = useMemo(() => {
+    return [...selected].sort((a, b) => {
+      const aRole = getRoleCategory(a.role);
+      const bRole = getRoleCategory(b.role);
+      const order = { wk: 0, bat: 1, ar: 2, bowl: 3, other: 4 };
+      if (order[aRole] !== order[bRole]) return order[aRole] - order[bRole];
+      return (b.soldFor || b.base || 0) - (a.soldFor || a.base || 0);
+    });
+  }, [getRoleCategory, selected]);
+
   if (submitted) return (
     <div style={{ minHeight:'100vh', background:BG, display:'flex', alignItems:'center', justifyContent:'center' }}>
       <div style={{ textAlign:'center', maxWidth: 560, padding: '0 20px' }}>
@@ -2030,54 +2216,196 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
     </div>
   );
   return (
-    <div style={{ minHeight:'100vh', background:BG, padding:'24px 16px' }}>
-      <div style={{ textAlign:'center', marginBottom:24 }}>
-        <div style={{ fontFamily:"'Bebas Neue'", fontSize:'clamp(28px,6vw,48px)', color:GOLD, letterSpacing:4 }}>SELECT YOUR PLAYING XI</div>
-        <div style={{ color:'#555', fontSize:12, letterSpacing:3, marginTop:6 }}>{selected.length}/{playersNeeded} selected · Squad limit {squadLimit}</div>
-        <div style={{ color:'#94A3B8', fontSize:12, lineHeight:1.7, marginTop:10 }}>
-          Auction is over. Pick your final XI now. Once every active team submits, results will open automatically.
-          {isHost ? ' If someone leaves, you can still finalize results and the game will auto-pick the best available XI for teams that did not submit.' : ''}
-        </div>
-      </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:10, maxWidth:900, margin:'0 auto 24px' }}>
-        {mySquad.map((p,i) => {
-          const sel = !!selected.find(x => x.name === p.name);
-          const rc = ROLE_C[p.role];
-          return (
-            <div key={i} onClick={() => toggle(p)} style={{ background:sel?`${rc}18`:CARD, border:`1px solid ${sel?rc:BORDER}`, borderRadius:8, padding:'12px', cursor:'pointer', transition:'all .2s', transform:sel?'translateY(-2px)':'none', boxShadow:sel?`0 0 18px ${rc}30`:'none' }}>
-              <div style={{ fontFamily:"'Bebas Neue'", fontSize:15, color:sel?rc:'#ddd', letterSpacing:1 }}>{p.name}</div>
-              <div style={{ fontSize:11, color:rc, marginTop:3, fontWeight:600 }}>{ROLE_L[p.role]}</div>
-              <div style={{ fontSize:11, color:GOLD, marginTop:3 }}>{fmt(p.soldFor || p.base)}</div>
-              {sel && <div style={{ fontSize:9, color:rc, marginTop:5, letterSpacing:2 }}>✓ SELECTED</div>}
+    <div style={{ minHeight:'100vh', background:'radial-gradient(circle at top, rgba(232,184,75,0.08), transparent 28%), linear-gradient(180deg, #050608 0%, #080808 55%, #090b12 100%)', padding:'24px 16px 32px' }}>
+      <div style={{ maxWidth:1320, margin:'0 auto' }}>
+        <div style={{ marginBottom:22, background:'linear-gradient(135deg, rgba(13,15,20,0.98), rgba(10,11,17,0.95))', border:`1px solid ${GOLD}22`, borderRadius:24, padding:'22px clamp(18px,3vw,30px)', boxShadow:'0 24px 80px rgba(0,0,0,0.35)' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:18, flexWrap:'wrap' }}>
+            <div style={{ flex:'1 1 420px' }}>
+              <div style={{ fontFamily:"'Bebas Neue'", fontSize:'clamp(30px,6vw,56px)', color:GOLD, letterSpacing:4 }}>SELECT YOUR PLAYING XI</div>
+              <div style={{ color:'#CBD5E1', fontSize:13, lineHeight:1.7, marginTop:8, maxWidth:760 }}>
+                Auction is over. Build your strongest final XI with the best balance across roles.
+                Once every active team submits, results will open automatically.
+                {isHost ? ' If someone leaves, you can still finalize results and the game will auto-pick the best available XI for teams that did not submit.' : ''}
+              </div>
             </div>
-          );
-        })}
-      </div>
-      <div style={{ textAlign:'center' }}>
-        {validationError && selected.length === playersNeeded && (
-          <div style={{ color:'#ef4444', fontSize:14, marginBottom:16, letterSpacing:1, fontFamily:"'Barlow Condensed'", fontWeight:700 }}>
-            ⚠️ {validationError.toUpperCase()}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))', gap:10, flex:'1 1 360px', width:'100%' }}>
+              <div style={{ background:'rgba(255,255,255,0.03)', border:`1px solid ${BORDER}`, borderRadius:16, padding:'14px 16px' }}>
+                <div style={{ color:'#64748B', fontSize:10, letterSpacing:2 }}>SELECTED</div>
+                <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2, marginTop:4 }}>{selected.length}<span style={{ color:'#475569', fontSize:22 }}>/ {playersNeeded}</span></div>
+              </div>
+              <div style={{ background:'rgba(255,255,255,0.03)', border:`1px solid ${BORDER}`, borderRadius:16, padding:'14px 16px' }}>
+                <div style={{ color:'#64748B', fontSize:10, letterSpacing:2 }}>TO PICK</div>
+                <div style={{ color:playersLeft === 0 ? '#34D399' : CYAN, fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2, marginTop:4 }}>{playersLeft}</div>
+              </div>
+              <div style={{ background:'rgba(255,255,255,0.03)', border:`1px solid ${BORDER}`, borderRadius:16, padding:'14px 16px' }}>
+                <div style={{ color:'#64748B', fontSize:10, letterSpacing:2 }}>SQUAD SIZE</div>
+                <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2, marginTop:4 }}>{mySquad.length}<span style={{ color:'#475569', fontSize:22 }}>/ {squadLimit}</span></div>
+              </div>
+            </div>
           </div>
-        )}
-        <div style={{ display:'flex', justifyContent:'center', gap:12, flexWrap:'wrap' }}>
-          <button onClick={() => canSubmit && onSubmit(selected)} disabled={!canSubmit}
-            style={{ background:canSubmit?`linear-gradient(135deg,${GOLD},#9a7610)`:'#111', border:`1px solid ${canSubmit?GOLD:'#333'}`, borderRadius:6, padding:'14px 48px', color:canSubmit?'#000':'#555', fontWeight:900, fontSize:16, letterSpacing:4, cursor:canSubmit?'pointer':'not-allowed', fontFamily:"'Barlow Condensed'" }}>
-          SUBMIT PLAYING XI
-          </button>
-          {isHost && (
-            <button
-              onClick={onFinalizeSelection}
-              style={{ background:'transparent', border:`1px solid ${CYAN}66`, borderRadius:6, padding:'14px 28px', color:CYAN, fontWeight:900, fontSize:15, letterSpacing:3, cursor:'pointer', fontFamily:"'Barlow Condensed'" }}
-            >
-              HOST FINALIZE
-            </button>
-          )}
         </div>
-        {totalTeams > 0 && (
-          <div style={{ color:'#555', fontSize:12, marginTop:14, letterSpacing:1.5 }}>
-            {submittedCount}/{totalTeams} active teams already submitted
+
+        <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1.7fr) minmax(320px, 0.95fr)', gap:20, alignItems:'start' }}>
+          <div style={{ minWidth:0 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(190px, 1fr))', gap:14 }}>
+              {enrichedSquad.map((p, i) => {
+                const sel = p.isSelected;
+                const rc = ROLE_C[p.role];
+                const rating = p.rating || p.overall || null;
+                return (
+                  <button
+                    key={`${p.name}-${i}`}
+                    type="button"
+                    onClick={() => toggle(p)}
+                    style={{ background:sel?`linear-gradient(180deg, ${rc}22, rgba(13,15,20,0.98) 38%)`:'linear-gradient(180deg, rgba(13,15,20,0.98), rgba(8,10,14,0.98))', border:`1px solid ${sel ? rc : BORDER}`, borderRadius:20, padding:0, cursor:'pointer', transition:'all .18s ease', transform:sel?'translateY(-3px)':'translateY(0)', boxShadow:sel?`0 16px 36px ${rc}20`:'0 10px 30px rgba(0,0,0,0.18)', overflow:'hidden', textAlign:'left' }}
+                  >
+                    <div style={{ position:'relative', padding:'14px 14px 10px', minHeight:126, background:sel?`radial-gradient(circle at top right, ${rc}30, transparent 42%)`:'radial-gradient(circle at top right, rgba(34,211,238,0.08), transparent 42%)' }}>
+                      <div style={{ position:'absolute', inset:0, background:'linear-gradient(180deg, transparent 25%, rgba(0,0,0,0.32) 100%)' }} />
+                      <div style={{ position:'relative', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
+                        <div style={{ width:72, height:72, borderRadius:20, overflow:'hidden', border:`1px solid ${sel ? rc : `${rc}50`}`, background:`linear-gradient(180deg, ${rc}16, rgba(255,255,255,0.03))`, flexShrink:0 }}>
+                          {p.photoUrl ? (
+                            <img src={p.photoUrl} alt={p.name} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top' }} />
+                          ) : (
+                            <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontFamily:"'Bebas Neue'", fontSize:26, letterSpacing:1 }}>
+                              {p.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8 }}>
+                          <span style={{ fontSize:10, letterSpacing:2, color:sel ? '#081018' : rc, background:sel ? rc : `${rc}16`, border:`1px solid ${sel ? rc : `${rc}22`}`, borderRadius:999, padding:'4px 8px', fontWeight:800 }}>
+                            {sel ? 'SELECTED' : 'TAP TO PICK'}
+                          </span>
+                          <span style={{ fontSize:11, color:GOLD, fontWeight:700, letterSpacing:1.2 }}>{fmt(p.soldFor || p.base)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ padding:'0 14px 14px' }}>
+                      <div style={{ color:'#F8FAFC', fontWeight:800, fontSize:16, lineHeight:1.2 }}>{p.name}</div>
+                      <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginTop:8 }}>
+                        <span style={{ fontSize:11, color:rc, fontWeight:800, letterSpacing:1.4 }}>{ROLE_L[p.role]}</span>
+                        {p.overseas && (
+                          <span style={{ fontSize:10, background:'rgba(96,165,250,0.14)', border:'1px solid rgba(96,165,250,0.24)', color:'#93C5FD', padding:'2px 8px', borderRadius:999, fontWeight:800, letterSpacing:1.2 }}>
+                            OVERSEAS
+                          </span>
+                        )}
+                        {rating && (
+                          <span style={{ fontSize:10, background:'rgba(232,184,75,0.12)', border:`1px solid ${GOLD}22`, color:GOLD, padding:'2px 8px', borderRadius:999, fontWeight:800, letterSpacing:1.2 }}>
+                            RTG {rating}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        )}
+
+          <div style={{ minWidth:0, display:'grid', gap:16 }}>
+            <div style={{ background:'linear-gradient(180deg, rgba(13,15,20,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18, boxShadow:'0 18px 50px rgba(0,0,0,0.26)' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:14 }}>
+                <div>
+                  <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:28, letterSpacing:2 }}>Your Final XI</div>
+                  <div style={{ color:'#64748B', fontSize:11, letterSpacing:1.4, marginTop:2 }}>{selected.length === playersNeeded ? 'Ready to submit' : `${playersLeft} more needed to lock the XI`}</div>
+                </div>
+                <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2 }}>{selected.length}/{playersNeeded}</div>
+              </div>
+
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:10, marginBottom:14 }}>
+                {roleTargets.map((item) => {
+                  const met = item.count >= item.min;
+                  return (
+                    <div key={item.key} style={{ background:`${item.color}10`, border:`1px solid ${met ? `${item.color}55` : '#273142'}`, borderRadius:14, padding:'10px 12px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+                        <span style={{ fontSize:10, color:'#94A3B8', letterSpacing:1.2 }}>{item.label}</span>
+                        <span style={{ color:met ? item.color : '#F87171', fontSize:10, fontWeight:800, letterSpacing:1.2 }}>{item.min > 0 ? `MIN ${item.min}` : 'OPTIONAL'}</span>
+                      </div>
+                      <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:26, letterSpacing:1.5, marginTop:3 }}>{item.count}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ display:'grid', gap:10 }}>
+                {selectedOrdered.length === 0 ? (
+                  <div style={{ border:`1px dashed ${BORDER}`, borderRadius:16, padding:'18px 14px', textAlign:'center', color:'#64748B', fontSize:13, lineHeight:1.6 }}>
+                    Start tapping player cards to build your strongest Playing XI.
+                  </div>
+                ) : (
+                  selectedOrdered.map((player, index) => {
+                    const photoUrl = getPlayerPhoto(player.name);
+                    const rc = ROLE_C[player.role];
+                    return (
+                      <div key={`${player.name}-${index}`} style={{ display:'flex', alignItems:'center', gap:10, border:`1px solid ${BORDER}`, background:'rgba(255,255,255,0.02)', borderRadius:16, padding:'10px 12px' }}>
+                        <div style={{ width:34, color:'#475569', fontFamily:"'Bebas Neue'", fontSize:18, letterSpacing:1.5, textAlign:'center', flexShrink:0 }}>{String(index + 1).padStart(2, '0')}</div>
+                        <div style={{ width:42, height:42, borderRadius:14, overflow:'hidden', background:`${rc}18`, border:`1px solid ${rc}55`, flexShrink:0 }}>
+                          {photoUrl ? (
+                            <img src={photoUrl} alt={player.name} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top' }} />
+                          ) : (
+                            <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:800 }}>
+                              {ROLE_EMOJI[player.role]}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ minWidth:0, flex:1 }}>
+                          <div style={{ color:'#E2E8F0', fontSize:14, fontWeight:800, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{player.name}</div>
+                          <div style={{ color:rc, fontSize:10, fontWeight:800, letterSpacing:1.4, marginTop:4 }}>{ROLE_L[player.role]}</div>
+                        </div>
+                        <div style={{ color:GOLD, fontSize:11, fontWeight:800, letterSpacing:1.1, flexShrink:0 }}>{fmt(player.soldFor || player.base)}</div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div style={{ background:'linear-gradient(180deg, rgba(10,13,18,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18 }}>
+              <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:26, letterSpacing:2 }}>Selection Rules</div>
+              <div style={{ display:'grid', gap:10, marginTop:14 }}>
+                {selectionRules.map((rule, index) => (
+                  <div key={rule} style={{ display:'flex', alignItems:'flex-start', gap:10, border:`1px solid ${BORDER}`, borderRadius:14, padding:'10px 12px', background:'rgba(255,255,255,0.02)' }}>
+                    <div style={{ width:24, height:24, borderRadius:'50%', background:`${GOLD}16`, color:GOLD, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontFamily:"'Bebas Neue'", fontSize:14 }}>
+                      {index + 1}
+                    </div>
+                    <div style={{ color:'#CBD5E1', fontSize:13, lineHeight:1.55 }}>{rule}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ textAlign:'center', background:'linear-gradient(180deg, rgba(13,15,20,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18 }}>
+              {validationError && (
+                <div style={{ color:'#F87171', fontSize:13, marginBottom:14, letterSpacing:1.1, fontWeight:800 }}>
+                  {selected.length === playersNeeded ? validationError.toUpperCase() : `PICK ${playersLeft} MORE PLAYER${playersLeft === 1 ? '' : 'S'} TO CONTINUE`}
+                </div>
+              )}
+              {!validationError && (
+                <div style={{ color:'#34D399', fontSize:13, marginBottom:14, letterSpacing:1.1, fontWeight:800 }}>
+                  XI BALANCE CHECK PASSED
+                </div>
+              )}
+              <div style={{ display:'flex', justifyContent:'center', gap:12, flexWrap:'wrap' }}>
+                <button onClick={() => canSubmit && onSubmit(selected)} disabled={!canSubmit}
+                  style={{ background:canSubmit?`linear-gradient(135deg,${GOLD},#9a7610)`:'#111', border:`1px solid ${canSubmit?GOLD:'#333'}`, borderRadius:12, padding:'15px 30px', color:canSubmit?'#000':'#555', fontWeight:900, fontSize:16, letterSpacing:3, cursor:canSubmit?'pointer':'not-allowed', fontFamily:"'Barlow Condensed'", minWidth:220 }}>
+                  SUBMIT PLAYING XI
+                </button>
+                {isHost && (
+                  <button
+                    onClick={onFinalizeSelection}
+                    style={{ background:'transparent', border:`1px solid ${CYAN}66`, borderRadius:12, padding:'15px 24px', color:CYAN, fontWeight:900, fontSize:15, letterSpacing:2.5, cursor:'pointer', fontFamily:"'Barlow Condensed'" }}
+                  >
+                    HOST FINALIZE
+                  </button>
+                )}
+              </div>
+              {totalTeams > 0 && (
+                <div style={{ color:'#64748B', fontSize:12, marginTop:14, letterSpacing:1.3 }}>
+                  {submittedCount}/{totalTeams} active teams already submitted
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

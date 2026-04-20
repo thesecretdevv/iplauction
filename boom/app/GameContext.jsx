@@ -209,8 +209,14 @@ export function GameProvider({ children }) {
           });
           if (res.roomStatus === "active") {
             setMultiGS(res.gameState);
-            if (pathname !== '/auction') {
-              router.push(buildUrl('/auction', { room: res.gameState?.roomCode || savedRoom, mode: (res.auctionMode || 'MEGA').toUpperCase(), spectator: res.isSpectator ? 1 : undefined }));
+            const me = (res.players || []).find((player) => player.id === playerId);
+            const shouldEnterAuction = res.isSpectator || !!me?.teamId;
+            if (shouldEnterAuction) {
+              if (pathname !== '/auction') {
+                router.push(buildUrl('/auction', { room: res.gameState?.roomCode || savedRoom, mode: (res.auctionMode || 'MEGA').toUpperCase(), spectator: res.isSpectator ? 1 : undefined }));
+              }
+            } else if (pathname !== '/room') {
+              router.push(buildUrl('/room', { action: 'lobby', room: res.code || savedRoom, mode: res.auctionMode || undefined }));
             }
           } else if (res.roomStatus === "finished") {
             clearSavedMultiplayerSession();
@@ -347,7 +353,23 @@ export function GameProvider({ children }) {
         });
       });
     });
-    return () => { off1(); off2(); off3(); off4(); off5(); off6(); };
+    const off7 = on("room-kicked", (payload) => {
+      clearSavedMultiplayerSession();
+      startTransition(() => {
+        setLobbyPlayers([]);
+        setMultiGS(null);
+        setRoomMeta(null);
+        setRoomCode(null);
+        setIsHost(false);
+        setIsSpectator(false);
+        setPlayMode(null);
+      });
+      if (typeof window !== 'undefined') {
+        window.alert(payload?.message || 'You were removed from the room by the host.');
+      }
+      router.push('/room?action=browse');
+    });
+    return () => { off1(); off2(); off3(); off4(); off5(); off6(); off7(); };
   }, [playMode, on, router, pathname, roomCode, lobbyMode]);
 
   // Unified Audio & Animation side-effects
@@ -549,8 +571,8 @@ export function GameProvider({ children }) {
     });
   }
 
-  function handleJoinRoom(code, name) {
-    emit("join-room", { code, playerName: name, playerId }, (res) => {
+  function handleJoinRoom(code, name, preferredRole = 'player') {
+    emit("join-room", { code, playerName: name, playerId, preferredRole }, (res) => {
       if (res.ok) {
         if (typeof window !== 'undefined') {
           localStorage.setItem("ipl_room_code", code);
@@ -577,10 +599,9 @@ export function GameProvider({ children }) {
           // If participant NO team, let them pick team in lobby.
           const myP = (res.players || []).find(p => p.id === playerId);
           if (res.isSpectator || (myP && myP.teamId)) {
-            router.push(buildUrl('/auction', { room: code, mode: res.auctionMode }));
+            router.push(buildUrl('/auction', { room: code, mode: res.auctionMode, spectator: res.isSpectator ? 1 : undefined }));
           } else {
-             // Stay in lobby (handled by phase in room/page.jsx or just navigate to lobby)
-             // room/page.jsx uses 'lobby' phase locally.
+             router.push(buildUrl('/room', { action: 'lobby', room: code, mode: res.auctionMode }));
           }
         } else if (res.roomStatus === "finished") {
           clearSavedMultiplayerSession();

@@ -777,19 +777,39 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 'auto' }}>
                        <div style={{ fontSize: 11, color: '#555', letterSpacing: 1 }}>
                           {isCompleted
                             ? <>Finished {room.finishedAt ? new Date(room.finishedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'recently'}</>
                             : <>Hosted by <span style={{ color: '#888', fontWeight: 700 }}>{room.host}</span></>
                           }
                        </div>
-                       <button 
-                        className="rb-join-btn" 
-                        onClick={() => isCompleted ? onViewCompleted(room) : doJoin(room.code)}
-                        style={{ width: 'auto', padding: '10px 24px', borderRadius: 8, background: isCompleted ? '#22c55e18' : isActive ? '#22D3EE15' : GOLD, color: isCompleted ? '#22c55e' : isActive ? '#22D3EE' : '#000', border: isCompleted ? '1px solid #22c55e40' : isActive ? '1px solid #22D3EE40' : 'none' }}>
-                        {isCompleted ? 'VIEW RESULTS' : isActive ? 'JOIN LIVE ROOM' : 'JOIN LOBBY'}
-                      </button>
+                       <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                        {isCompleted ? (
+                          <button 
+                            className="rb-join-btn" 
+                            onClick={() => onViewCompleted(room)}
+                            style={{ width: 'auto', padding: '10px 24px', borderRadius: 8, background:'#22c55e18', color:'#22c55e', border:'1px solid #22c55e40' }}>
+                            VIEW RESULTS
+                          </button>
+                        ) : (
+                          <>
+                            <button 
+                              className="rb-join-btn" 
+                              onClick={() => doJoin(room.code, 'player')}
+                              style={{ width: 'auto', padding: '10px 18px', borderRadius: 8, background: isActive ? '#22D3EE15' : GOLD, color: isActive ? '#22D3EE' : '#000', border: isActive ? '1px solid #22D3EE40' : 'none' }}>
+                              {isActive ? 'PLAY LIVE' : 'JOIN LOBBY'}
+                            </button>
+                            <button
+                              className="rb-join-btn"
+                              onClick={() => doJoin(room.code, 'spectator')}
+                              style={{ width:'auto', padding:'10px 16px', borderRadius:8, background:'#111827', color:'#cbd5e1', border:'1px solid #334155' }}
+                            >
+                              WATCH
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -1129,12 +1149,12 @@ function RoomContent() {
     handleFindOnline();
   }, [autoFind, handleFindOnline, loading, name, phase, selectedRivalsMatch]);
 
-  const doJoin = (targetCode) => {
+  const doJoin = (targetCode, preferredRole = 'player') => {
     if (!name.trim()) { setError('Enter your name first'); return; }
     const code = (targetCode || '').trim().toUpperCase();
     if (!code) { setError('Enter a room code'); return; }
     setLoading(true); setError('');
-    emit('join-room', { code, playerName: name.trim(), playerId }, (res) => {
+    emit('join-room', { code, playerName: name.trim(), playerId, preferredRole }, (res) => {
       setLoading(false);
       if (!res?.ok) {
         setError(res?.error === 'Room not found' ? 'Room not found or already expired.' : (res?.error || 'Room not found'));
@@ -1174,6 +1194,12 @@ function RoomContent() {
           router.push(`/auction?room=${code}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}${res.isSpectator ? '&spectator=1' : ''}`);
         } else {
           setPhase('lobby'); // Participant but no team -> pick one first
+          const params = new URLSearchParams({
+            action: 'lobby',
+            room: code,
+          });
+          if (res.auctionMode) params.set('mode', res.auctionMode);
+          router.push(`/room?${params.toString()}`);
         }
       } else if (res.roomStatus === 'finished') {
         setMultiGS(res.gameState); router.push(`/results?room=${code}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}`);
@@ -1186,6 +1212,37 @@ function RoomContent() {
       if (!res?.ok) setError(res?.error || 'Cannot select that team');
     });
   };
+
+  const requestKickPlayer = useCallback((player) => {
+    if (!player?.id) return;
+    setDialog({
+      title: `Kick ${player.name}?`,
+      message: player.teamId
+        ? `${player.name} will be removed from this room. Their franchise slot will open up again for another player.`
+        : `${player.name} will be removed from this room immediately.`,
+      tone: 'danger',
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onClick: closeDialog },
+        {
+          label: 'Kick Player',
+          variant: 'danger',
+          onClick: () => {
+            closeDialog();
+            emit('kick-player', { targetPlayerId: player.id }, (res) => {
+              if (!res?.ok) {
+                setDialog({
+                  title: 'Could Not Kick Player',
+                  message: res?.error || 'Something went wrong while removing this player.',
+                  tone: 'info',
+                  actions: [{ label: 'OK', onClick: closeDialog }],
+                });
+              }
+            });
+          },
+        },
+      ],
+    });
+  }, [closeDialog, emit]);
 
   const changeMode = (m) => {
     const recommendedLimit = 15;
@@ -1515,8 +1572,8 @@ function RoomContent() {
                         nameRef.current?.focus();
                         return;
                       }
-                      doJoin(r.code);
-                    }}>QUICK JOIN</button>
+                      doJoin(r.code, 'player');
+                    }}>PLAY</button>
                   </div>
                 ))}
               </div>
@@ -1538,7 +1595,7 @@ function RoomContent() {
                         nameRef.current?.focus();
                         return;
                       }
-                      doJoin(r.code);
+                      doJoin(r.code, 'player');
                     }}>REJOIN</button>
                   </div>
                 ))}
@@ -1662,13 +1719,18 @@ function RoomContent() {
               onChange={e => setJoinCode(e.target.value.toUpperCase())}
               placeholder="e.g. X9QWL"
               maxLength={6}
-              onKeyDown={e => e.key === 'Enter' && doJoin(joinCode)}
+              onKeyDown={e => e.key === 'Enter' && doJoin(joinCode, 'player')}
             />
 
             {error && <div className="rp-error">{error}</div>}
-            <button className="rp-btn cyan-btn" onClick={() => doJoin(joinCode)} disabled={loading}>
-              {loading ? 'JOINING…' : 'JOIN ROOM →'}
-            </button>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:12 }}>
+              <button className="rp-btn cyan-btn" onClick={() => doJoin(joinCode, 'player')} disabled={loading}>
+                {loading ? 'JOINING…' : 'PLAY IF SLOT OPEN →'}
+              </button>
+              <button className="rp-btn" onClick={() => doJoin(joinCode, 'spectator')} disabled={loading}>
+                {loading ? 'JOINING…' : 'WATCH AS SPECTATOR'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1797,11 +1859,21 @@ function RoomContent() {
                       <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700, fontSize:15, color: team?.color || '#ddd', flex:1, letterSpacing:'.04em' }}>
                         {p.name}
                         {p.isHost && <span style={{ fontFamily:"'Courier Prime',monospace", fontSize:8, color:GOLD, marginLeft:6, letterSpacing:'2px' }}>HOST</span>}
+                        {p.isSpectator && <span style={{ fontFamily:"'Courier Prime',monospace", fontSize:8, color:'#94A3B8', marginLeft:6, letterSpacing:'2px' }}>SPEC</span>}
                       </span>
                       {team && (
                         <span className="lobby-player-badge" style={{ background:`${team.color}18`, color:team.color, border:`1px solid ${team.color}50` }}>
                           {team.short}
                         </span>
+                      )}
+                      {isHost && !p.isHost && (
+                        <button
+                          type="button"
+                          onClick={() => requestKickPlayer(p)}
+                          style={{ marginLeft:8, padding:'6px 10px', borderRadius:8, border:'1px solid #7f1d1d', background:'#2a0d0d', color:'#fca5a5', fontSize:11, fontWeight:800, letterSpacing:1, cursor:'pointer' }}
+                        >
+                          KICK
+                        </button>
                       )}
                     </div>
                   );

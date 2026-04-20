@@ -16,15 +16,15 @@ export default function JoinPage() {
   const {
     emit, playerId, setRoomCode, setLobbyPlayers,
     setIsHost, setMyName, setPlayMode, setMultiGS,
-    setLobbyMode, setIsSpectator
+    setLobbyMode, setIsSpectator, setRoomMeta
   } = useGame();
 
-  const handleJoin = () => {
+  const handleJoin = (preferredRole = 'player') => {
     if (!name.trim()) return setError("Enter your name");
     setLoading(true);
     setError('');
 
-    emit("join-room", { code, playerName: name.trim(), playerId }, (res) => {
+    emit("join-room", { code, playerName: name.trim(), playerId, preferredRole }, (res) => {
       setLoading(false);
       if (res.ok) {
         if (typeof window !== 'undefined') {
@@ -44,10 +44,27 @@ export default function JoinPage() {
         setIsHost(res.hostId === playerId);
         setIsSpectator(!!res.isSpectator);
         if (res.auctionMode) setLobbyMode(res.auctionMode);
+        setRoomMeta({
+          roomType: res.roomType || 'standard',
+          activeTeamIds: res.activeTeamIds || null,
+          rivalsMatch: res.rivalsMatch || null,
+          roomName: res.roomName || null,
+          squadLimit: res.squadLimit || null,
+        });
 
         if (res.roomStatus === "active") {
           setMultiGS(res.gameState);
-          router.push(`/auction?room=${code}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}${res.isSpectator ? '&spectator=1' : ''}`);
+          const me = (res.players || []).find((player) => player.id === playerId);
+          if (res.isSpectator || me?.teamId) {
+            router.push(`/auction?room=${code}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}${res.isSpectator ? '&spectator=1' : ''}`);
+          } else {
+            const params = new URLSearchParams({
+              action: 'lobby',
+              room: code,
+            });
+            if (res.auctionMode) params.set('mode', res.auctionMode);
+            router.push(`/room?${params.toString()}`);
+          }
         } else if (res.roomStatus === "finished") {
           setMultiGS(res.gameState);
           router.push(`/results?room=${code}${res.auctionMode ? `&mode=${res.auctionMode}` : ''}`);
@@ -112,26 +129,41 @@ export default function JoinPage() {
             placeholder="Enter Your Name"
             style={inputStyle}
             maxLength={20}
-            onKeyDown={e => e.key === 'Enter' && handleJoin()}
+            onKeyDown={e => e.key === 'Enter' && handleJoin('player')}
             autoFocus
           />
 
           {error && <div style={{ color: "#ef4444", fontSize: 13, textAlign: "center" }}>{error}</div>}
 
-          <button
-            onClick={handleJoin}
-            disabled={loading}
-            style={{
-              width: "100%", padding: "16px",
-              background: `linear-gradient(135deg, ${GOLD}, #9a7610)`,
-              border: "none", borderRadius: 8, color: "#000",
-              fontSize: 18, fontWeight: 900, cursor: loading ? "wait" : "pointer",
-              letterSpacing: 3, fontFamily: "'Barlow Condensed'",
-              boxShadow: `0 4px 30px ${GOLD}44`
-            }}
-          >
-            {loading ? "JOINING..." : "JOIN ROOM"}
-          </button>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(170px, 1fr))", gap:12 }}>
+            <button
+              onClick={() => handleJoin('player')}
+              disabled={loading}
+              style={{
+                width: "100%", padding: "16px",
+                background: `linear-gradient(135deg, ${GOLD}, #9a7610)`,
+                border: "none", borderRadius: 8, color: "#000",
+                fontSize: 16, fontWeight: 900, cursor: loading ? "wait" : "pointer",
+                letterSpacing: 2, fontFamily: "'Barlow Condensed'",
+                boxShadow: `0 4px 30px ${GOLD}44`
+              }}
+            >
+              {loading ? "JOINING..." : "PLAY IF SLOT OPEN"}
+            </button>
+            <button
+              onClick={() => handleJoin('spectator')}
+              disabled={loading}
+              style={{
+                width: "100%", padding: "16px",
+                background: "#0b1220",
+                border: `1px solid ${BORDER}`, borderRadius: 8, color: "#cbd5e1",
+                fontSize: 16, fontWeight: 900, cursor: loading ? "wait" : "pointer",
+                letterSpacing: 2, fontFamily: "'Barlow Condensed'",
+              }}
+            >
+              {loading ? "JOINING..." : "WATCH AS SPECTATOR"}
+            </button>
+          </div>
         </div>
 
         {/* Link to create own room */}
