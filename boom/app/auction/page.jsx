@@ -438,6 +438,37 @@ function AuctionContent() {
     setRoomMeta,
   ]);
 
+  // ── Derived memos that MUST come before any early returns (Rules of Hooks) ──
+  // These depend on gs but safely handle null via optional chaining.
+  const claimedTeamIds = useMemo(() => new Set(
+    (lobbyPlayers || [])
+      .filter((entry) => !entry.isSpectator && entry.teamId)
+      .map((entry) => entry.teamId)
+  ), [lobbyPlayers]);
+  const teamsWithAuctionState = useMemo(() => new Set(
+    TEAMS
+      .filter((team) => {
+        const squadCount = gs?.squads?.[team.id]?.length || 0;
+        const purseLeft = gs?.purses?.[team.id];
+        const hasSpent = typeof purseLeft === 'number' ? purseLeft < DEFAULT_PURSE : false;
+        const hasSelection = !!gs?.selections?.[team.id];
+        const hasBidHistory = (gs?.bidLog || []).some((bid) => bid.teamId === team.id);
+        const hasSaleHistory = (gs?.auctionLog || []).some((item) => item.bidder === team.id);
+        const isCurrentBidder = gs?.currentBidder === team.id;
+        return squadCount > 0 || hasSpent || hasSelection || hasBidHistory || hasSaleHistory || isCurrentBidder;
+      })
+      .map((team) => team.id)
+  ), [gs?.auctionLog, gs?.bidLog, gs?.currentBidder, gs?.purses, gs?.selections, gs?.squads]);
+  const displayTeamIds = useMemo(() => {
+    if (!isMulti) return TEAMS.map((team) => team.id);
+    const ids = new Set([
+      ...claimedTeamIds,
+      ...teamsWithAuctionState,
+      ...(effectiveMyTeamId ? [effectiveMyTeamId] : []),
+    ]);
+    return ids.size > 0 ? Array.from(ids) : (gs?.activeTeamIds?.length ? gs.activeTeamIds : []);
+  }, [claimedTeamIds, effectiveMyTeamId, gs?.activeTeamIds, isMulti, teamsWithAuctionState]);
+
   if (!gs) {
     return (
       <div style={{ height: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
@@ -474,34 +505,7 @@ function AuctionContent() {
   const pRecord     = getPlayerRecord(player.name);
   const photoUrl    = pRecord?.photo_url || null;
   const stats       = pRecord?.stats || {};
-  const claimedTeamIds = useMemo(() => new Set(
-    (lobbyPlayers || [])
-      .filter((entry) => !entry.isSpectator && entry.teamId)
-      .map((entry) => entry.teamId)
-  ), [lobbyPlayers]);
-  const teamsWithAuctionState = useMemo(() => new Set(
-    TEAMS
-      .filter((team) => {
-        const squadCount = gs?.squads?.[team.id]?.length || 0;
-        const purseLeft = gs?.purses?.[team.id];
-        const hasSpent = typeof purseLeft === 'number' ? purseLeft < DEFAULT_PURSE : false;
-        const hasSelection = !!gs?.selections?.[team.id];
-        const hasBidHistory = (gs?.bidLog || []).some((bid) => bid.teamId === team.id);
-        const hasSaleHistory = (gs?.auctionLog || []).some((item) => item.bidder === team.id);
-        const isCurrentBidder = gs?.currentBidder === team.id;
-        return squadCount > 0 || hasSpent || hasSelection || hasBidHistory || hasSaleHistory || isCurrentBidder;
-      })
-      .map((team) => team.id)
-  ), [gs?.auctionLog, gs?.bidLog, gs?.currentBidder, gs?.purses, gs?.selections, gs?.squads]);
-  const displayTeamIds = useMemo(() => {
-    if (!isMulti) return TEAMS.map((team) => team.id);
-    const ids = new Set([
-      ...claimedTeamIds,
-      ...teamsWithAuctionState,
-      ...(effectiveMyTeamId ? [effectiveMyTeamId] : []),
-    ]);
-    return ids.size > 0 ? Array.from(ids) : (gs?.activeTeamIds?.length ? gs.activeTeamIds : []);
-  }, [claimedTeamIds, effectiveMyTeamId, gs?.activeTeamIds, isMulti, teamsWithAuctionState]);
+
   const displayTeams = TEAMS.filter((team) => displayTeamIds.includes(team.id));
   const rivalsMatch = gs?.rivalsMatch || null;
   const rivalsCountdown = rivalsMatch?.startAt ? formatCountdown(new Date(rivalsMatch.startAt).getTime() - Date.now()) : null;
@@ -1732,7 +1736,7 @@ function AuctionContent() {
                 </div>
 
                 <div className="ac-tab-content">
-                  <div className="ac-mobile-panel-scroll">
+                  <div className="ac-mobile-panel-scroll" style={mobileTab === 'chat' ? { overflowY:'hidden', paddingBottom:0 } : {}}>
                 {mobileTab === 'teams' && sortedTeams.map(team => {
                   const isLead = team.id === gs.currentBidder;
                   const isMe   = team.id === effectiveMyTeamId;
@@ -1783,9 +1787,14 @@ function AuctionContent() {
                                           <span style={{ fontSize:12 }}>{ROLE_EMOJI[role]}</span>
                                         )}
                                       </div>
-                                      <span style={{ color:'#ccc', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.name}</span>
+                                      <div style={{ minWidth:0, flex:1 }}>
+                                        <span style={{ color:'#ccc', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>{p.name}</span>
+                                        {p.overseas && (
+                                          <span style={{ fontSize:9, background:'#6366f118', color:'#818cf8', padding:'1px 5px', borderRadius:3, letterSpacing:1, fontWeight:700, display:'inline-block', marginTop:2 }}>OS</span>
+                                        )}
+                                      </div>
                                     </div>
-                                    <span style={{ color:GOLD, fontWeight:700, whiteSpace:'nowrap' }}>{fmt(p.soldFor||p.base)}</span>
+                                    <span style={{ color:GOLD, fontWeight:700, whiteSpace:'nowrap', flexShrink:0 }}>{fmt(p.soldFor||p.base)}</span>
                                   </div>
                                 ))}
                               </div>
@@ -1879,9 +1888,7 @@ function AuctionContent() {
                   </div>
                 )}
                 {mobileTab === 'chat' && (
-                  <div style={{ height: '100%' }}>
-                    <ChatBox chatLog={chatLog} emit={emit} currentRoom={roomCode} isSpectator={isSpectatorMode} />
-                  </div>
+                  <MobileChatBox chatLog={chatLog} emit={emit} currentRoom={roomCode} isSpectator={isSpectatorMode} myName={myName} myTeamId={effectiveMyTeamId} gs={gs} />
                 )}
                   </div>
                 </div>
@@ -2419,8 +2426,110 @@ export default function AuctionPage() {
   );
 }
 
-// ── Chat Box Component ───────────────────────────────────────────────────────
+// ── Mobile Chat Box ──────────────────────────────────────────────────────────
+// Purpose-built for mobile tab panel: no outer scroll wrapper conflict,
+// own-messages right-aligned with team color, lag-free scrolling.
+const MobileChatBox = memo(function MobileChatBox({ chatLog, emit, currentRoom, isSpectator, myName, myTeamId, gs }) {
+  const [msg, setMsg] = useState('');
+  const endRef = useRef(null);
+  const TEAM_CLR = {
+    CSK:'#F9CA24', MI:'#4FC3F7', RCB:'#FF5252', KKR:'#CE93D8', SRH:'#FF8A65',
+    DC:'#64B5F6', PBKS:'#EF9A9A', RR:'#F48FB1', GT:'#4DD0E1', LSG:'#81D4FA',
+  };
+  const myColor = TEAM_CLR[myTeamId] || '#22D3EE';
+
+  // Build a fast id→teamId lookup from the game state
+  const playerTeamMap = useMemo(() => {
+    const m = {};
+    Object.values(gs?.players || {}).forEach(p => { if (p.id && p.teamId) m[p.id] = p.teamId; });
+    return m;
+  }, [gs?.players]);
+
+  const visibleMessages = useMemo(
+    () => (chatLog || []).filter(m => m?.type === 'text' || m?.type === 'gif').slice(-60),
+    [chatLog]
+  );
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [visibleMessages.length]);
+
+  const send = useCallback((e) => {
+    e.preventDefault();
+    if (!msg.trim() || !currentRoom) return;
+    emit('send-chat', { text: msg.trim(), isGif: false });
+    setMsg('');
+  }, [msg, currentRoom, emit]);
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', minHeight:0 }}>
+      {/* Message list */}
+      <div style={{ flex:1, overflowY:'auto', overscrollBehavior:'contain', padding:'6px 0 4px', display:'flex', flexDirection:'column', gap:5, WebkitOverflowScrolling:'touch' }}>
+        {visibleMessages.length === 0 && (
+          <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#374151', gap:8, padding:'24px 0' }}>
+            <span style={{ fontSize:26 }}>💬</span>
+            <span style={{ fontSize:11, letterSpacing:1 }}>No messages yet</span>
+          </div>
+        )}
+        {visibleMessages.map(m => {
+          const isOwn = m.senderName === myName;
+          const senderTeamId = playerTeamMap[m.senderId];
+          const nameColor = senderTeamId ? (TEAM_CLR[senderTeamId] || '#22D3EE') : '#22D3EE';
+          return (
+            <div key={m.id} style={{ display:'flex', flexDirection:'column', alignItems: isOwn ? 'flex-end' : 'flex-start', padding:'0 2px' }}>
+              <div style={{ fontSize:9, color: nameColor, fontWeight:700, letterSpacing:.3, marginBottom:2, paddingLeft: isOwn ? 0 : 2, paddingRight: isOwn ? 2 : 0 }}>
+                {m.senderName}
+              </div>
+              {m.type === 'gif' ? (
+                <img src={m.text} alt="GIF" style={{ maxWidth:'72%', borderRadius:8, border:'1px solid #1f2937' }} />
+              ) : (
+                <div style={{
+                  maxWidth:'82%', padding:'7px 10px',
+                  borderRadius: isOwn ? '12px 12px 3px 12px' : '12px 12px 12px 3px',
+                  background: isOwn ? `${myColor}1a` : '#181b24',
+                  border: `1px solid ${isOwn ? myColor + '33' : '#242832'}`,
+                  fontSize:13, color: isOwn ? '#e5e7eb' : '#c9cdd8', lineHeight:1.45, wordBreak:'break-word',
+                }}>
+                  {m.text}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <div ref={endRef} style={{ height:1 }} />
+      </div>
+
+      {/* Input */}
+      {!isSpectator ? (
+        <form onSubmit={send} style={{ display:'flex', gap:6, padding:'6px 0 2px', borderTop:'1px solid #1a1a22', flexShrink:0 }}>
+          <input
+            value={msg}
+            onChange={e => setMsg(e.target.value)}
+            placeholder="Message the room…"
+            style={{ flex:1, background:'#111318', border:'1px solid #22283a', color:'#e5e7eb', padding:'9px 11px', borderRadius:10, fontSize:13, outline:'none', minWidth:0 }}
+            autoComplete="off"
+            autoCorrect="off"
+          />
+          <button
+            type="submit"
+            disabled={!msg.trim()}
+            style={{ background: msg.trim() ? myColor : '#111', color: msg.trim() ? '#000' : '#333', border:'none', minWidth:44, borderRadius:10, fontWeight:900, cursor: msg.trim() ? 'pointer' : 'not-allowed', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'background .15s' }}
+          >
+            ↑
+          </button>
+        </form>
+      ) : (
+        <div style={{ padding:'8px 0 2px', borderTop:'1px solid #1a1a22', color:'#4b5563', fontSize:11, letterSpacing:1, textAlign:'center', flexShrink:0 }}>
+          👁 Spectator — watching live
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ── Chat Box Component (desktop sidebar) ─────────────────────────────────────
 const ChatBox = memo(function ChatBox({ chatLog, emit, currentRoom, isSpectator }) {
+
   const [msg, setMsg] = useState("");
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [gifQuery, setGifQuery] = useState('');
