@@ -829,6 +829,7 @@ function RoomContent() {
   const action = searchParams.get('action');
   const rivalsMatchKey = searchParams.get('matchKey');
   const autoFind = searchParams.get('autoFind') === '1';
+  const urlRoomCode = searchParams.get('room');
 
   const {
     emit, on, playerId,
@@ -862,6 +863,9 @@ function RoomContent() {
   const [matchmakingCycle, setMatchmakingCycle] = useState(0);
   const nameRef = useRef(null);
   const closeDialog = useCallback(() => setDialog(null), []);
+  // Keep a ref to the current phase so the pagehide handler always sees fresh value
+  const phaseRef = useRef(phase);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   // ── Restore name from localStorage ──
   useEffect(() => {
@@ -879,6 +883,22 @@ function RoomContent() {
       localStorage.setItem('ipl_player_name', name.trim());
     }
   }, [name]);
+
+  // ── Notify server immediately when user closes tab / navigates away ──
+  // This removes the lobby room from the public list right away rather than
+  // waiting ~25 s for the socket ping-timeout to fire.
+  useEffect(() => {
+    const LOBBY_PHASES = new Set(['lobby', 'rivals', 'rivals-searching', 'rivals-found', 'rivals-create']);
+    const handlePageHide = () => {
+      if (LOBBY_PHASES.has(phaseRef.current)) {
+        emit('leave-lobby');
+      }
+    };
+    window.addEventListener('pagehide', handlePageHide);
+    return () => window.removeEventListener('pagehide', handlePageHide);
+  // emit is stable (useCallback), no other deps needed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (roomMeta?.squadLimit) {
@@ -917,12 +937,15 @@ function RoomContent() {
   }, [phase, matchmakingCycle]);
 
   useEffect(() => {
-    if (phase !== 'rivals-found' || !multiGS) return undefined;
+    // Use the room code from URL param as primary source so we don't depend on
+    // async state (multiGS set via startTransition may not be ready yet).
+    const effectiveRoom = urlRoomCode || roomCode || multiGS?.roomCode;
+    if (phase !== 'rivals-found' || !effectiveRoom) return undefined;
     const timer = window.setTimeout(() => {
-      router.push(`/auction?room=${roomCode || multiGS?.roomCode}&mode=RIVALS${isSpectator ? '&spectator=1' : ''}`);
+      router.push(`/auction?room=${effectiveRoom}&mode=RIVALS${isSpectator ? '&spectator=1' : ''}`);
     }, 3600);
     return () => window.clearTimeout(timer);
-  }, [phase, multiGS, router, roomCode, isSpectator]);
+  }, [phase, multiGS, router, roomCode, urlRoomCode, isSpectator]);
 
   // ── Auto-focus name input ──
   useEffect(() => {
@@ -937,6 +960,27 @@ function RoomContent() {
       return prev === nextPhase ? prev : nextPhase;
     });
   }, [action]);
+
+  // ── Dedicated rivals game-started listener ──────────────────────────────────
+  // This is a safety net for the race condition where:
+  //   1. Player A emits join-rivals-match and gets roomStatus='lobby' (waiting)
+  //   2. setPlayMode('multi') is called, causing GameContext's socket effect to
+  //      temporarily tear down and re-register its listeners
+  //   3. Player B joins; server auto-starts and emits game-started in that window
+  //   4. GameContext misses the event → Player A is stuck on rivals-searching
+  // This local listener fires immediately when the phase is rivals-searching.
+  useEffect(() => {
+    if (phase !== 'rivals-searching') return;
+    const effectiveRoom = urlRoomCode || roomCode;
+    const off = on('game-started', (gs) => {
+      setMultiGS(gs);
+      const targetRoom = effectiveRoom || gs?.roomCode;
+      if (targetRoom) {
+        router.push(`/room?action=rivals-found&room=${targetRoom}`);
+      }
+    });
+    return () => { if (off) off(); };
+  }, [phase, on, router, urlRoomCode, roomCode, setMultiGS]);
 
   useEffect(() => {
     if (!['rivals', 'rivals-create', 'rivals-searching', 'rivals-found'].includes(phase)) return;

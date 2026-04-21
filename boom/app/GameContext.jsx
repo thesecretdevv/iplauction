@@ -305,8 +305,10 @@ export function GameProvider({ children }) {
       }));
     });
     const off2 = on("game-started", (gs) => {
+      // Set multiGS synchronously (not in startTransition) so it's immediately
+      // available when rivals-found or auction effects check it in the next render.
+      setMultiGS(gs);
       startTransition(() => {
-        setMultiGS(gs);
         setRoomMeta(prev => ({
           roomType: gs?.roomType || prev?.roomType || 'standard',
           activeTeamIds: gs?.activeTeamIds || prev?.activeTeamIds || null,

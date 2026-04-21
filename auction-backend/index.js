@@ -43,9 +43,11 @@ const io = new Server(httpServer, {
         origin: ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001", "https://bidwicket.onrender.com"],
         methods: ["GET", "POST"]
     },
-    // Optimize for low latency
-    pingTimeout: 20000,
-    pingInterval: 25000,
+    // Faster disconnect detection:
+    // pingInterval 15s + pingTimeout 10s = server knows within ~25s when a tab closes.
+    // Previously 25s+20s=45s, during which ghost rooms stayed visible in the public list.
+    pingTimeout: 10000,
+    pingInterval: 15000,
     transports: ['websocket', 'polling'],
     upgradeTimeout: 10000,
 });
@@ -1784,6 +1786,42 @@ io.on('connection', (socket) => {
         cb?.({ ok: true });
     });
 
+    // ── Leave Lobby (explicit navigation away) ────────────────────────────────
+    // The client fires this when the user navigates away from the lobby screen
+    // (pagehide / beforeunload / route change). This lets us immediately hide
+    // the room from the public list rather than waiting up to 25 s for the
+    // ping-timeout to fire.
+    socket.on('leave-lobby', async () => {
+        if (!currentRoom || !currentPlayerId) return;
+        const room = await getRoom(currentRoom);
+        if (!room || !room.players[currentPlayerId]) return;
+
+        // Only act while the room is still in lobby (not started).
+        if (room.status !== 'lobby') return;
+
+        const player = room.players[currentPlayerId];
+        player.offline = true;
+        markRoomDirty(room);
+
+        const onlinePlayers = Object.values(room.players).filter(p => !p.offline);
+        if (onlinePlayers.length === 0) {
+            // Room is now empty — hide from public list immediately.
+            // We keep it in Redis (with a short 5-min TTL) so a fast
+            // network-recovery rejoin still works, but nobody new can
+            // discover it.
+            await persistRoom(room);          // removes from public index
+            await redis.expire(`room:${room.code}`, 300); // 5-min TTL for orphaned lobby
+            broadcastRoomList();
+            console.log(`[ROOM] ${currentRoom} hidden from public list (owner left lobby)`);
+        } else {
+            // Others are still here — update the lobby view.
+            const state = getLobbyState(room);
+            io.to(currentRoom).emit('lobby-update', state);
+            await persistRoom(room);
+            if (!room.isPrivate) broadcastRoomList();
+        }
+    });
+
     // ── Disconnect ──
     socket.on('disconnect', async () => {
         console.log(`[-] ${socket.id} (Player: ${currentPlayerId || 'Unknown'}) disconnected`);
@@ -1806,9 +1844,15 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            await persistRoom(room);
+            // Empty lobby — immediately remove from public discovery so no
+            // one stumbles into a ghost room.  Keep in Redis for 60 s so a
+            // fast-reconnecting owner can still rejoin.
+            await persistRoom(room);           // removes from public index
+            if (room.status === 'lobby') {
+                await redis.expire(`room:${room.code}`, 300); // 5-min safety TTL
+            }
             rooms.delete(currentRoom.toUpperCase());
-            console.log(`[ROOM] ${currentRoom} has no online players; kept in Redis so players can rejoin after a disconnect`);
+            console.log(`[ROOM] ${currentRoom} has no online players; hidden from public list`);
             if (!room.isPrivate) broadcastRoomList();
             return;
         }
@@ -1831,7 +1875,9 @@ io.on('connection', (socket) => {
         if (!room.isPrivate) broadcastRoomList();
         await persistRoom(room);
 
-        // Schedule team-slot release after a 30s grace period
+        // Schedule team-slot release after a 60s grace period (up from 30s).
+        // 60s gives enough headroom for a brief network drop or page refresh
+        // without falsely evicting the player.
         const gracePeriodId = setTimeout(async () => {
             disconnectTimers.delete(currentPlayerId);
             const r = await getRoom(currentRoom);
@@ -1843,7 +1889,7 @@ io.on('connection', (socket) => {
             if (r.status === 'lobby') {
                 delete r.players[currentPlayerId];
                 markRoomDirty(r);
-                console.log(`[ROOM] ${currentPlayerId} removed from ${currentRoom}`);
+                console.log(`[ROOM] ${currentPlayerId} removed from ${currentRoom} after 60s grace`);
 
                 const remaining = Object.values(r.players).filter(p2 => !p2.offline);
                 if (remaining.length === 0) {
@@ -1856,7 +1902,7 @@ io.on('connection', (socket) => {
                 }
                 if (!r.isPrivate) broadcastRoomList();
             }
-        }, 30_000);
+        }, 60_000);
 
         disconnectTimers.set(currentPlayerId, gracePeriodId);
     });
