@@ -1605,12 +1605,17 @@ io.on('connection', (socket) => {
         if (!currentRoom || !currentPlayerId) return;
         const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
+        // Only guard valid range
         const newD = Math.max(5, Math.min(60, parseInt(duration) || 10));
+        // ✅ Only update timerDuration — never reset the live timer mid-countdown.
+        // Resetting gs.timer here would race with the running setInterval tick and
+        // could cause timer = 0 → finishCurrent() → startSelectionPhase() mid-auction.
+        // The new duration takes effect automatically on the next player.
         room.gameState.timerDuration = newD;
-        room.gameState.timer = newD;
         markRoomDirty(room);
+        // Broadcast only the configuration change (no phase/selection state needed)
         io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: false }));
-        await persistRoom(room);
+        schedulePersistRoom(room, 500);
     });
 
     // ── Chat ──
@@ -1721,7 +1726,9 @@ io.on('connection', (socket) => {
         io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: false }));
         cb?.({ ok: true, newBid: nb });
         
-        schedulePersistRoom(room, 200);
+        // Increased debounce from 200ms → 500ms to reduce Redis write storms
+        // during fast bidding rounds, which caused intermittent 10-15s hangs.
+        schedulePersistRoom(room, 500);
     });
 
     // ── Submit XI ──

@@ -86,9 +86,20 @@ function mergeGameState(prev, next) {
   if (!next) return prev;
   if (!prev) return next;
 
+  // Safety guard: if this is a lightweight broadcast (no selections included),
+  // do NOT let it overwrite the phase to 'selection' or 'finished'. This
+  // prevents a race condition where set-timer-duration (or any partial emit
+  // with includeSelectionState: false) could flip all clients to the
+  // Playing XI screen mid-auction.
+  const isLightweightBroadcast = next.selections === undefined;
+  const phase = (isLightweightBroadcast && (next.phase === 'selection' || next.phase === 'finished'))
+    ? (prev.phase ?? next.phase)
+    : (next.phase ?? prev.phase);
+
   return {
     ...prev,
     ...next,
+    phase,
     playerQueue: next.playerQueue ?? prev.playerQueue,
     purses: next.purses ?? prev.purses,
     squads: next.squads ?? prev.squads,
