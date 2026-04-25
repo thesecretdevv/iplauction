@@ -124,6 +124,7 @@ const globalStyles = `
   @keyframes shimmer   { 0%{background-position:-200% center} 100%{background-position:200% center} }
   @keyframes floatOrb  { 0%{transform:translateY(0)rotate(0);opacity:0} 20%{opacity:.12} 80%{opacity:.12} 100%{transform:translateY(-800px)rotate(360deg);opacity:0} }
   @keyframes scrollMq  { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+  @keyframes logoBob   { 0%, 100% { transform: translateY(0px) scale(1); } 50% { transform: translateY(-6px) scale(1.03); } }
   @keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:.4} }
   @keyframes rivalsSweep { 0%{transform:translateX(0)} 100%{transform:translateX(18px)} }
   @keyframes rivalsVsPop { 0%{transform:scale(.7);opacity:0} 60%{transform:scale(1.08);opacity:1} 100%{transform:scale(1);opacity:1} }
@@ -680,9 +681,27 @@ const globalStyles = `
   @media (max-width: 900px)  { .lc-panel { display: none !important; } }
 
   /* ── Marquee ── */
-  .rp-marquee-container { position:fixed; bottom:0; left:0; width:100%; overflow:hidden; background:#000; border-top:1px solid #0d0d0d; z-index:10; padding:6px 0; }
-  .rp-marquee-track { display:flex; white-space:nowrap; width:max-content; animation:scrollMq 30s linear infinite; }
-  .rp-marquee-item { font-family:'Bebas Neue',sans-serif; font-size:1.3rem; color:#1a1a1a; margin:0 36px; letter-spacing:4px; }
+  .rp-marquee-container { position:fixed; bottom:0; left:0; width:100%; overflow:hidden; background:rgba(0,0,0,.96); border-top:1px solid #0d0d0d; z-index:10; padding:8px 0; }
+  .rp-marquee-track { display:flex; align-items:center; white-space:nowrap; width:max-content; animation:scrollMq 34s linear infinite; }
+  .rp-marquee-item { width:54px; height:54px; margin:0 20px; display:flex; align-items:center; justify-content:center; border-radius:999px; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); border:1px solid #161616; box-shadow:0 10px 24px rgba(0,0,0,.22); animation:logoBob 3.8s ease-in-out infinite; }
+  .rp-marquee-logo { width:36px; height:36px; object-fit:contain; filter:drop-shadow(0 6px 10px rgba(0,0,0,.35)); opacity:.96; }
+
+  .rb-room-grid {
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0, 1fr));
+    gap:18px;
+    align-items:stretch;
+  }
+
+  @media (max-width: 1180px) {
+    .rb-room-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 760px) {
+    .rb-room-grid { grid-template-columns:1fr; }
+    .rp-marquee-item { width:46px; height:46px; margin:0 14px; }
+    .rp-marquee-logo { width:30px; height:30px; }
+  }
 
   @media(max-width:600px){
     .rp-h1 { font-size:3rem; }
@@ -839,9 +858,26 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
   const privateActivity = getPrivateActivityEstimate(liveStats.rooms, liveStats.players);
 
   // Filter logic
-  const liveRooms    = serverRooms.filter(r => r.status === 'active');
-  const waitingRooms = serverRooms.filter(r => r.status === 'lobby');
-  const archivedRooms = completedRooms || [];
+  const sortRoomsStable = useCallback((rooms) => (
+    [...rooms].sort((a, b) => {
+      const nameCompare = String(a.name || '').localeCompare(String(b.name || ''));
+      if (nameCompare !== 0) return nameCompare;
+      return String(a.code || '').localeCompare(String(b.code || ''));
+    })
+  ), []);
+
+  const liveRooms = useMemo(
+    () => sortRoomsStable(serverRooms.filter(r => r.status === 'active')),
+    [serverRooms, sortRoomsStable]
+  );
+  const waitingRooms = useMemo(
+    () => sortRoomsStable(serverRooms.filter(r => r.status === 'lobby')),
+    [serverRooms, sortRoomsStable]
+  );
+  const archivedRooms = useMemo(
+    () => [...(completedRooms || [])].sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0) || String(a.code || '').localeCompare(String(b.code || ''))),
+    [completedRooms]
+  );
   const displayRooms = activeTab === 'live'
     ? liveRooms
     : activeTab === 'completed'
@@ -914,9 +950,9 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
 
       {/* ── Rooms list ── */}
       <div className="rb-rooms-list" style={{ padding: '32px 32px 60px', background: '#080808' }}>
-        <div style={{ maxWidth: 800, margin: '0 auto' }}>
+        <div style={{ maxWidth: 1440, margin: '0 auto' }}>
           {loading && displayRooms.length === 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+            <div className="rb-room-grid">
               {[0, 1, 2, 3].map((item) => (
                 <div key={item} style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 16, padding: 24, minHeight: 180, overflow: 'hidden', position: 'relative' }}>
                   <div style={{ width: '55%', height: 18, background: '#171717', borderRadius: 6, marginBottom: 18 }} />
@@ -942,8 +978,8 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
                )}
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
-              {displayRooms.map((room, i) => {
+            <div className="rb-room-grid">
+              {displayRooms.map((room) => {
                 const isActive = room.status === 'active';
                 const isCompleted = room.status === 'finished';
                 const teamCount = room.players || 0;
@@ -951,9 +987,9 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
                 const teamLimit = isRivals ? 2 : 10;
                 
                 return (
-                  <div key={i} className="rb-room-card" 
+                  <div key={room.code} className="rb-room-card" 
                     style={{ 
-                      animation: `fadeUp .4s ease ${i * 0.05}s both`,
+                      animation: 'fadeUp .34s ease both',
                       background: '#0d0d0d',
                       border: '1px solid #1a1a1a',
                       borderRadius: 16,
@@ -2440,7 +2476,14 @@ function RoomContent() {
         <div className="rp-marquee-container">
           <div className="rp-marquee-track">
             {[...TEAMS, ...TEAMS].map((t, i) => (
-              <span key={i} className="rp-marquee-item" style={{ color:t.color }}>{t.short}</span>
+              <div
+                key={`${t.id}-${i}`}
+                className="rp-marquee-item"
+                style={{ animationDelay: `${(i % TEAMS.length) * 0.18}s` }}
+                title={t.name}
+              >
+                <img className="rp-marquee-logo" src={TEAM_LOGOS[t.id]} alt={`${t.name} logo`} loading="lazy" />
+              </div>
             ))}
           </div>
         </div>

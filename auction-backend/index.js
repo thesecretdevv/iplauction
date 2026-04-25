@@ -146,6 +146,42 @@ function getLobbyStatePayload(room) {
     };
 }
 
+function hasLiveSocket(socketId) {
+    return Boolean(socketId && io.sockets.sockets.has(socketId));
+}
+
+async function reconcileRoomPresence(room, { removeEmptyPublicLobby = false } = {}) {
+    if (!room) return null;
+
+    let changed = false;
+    for (const player of Object.values(room.players || {})) {
+        const shouldBeOffline = !hasLiveSocket(player.socketId);
+        if (player.offline !== shouldBeOffline) {
+            player.offline = shouldBeOffline;
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        markRoomDirty(room);
+    }
+
+    if (room.status === 'lobby' && getVisiblePlayers(room).length === 0) {
+        if (!room.isPrivate && removeEmptyPublicLobby) {
+            await removeRoom(room.code);
+            return null;
+        }
+
+        if (changed) {
+            await persistRoom(room);
+        }
+    } else if (changed) {
+        await persistRoom(room);
+    }
+
+    return room;
+}
+
 function getCurrentMatchStatus(matchKey, now = new Date()) {
     return buildRivalsMatchSnapshot(matchKey, now);
 }
@@ -153,7 +189,7 @@ function getCurrentMatchStatus(matchKey, now = new Date()) {
 async function findOpenRivalsRoom(matchKey) {
     const publicCodes = await redis.smembers('public_rooms');
     for (const code of publicCodes) {
-        const room = await getRoom(code);
+        const room = await reconcileRoomPresence(await getRoom(code), { removeEmptyPublicLobby: true });
         if (!room || room.roomType !== 'rivals' || room.rivalsMatch?.key !== matchKey || isRoomOver(room)) continue;
         if (getActivePlayers(room).length < getRoomPlayerLimit(room)) {
             return room;
@@ -542,10 +578,18 @@ async function getPublicRoomsPayload() {
     }
 
     const publicCodes = await redis.smembers('public_rooms');
-    const loadedRooms = await Promise.all(publicCodes.map((code) => getRoom(code)));
-    const activeRooms = loadedRooms
-        .filter(r => r && !r.isPrivate && !isRoomOver(r))
-        .map(mapPublicRoom);
+    const activeRooms = [];
+
+    for (const code of publicCodes) {
+        const room = await reconcileRoomPresence(await getRoom(code), { removeEmptyPublicLobby: true });
+        if (!room) continue;
+        if (room.isPrivate || isRoomOver(room)) continue;
+        if (getVisiblePlayers(room).length === 0) {
+            await removeFromPublicIndex(code);
+            continue;
+        }
+        activeRooms.push(mapPublicRoom(room));
+    }
 
     const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
     const completedRooms = (await getFinishedRooms())
@@ -639,6 +683,9 @@ async function getRoom(code) {
                 }
             }
         } catch(e) { console.error("[REDIS] Load Error:", e); }
+    }
+    if (room) {
+        room = await reconcileRoomPresence(room);
     }
     return room;
 }
