@@ -152,6 +152,9 @@ export function GameProvider({ children }) {
     if (typeof window === 'undefined') return;
     localStorage.removeItem("ipl_room_code");
     localStorage.removeItem("ipl_play_mode");
+    // Also clear player_name so auto-rejoin can't retrigger without explicit action
+    // Note: we intentionally keep ipl_player_name for convenience on next explicit join.
+    // But we do need to remove ipl_room_code so the savedRoom check fails cleanly.
   }
 
   // Helper to build URLs with query params
@@ -202,17 +205,43 @@ export function GameProvider({ children }) {
     // ── Rejoin logic ──
     const search = new URLSearchParams(window.location.search);
     const roomParam = search.get('room');
-    const savedRoom = roomParam || localStorage.getItem("ipl_room_code");
+    const storedRoom = localStorage.getItem("ipl_room_code");
     const savedName = localStorage.getItem("ipl_player_name");
     const savedPlayMode = localStorage.getItem("ipl_play_mode");
+
+    // ── Stale session guard ──────────────────────────────────────────────────
+    // If the URL specifies a room that DIFFERS from what's in localStorage,
+    // the user is intentionally navigating to a NEW room/match. Wipe the stale
+    // session so the old room code can't hijack navigation.
+    if (roomParam && storedRoom && roomParam.toUpperCase() !== storedRoom.toUpperCase()) {
+      localStorage.removeItem("ipl_room_code");
+      localStorage.removeItem("ipl_play_mode");
+    }
+
+    const savedRoom = roomParam || localStorage.getItem("ipl_room_code");
+
+    // ── Rivals ghost-redirect guard ──────────────────────────────────────────
+    // If there is NO room param in the URL (user is e.g. navigating to /room or
+    // the home page to start a fresh Rivals match), and the only reason we'd
+    // auto-rejoin is a stored session, DON'T redirect away from the current page
+    // unless the user is already at /auction or /room (i.e. actively in a game).
+    // This prevents: finish Rivals → close tab → reopen /room → redirect to old match.
+    const isFromStoredSessionOnly = !roomParam && !!savedRoom;
+    const isOnGamePage = pathname === '/auction' || pathname === '/room';
+    if (isFromStoredSessionOnly && !isOnGamePage && savedPlayMode === 'multi') {
+      // Stale multi session with no explicit URL room — skip auto-rejoin
+      // so the user can start a fresh match (e.g. new Rivals) without being
+      // ghost-redirected to the old auction room.
+      return;
+    }
 
     if (savedRoom && savedName) {
       // Auto-join if we have all data
       setRoomCode(savedRoom);
       setMyName(savedName);
       setPlayMode("multi");
-      
-        emit("join-room", { code: savedRoom, playerName: savedName, playerId }, (res) => {
+
+      emit("join-room", { code: savedRoom, playerName: savedName, playerId }, (res) => {
         if (res.ok) {
           setLobbyPlayers(res.players);
           setIsHost(res.hostId === playerId);
