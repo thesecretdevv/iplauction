@@ -62,6 +62,12 @@ const shuffle = arr => { const a = [...arr]; for (let i = a.length - 1; i > 0; i
 const fmt = c => c >= 1 ? `₹${c.toFixed(2)} Cr` : `₹${Math.round(c * 100)} L`;
 const getIncrement = p => p < 2 ? 0.10 : p < 5 ? 0.20 : p < 10 ? 0.25 : 0.50;
 const nextBid = c => +(c + getIncrement(c)).toFixed(2);
+function getOverseasLimitForSquad(squadLimit) {
+    const limit = Number(squadLimit) || 15;
+    if (limit >= 25) return 8;
+    if (limit >= 20) return 7;
+    return 6;
+}
 
 const TEAMS = [
     { id: "CSK", name: "Chennai Super Kings", short: "CSK", color: "#F9CA24" },
@@ -184,6 +190,8 @@ const finishedGames = [];
 // Grace period timers: Map<playerId, timeoutId>
 const disconnectTimers = new Map();
 const pendingPersistTimers = new Map();
+let publicRoomsCache = null;
+const PUBLIC_ROOMS_CACHE_MS = 2500;
 
 function getDefaultSquadLimit(auctionMode) {
     const normalized = String(auctionMode || '').toLowerCase();
@@ -193,6 +201,7 @@ function getDefaultSquadLimit(auctionMode) {
 
 function markRoomDirty(room) {
     if (!room) return 0;
+    publicRoomsCache = null;
     room.revision = (room.revision || 0) + 1;
     room.updatedAt = Date.now();
     return room.revision;
@@ -252,49 +261,7 @@ app.get('/', (req, res) => {
 app.get('/api/rooms', async (req, res) => {
     try {
         res.setHeader('Cache-Control', 'no-store');
-        // Fetch all candidates from Redis index
-        const publicCodes = await redis.smembers('public_rooms');
-        const activeRooms = [];
-
-        // Hydrate each code
-        for (const code of publicCodes) {
-            const r = await getRoom(code);
-            if (r && !r.isPrivate && !isRoomOver(r)) {
-                activeRooms.push({
-                    code: r.code,
-                    name: r.name,
-                    host: r.players[r.hostId]?.name || 'Unknown',
-                    players: Object.values(r.players).filter(p => !p.isSpectator && !p.offline).length,
-                    spectators: Object.values(r.players).filter(p => p.isSpectator && !p.offline).length,
-                    status: r.status,
-                    mode: r.auctionMode,
-                    roomType: r.roomType || 'standard',
-                    activeTeamIds: getActiveTeamIds(r),
-                    rivalsMatch: r.rivalsMatch || null,
-                    // Useful for discovery:
-                    currentPlayer: r.gameState?.playerQueue[r.gameState?.currentIdx]?.name || null
-                });
-            }
-        }
-
-        const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
-        const completedRooms = (await getFinishedRooms()).filter(room => !room.isPrivate).map(room => ({
-            code: room.code,
-            name: room.name,
-            host: room.host,
-            players: room.players,
-            spectators: room.spectators,
-            status: 'finished',
-            mode: room.mode,
-            roomType: room.roomType || 'standard',
-            activeTeamIds: room.activeTeamIds || TEAM_IDS,
-            rivalsMatch: room.rivalsMatch || null,
-            participants: room.participants || [],
-            finishedAt: room.finishedAt,
-            totalSold: room.totalSold,
-            topBuy: room.topBuy || null
-        }));
-        res.json({ active: activeRooms, completed: completedRooms, totalRooms: activeRooms.length, totalPlayers });
+        res.json(await getPublicRoomsPayload());
     } catch (e) {
         console.error("[REST] Room Fetch Error:", e);
         res.status(500).json({ error: "Failed to fetch rooms" });
@@ -443,15 +410,19 @@ app.delete('/api/admin/rooms/:code', async (req, res) => {
 
 // Helper to keep track of public rooms in a central index
 async function addToPublicIndex(code) {
+    publicRoomsCache = null;
     try { await redis.sadd('public_rooms', code); } catch(e) {}
 }
 async function removeFromPublicIndex(code) {
+    publicRoomsCache = null;
     try { await redis.srem('public_rooms', code); } catch(e) {}
 }
 async function addToFinishedIndex(code) {
+    publicRoomsCache = null;
     try { await redis.sadd(FINISHED_ROOM_SET_KEY, code); } catch(e) {}
 }
 async function removeFromFinishedIndex(code) {
+    publicRoomsCache = null;
     try { await redis.srem(FINISHED_ROOM_SET_KEY, code); } catch(e) {}
 }
 
@@ -500,16 +471,15 @@ async function getFinishedRoomSnapshot(code) {
 async function getFinishedRooms() {
     try {
         const codes = await redis.smembers(FINISHED_ROOM_SET_KEY);
-        const snapshots = [];
-
-        for (const code of codes) {
+        const loaded = await Promise.all(codes.map(async (code) => {
             const snapshot = await getFinishedRoomSnapshot(code);
             if (!snapshot) {
                 await removeFromFinishedIndex(code);
-                continue;
+                return null;
             }
-            snapshots.push(snapshot);
-        }
+            return snapshot;
+        }));
+        const snapshots = loaded.filter(Boolean);
 
         snapshots.sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
         return snapshots;
@@ -528,6 +498,68 @@ async function deleteFinishedRoomSnapshot(code) {
     } catch (e) {
         console.error('[REDIS] Finished room delete error:', e);
     }
+}
+
+function mapPublicRoom(room) {
+    return {
+        code: room.code,
+        name: room.name,
+        host: room.players[room.hostId]?.name || 'Unknown',
+        players: Object.values(room.players).filter(p => !p.isSpectator && !p.offline).length,
+        spectators: Object.values(room.players).filter(p => p.isSpectator && !p.offline).length,
+        status: room.status,
+        mode: room.auctionMode,
+        roomType: room.roomType || 'standard',
+        activeTeamIds: getActiveTeamIds(room),
+        rivalsMatch: room.rivalsMatch || null,
+        currentPlayer: room.gameState?.playerQueue?.[room.gameState?.currentIdx]?.name || null
+    };
+}
+
+function mapFinishedRoom(room) {
+    return {
+        code: room.code,
+        name: room.name,
+        host: room.host,
+        players: room.players,
+        spectators: room.spectators,
+        status: 'finished',
+        mode: room.mode,
+        roomType: room.roomType || 'standard',
+        activeTeamIds: room.activeTeamIds || TEAM_IDS,
+        rivalsMatch: room.rivalsMatch || null,
+        participants: room.participants || [],
+        finishedAt: room.finishedAt,
+        totalSold: room.totalSold,
+        topBuy: room.topBuy || null
+    };
+}
+
+async function getPublicRoomsPayload() {
+    const now = Date.now();
+    if (publicRoomsCache && now - publicRoomsCache.createdAt < PUBLIC_ROOMS_CACHE_MS) {
+        return publicRoomsCache.payload;
+    }
+
+    const publicCodes = await redis.smembers('public_rooms');
+    const loadedRooms = await Promise.all(publicCodes.map((code) => getRoom(code)));
+    const activeRooms = loadedRooms
+        .filter(r => r && !r.isPrivate && !isRoomOver(r))
+        .map(mapPublicRoom);
+
+    const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
+    const completedRooms = (await getFinishedRooms())
+        .filter(room => !room.isPrivate)
+        .map(mapFinishedRoom);
+
+    const payload = {
+        active: activeRooms,
+        completed: completedRooms,
+        totalRooms: activeRooms.length,
+        totalPlayers,
+    };
+    publicRoomsCache = { createdAt: now, payload };
+    return payload;
 }
 
 async function persistRoom(room) {
@@ -904,6 +936,7 @@ function startGameTick(room) {
 
 function broadcastRoomList() {
     // Emit to all connected sockets that public rooms changed
+    publicRoomsCache = null;
     io.emit('public-rooms-updated');
 }
 
@@ -1645,46 +1678,7 @@ io.on('connection', (socket) => {
     // ── Get Rooms (socket) ── pull from Redis
     socket.on('get-rooms', async (cb) => {
         try {
-            const publicCodes = await redis.smembers('public_rooms');
-            const activeRooms = [];
-            
-            for (const code of publicCodes) {
-                const r = await getRoom(code);
-                if (r && !r.isPrivate && !isRoomOver(r)) {
-                    activeRooms.push({
-                        code: r.code,
-                        name: r.name,
-                        host: r.players[r.hostId]?.name || 'Unknown',
-                        players: Object.values(r.players).filter(p => !p.isSpectator && !p.offline).length,
-                        spectators: Object.values(r.players).filter(p => p.isSpectator && !p.offline).length,
-                        status: r.status,
-                        mode: r.auctionMode,
-                        roomType: r.roomType || 'standard',
-                        activeTeamIds: getActiveTeamIds(r),
-                        rivalsMatch: r.rivalsMatch || null,
-                        currentPlayer: r.gameState?.playerQueue[r.gameState?.currentIdx]?.name || null
-                    });
-                }
-            }
-            
-            const totalPlayers = activeRooms.reduce((sum, r) => sum + r.players, 0);
-            const completedRooms = (await getFinishedRooms()).filter(room => !room.isPrivate).map(room => ({
-                code: room.code,
-                name: room.name,
-                host: room.host,
-                players: room.players,
-                spectators: room.spectators,
-                status: 'finished',
-                mode: room.mode,
-                roomType: room.roomType || 'standard',
-                activeTeamIds: room.activeTeamIds || TEAM_IDS,
-                rivalsMatch: room.rivalsMatch || null,
-                participants: room.participants || [],
-                finishedAt: room.finishedAt,
-                totalSold: room.totalSold,
-                topBuy: room.topBuy || null
-            }));
-            cb?.({ active: activeRooms, completed: completedRooms, totalRooms: activeRooms.length, totalPlayers });
+            cb?.(await getPublicRoomsPayload());
         } catch(e) { console.error("[SOCKET] Room Fetch Error:", e); cb?.({ active: [], completed: [] }); }
     });
 
@@ -1706,10 +1700,9 @@ io.on('connection', (socket) => {
         const nb = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
         if (gs.purses[teamId] < nb) return cb?.({ ok: false, error: 'Insufficient purse' });
 
-        const isMini = room.auctionMode && room.auctionMode.toLowerCase() === 'mini';
         const isRivals = room.roomType === 'rivals' || room.auctionMode === 'rivals';
-        const maxSquadSize = isRivals ? RIVALS_MAX_SQUAD_SIZE : (gs.squadLimit || room.squadLimit || getDefaultSquadLimit(room.auctionMode || (isMini ? 'mini' : 'mega')));
-        const maxOverseas = isRivals ? RIVALS_MAX_OVERSEAS : (isMini ? 4 : 8);
+        const maxSquadSize = isRivals ? RIVALS_MAX_SQUAD_SIZE : (gs.squadLimit || room.squadLimit || getDefaultSquadLimit(room.auctionMode));
+        const maxOverseas = isRivals ? RIVALS_MAX_OVERSEAS : getOverseasLimitForSquad(maxSquadSize);
 
         if (gs.squads[teamId].length >= maxSquadSize) return cb?.({ ok: false, error: 'Squad full (' + maxSquadSize + ' max)' });
 
@@ -1746,6 +1739,11 @@ io.on('connection', (socket) => {
         if (!player || !player.teamId || player.isSpectator) return cb?.({ ok: false });
 
         const teamId = player.teamId;
+        const requiredSquadSize = gs.squadLimit || room.squadLimit || getDefaultSquadLimit(room.auctionMode);
+        const squadSize = gs.squads?.[teamId]?.length || 0;
+        if (squadSize < requiredSquadSize) {
+            return cb?.({ ok: false, error: `You need to buy ${requiredSquadSize} players before submitting your XI` });
+        }
         if (players.length !== 11) return cb?.({ ok: false, error: "Must select exactly 11 players" });
 
         gs.playingXI[teamId] = players;

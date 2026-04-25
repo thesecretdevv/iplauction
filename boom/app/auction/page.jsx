@@ -2,11 +2,11 @@
 
 import { useState, useRef, useCallback, useMemo, Suspense, memo, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useGame, fmt, nextBid } from '../GameContext';
+import { useGame, fmt, nextBid, getOverseasLimitForSquad } from '../GameContext';
 import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from '../../src/MultiScreens';
 import { StatsModal } from '../../src/StatsModal';
 import { SquadModal } from '../../src/SquadModal';
-import { getPlayerRecord } from '../data/playerRatings';
+import { getPlayerRating, getPlayerRecord, selectPlayingXI } from '../data/playerRatings';
 import AppDialog from '../components/AppDialog';
 
 const kohliImg = '/assets/Kohli.avif';
@@ -251,14 +251,14 @@ function AuctionContent() {
   }, [emit]);
   const openRulesDialog = useCallback(() => {
     const currentSquadLimit = gs?.squadLimit || (isRivals ? RIVALS_MAX_SQUAD_SIZE : 15);
-    const overseasLimit = isRivals ? RIVALS_MAX_OVERSEAS : 4;
+    const overseasLimit = isRivals ? RIVALS_MAX_OVERSEAS : getOverseasLimitForSquad(currentSquadLimit);
     setDialog({
       title: 'Auction Rules',
       message: [
         `Squad limit: each team can buy up to ${currentSquadLimit} players.`,
         'Final XI: every team must submit exactly 11 players after the auction ends.',
         'Minimum XI rules: at least 2 batters, 2 bowlers, and 1 wicketkeeper are required.',
-        `Overseas rule: keep the final XI within ${overseasLimit} overseas players.`,
+        `Overseas buying rule: ${currentSquadLimit}-player squads can buy up to ${overseasLimit} overseas players.`,
         'If the host finalizes results before everyone submits, the game auto-picks the best available XI from each remaining squad.',
         'Teams that fail the XI rules will be marked disqualified in results.',
       ].join('\n\n'),
@@ -489,6 +489,7 @@ function AuctionContent() {
         onSubmit={submitXI}
         submitted={isMulti ? gs.selections[effectiveMyTeamId] : false}
         playersNeeded={11}
+        mode={currentMode}
         isHost={isHost}
         emit={emit}
         activeTeams={(lobbyPlayers || []).filter(player => !player.isSpectator && player.teamId)}
@@ -520,9 +521,8 @@ function AuctionContent() {
     .filter(([, players]) => players.length > 0);
   
   // Dynamic limits based on mode
-  const isMini      = gs.auctionMode?.toLowerCase() === 'mini';
   const maxSquadSize= isRivals ? RIVALS_MAX_SQUAD_SIZE : (gs.squadLimit || 15);
-  const maxOverseas = isRivals ? RIVALS_MAX_OVERSEAS : (isMini ? 4 : 8);
+  const maxOverseas = isRivals ? RIVALS_MAX_OVERSEAS : getOverseasLimitForSquad(maxSquadSize);
 
   const canBid      = gs.phase === 'bidding'
     && gs.currentBidder !== effectiveMyTeamId
@@ -945,14 +945,64 @@ function AuctionContent() {
         .ac-sheet-header { flex-shrink:0; padding:10px 14px;
           display:flex; justify-content:space-between; align-items:center;
           border-bottom:1px solid ${BORDER}; }
-        .ac-sheet-tabs { display:flex; border-bottom:1px solid #1a1a1a; flex-shrink:0; }
+        .ac-sheet-close {
+          width:34px;
+          height:34px;
+          border-radius:10px;
+          border:1px solid #3a3a3a;
+          background:#171717;
+          color:#f1f5f9;
+          font-size:16px;
+          font-weight:900;
+          cursor:pointer;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          flex-shrink:0;
+          box-shadow:0 0 0 1px rgba(255,255,255,0.03);
+        }
+        .ac-sheet-tabs { display:flex; align-items:stretch; border-bottom:1px solid #1a1a1a; flex-shrink:0; }
         .ac-sheet-tab {
           flex:1; padding:9px 4px; text-align:center; font-size:11px; font-weight:700;
           font-family:'Barlow Condensed',sans-serif; letter-spacing:.5px; cursor:pointer;
           border-bottom:2px solid transparent; color:#555; transition:all .2s;
+          display:flex; align-items:center; justify-content:center;
         }
         .ac-sheet-tab.active { color:#fff; border-bottom-color:${GOLD}; }
+        .ac-sheet-tab-close {
+          width:44px;
+          border:0;
+          border-left:1px solid #222;
+          border-bottom:2px solid transparent;
+          background:#111;
+          color:#f1f5f9;
+          font-size:15px;
+          font-weight:900;
+          cursor:pointer;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          flex-shrink:0;
+        }
         .ac-sheet-body { flex:1; overflow-y:auto; padding:12px 14px 16px; overscroll-behavior: contain; }
+        .ac-os-badge {
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          min-width:24px;
+          height:18px;
+          padding:0 7px;
+          border-radius:999px;
+          border:1px solid rgba(147,197,253,0.55);
+          background:rgba(37,99,235,0.28);
+          color:#dbeafe;
+          font-size:9px;
+          line-height:1;
+          letter-spacing:1px;
+          font-weight:900;
+          flex-shrink:0;
+          box-shadow:0 0 14px rgba(96,165,250,0.18);
+        }
 
         /* ── BOTTOM TICKER ── */
         .ac-ticker { border-top:1px solid ${BORDER}; padding:6px 12px; display:flex;
@@ -1520,7 +1570,7 @@ function AuctionContent() {
                     <div className="ac-player-name">{player.name.toUpperCase()}</div>
                     <div className="ac-player-meta" style={{ color:ROLE_C[player.role], display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <span style={{ fontSize: 10, background: `${ROLE_C[player.role]}20`, color: ROLE_C[player.role], padding: '1px 5px', borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>{ROLE_L[player.role]}</span>
-                      {player.overseas && <span style={{ fontSize: 9, background: '#6366f120', color: '#818cf8', padding: '1px 5px', borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>OS</span>}
+                      {player.overseas && <span className="ac-os-badge">OS</span>}
                       {player.isWildcard && <span style={{ fontSize: 9, background: `${GOLD}18`, color: GOLD, padding: '1px 5px', borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>WILDCARD</span>}
                     </div>
                     <div style={{ fontSize:10, color:'#444', letterSpacing:.5, marginTop:2 }}>Base: {fmt(player.base)} · #{gs.currentIdx + 1}/{gs.playerQueue.length}</div>
@@ -1790,7 +1840,7 @@ function AuctionContent() {
                                       <div style={{ minWidth:0, flex:1 }}>
                                         <span style={{ color:'#ccc', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>{p.name}</span>
                                         {p.overseas && (
-                                          <span style={{ fontSize:9, background:'#6366f118', color:'#818cf8', padding:'1px 5px', borderRadius:3, letterSpacing:1, fontWeight:700, display:'inline-block', marginTop:2 }}>OS</span>
+                                          <span className="ac-os-badge" style={{ marginTop:2 }}>OS</span>
                                         )}
                                       </div>
                                     </div>
@@ -2015,7 +2065,7 @@ function AuctionContent() {
             {/* Header */}
             <div className="ac-sheet-header">
               <span style={{ fontFamily:"'Bebas Neue'", fontSize:17, color:'#ccc', letterSpacing:2 }}>MORE</span>
-              <button onClick={() => setShowHamburger(false)} style={{ background:'none', border:'none', color:'#666', fontSize:20, cursor:'pointer' }}>✕</button>
+              <button className="ac-sheet-close" onClick={() => setShowHamburger(false)} aria-label="Close more panel">X</button>
             </div>
             {/* Sub-tabs */}
             <div className="ac-sheet-tabs">
@@ -2023,6 +2073,7 @@ function AuctionContent() {
                 <div key={id} className={`ac-sheet-tab${hamburgerTab===id?' active':''}`}
                   onClick={() => setHamburgerTab(id)}>{label}</div>
               ))}
+              <button className="ac-sheet-tab-close" onClick={() => setShowHamburger(false)} aria-label="Close more panel">X</button>
             </div>
             {/* Tab body */}
             <div className="ac-sheet-body">
@@ -2039,9 +2090,12 @@ function AuctionContent() {
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
                         {players.map((p,i) => (
-                          <div key={i} style={{ background:'#0d0d10', border:'1px solid #1a1a1a', borderRadius:6, padding:'7px 9px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                            <span style={{ fontSize:12, color:'#aaa' }}>{p.name}</span>
-                            <span style={{ fontSize:10, color:ROLE_C[p.role] }}>{ROLE_EMOJI[p.role]}</span>
+                          <div key={i} style={{ background:'#0d0d10', border:'1px solid #1a1a1a', borderRadius:6, padding:'7px 9px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+                            <span style={{ fontSize:12, color:'#aaa', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</span>
+                            <span style={{ display:'flex', alignItems:'center', gap:5, flexShrink:0 }}>
+                              {p.overseas && <span className="ac-os-badge">OS</span>}
+                              <span style={{ fontSize:10, color:ROLE_C[p.role] }}>{ROLE_EMOJI[p.role]}</span>
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -2060,7 +2114,10 @@ function AuctionContent() {
                       <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid #141414' }}>
                         <div>
                           <div style={{ color:'#ddd', fontWeight:700, fontSize:13 }}>{item.player.name}</div>
-                          <div style={{ fontSize:10, color:ROLE_C[item.player.role], marginTop:2 }}>{ROLE_L[item.player.role]}</div>
+                          <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:2 }}>
+                            <span style={{ fontSize:10, color:ROLE_C[item.player.role] }}>{ROLE_L[item.player.role]}</span>
+                            {item.player.overseas && <span className="ac-os-badge">OS</span>}
+                          </div>
                         </div>
                         <div style={{ textAlign:'right' }}>
                           <div style={{ color:t?.color, fontWeight:700, fontSize:12 }}>{t ? getTeamLabel(t, { short: true }) : item.bidder}</div>
@@ -2080,7 +2137,10 @@ function AuctionContent() {
                     <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid #141414' }}>
                       <div>
                         <div style={{ color:'#888', fontWeight:700, fontSize:13 }}>{item.player.name}</div>
-                        <div style={{ fontSize:10, color:ROLE_C[item.player.role], marginTop:2 }}>{ROLE_L[item.player.role]}</div>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:2 }}>
+                          <span style={{ fontSize:10, color:ROLE_C[item.player.role] }}>{ROLE_L[item.player.role]}</span>
+                          {item.player.overseas && <span className="ac-os-badge">OS</span>}
+                        </div>
                       </div>
                       <span style={{ color:'#ef4444', fontWeight:700, fontSize:11, letterSpacing:1 }}>UNSOLD</span>
                     </div>
@@ -2118,8 +2178,9 @@ function AuctionContent() {
 }
 
 // ── Playing XI Selection ──────────────────────────────────────────────────────
-function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isHost = false, activeTeams = [], selections = {}, onFinalizeSelection, squadLimit = 15 }) {
+function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mode = 'mega', isHost = false, activeTeams = [], selections = {}, onFinalizeSelection, squadLimit = 15 }) {
   const [selected, setSelected] = useState([]);
+  const ratingMode = String(mode || 'mega').toLowerCase() === 'mini' ? 'mini' : 'mega';
 
   useEffect(() => {
     if (!Array.isArray(mySquad) || mySquad.length === 0) {
@@ -2128,9 +2189,13 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
     }
     setSelected((prev) => {
       if (prev.length > 0) return prev;
-      return [...mySquad].sort((a, b) => (b.soldFor || 0) - (a.soldFor || 0)).slice(0, playersNeeded);
+      const autoXI = selectPlayingXI(mySquad, ratingMode);
+      if (autoXI.length > 0) return autoXI.slice(0, playersNeeded);
+      return [...mySquad]
+        .sort((a, b) => getPlayerRating(b.name, ratingMode) - getPlayerRating(a.name, ratingMode))
+        .slice(0, playersNeeded);
     });
-  }, [mySquad, playersNeeded]);
+  }, [mySquad, playersNeeded, ratingMode]);
 
   const toggle = (p) => setSelected((prev) =>
     prev.find((x) => x.name === p.name)
@@ -2158,6 +2223,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
   }, [getRoleCategory, selected]);
 
   const getValidationErrors = () => {
+    if ((mySquad?.length || 0) < squadLimit) return `You need to buy ${squadLimit} players before submitting your XI.`;
     if (selected.length !== playersNeeded) return `Select ${playersNeeded} players.`;
     if (roleSummary.bat < 2) return 'Must have at least 2 Batsmen';
     if (roleSummary.bowl < 2) return 'Must have at least 2 Bowlers';
@@ -2177,6 +2243,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
     { key: 'ar', label: 'All-rounders', count: roleSummary.ar, min: 0, color: '#C084FC' },
   ];
   const selectionRules = [
+    `Your squad must contain ${squadLimit} players before the XI can be submitted.`,
     `Select exactly ${playersNeeded} players from your squad.`,
     'Minimum balance required: 2 batters, 2 bowlers, 1 wicketkeeper.',
     'Tap any player card to add or remove them from the XI.',
@@ -2187,23 +2254,27 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
       .map((player) => ({
         ...player,
         photoUrl: getPlayerPhoto(player.name),
+        rating: getPlayerRating(player.name, ratingMode),
         roleCategory: getRoleCategory(player.role),
         isSelected: selectedNames.has(player.name),
       }))
       .sort((a, b) => {
         if (a.isSelected !== b.isSelected) return a.isSelected ? -1 : 1;
+        if (a.rating !== b.rating) return b.rating - a.rating;
         return (b.soldFor || b.base || 0) - (a.soldFor || a.base || 0);
       });
-  }, [getRoleCategory, mySquad, selectedNames]);
+  }, [getRoleCategory, mySquad, ratingMode, selectedNames]);
   const selectedOrdered = useMemo(() => {
     return [...selected].sort((a, b) => {
       const aRole = getRoleCategory(a.role);
       const bRole = getRoleCategory(b.role);
       const order = { wk: 0, bat: 1, ar: 2, bowl: 3, other: 4 };
       if (order[aRole] !== order[bRole]) return order[aRole] - order[bRole];
+      const ratingDiff = getPlayerRating(b.name, ratingMode) - getPlayerRating(a.name, ratingMode);
+      if (ratingDiff !== 0) return ratingDiff;
       return (b.soldFor || b.base || 0) - (a.soldFor || a.base || 0);
     });
-  }, [getRoleCategory, selected]);
+  }, [getRoleCategory, ratingMode, selected]);
 
   if (submitted) return (
     <div style={{ minHeight:'100vh', background:BG, display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -2223,53 +2294,96 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
     </div>
   );
   return (
-    <div style={{ minHeight:'100vh', background:'radial-gradient(circle at top, rgba(232,184,75,0.08), transparent 28%), linear-gradient(180deg, #050608 0%, #080808 55%, #090b12 100%)', padding:'24px 16px 32px' }}>
-      <div style={{ maxWidth:1320, margin:'0 auto' }}>
-        <div style={{ marginBottom:22, background:'linear-gradient(135deg, rgba(13,15,20,0.98), rgba(10,11,17,0.95))', border:`1px solid ${GOLD}22`, borderRadius:24, padding:'22px clamp(18px,3vw,30px)', boxShadow:'0 24px 80px rgba(0,0,0,0.35)' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:18, flexWrap:'wrap' }}>
-            <div style={{ flex:'1 1 420px' }}>
-              <div style={{ fontFamily:"'Bebas Neue'", fontSize:'clamp(30px,6vw,56px)', color:GOLD, letterSpacing:4 }}>SELECT YOUR PLAYING XI</div>
-              <div style={{ color:'#CBD5E1', fontSize:13, lineHeight:1.7, marginTop:8, maxWidth:760 }}>
+    <div className="xi-screen" style={{ minHeight:'100vh', background:'radial-gradient(circle at top, rgba(232,184,75,0.08), transparent 28%), linear-gradient(180deg, #050608 0%, #080808 55%, #090b12 100%)', padding:'24px 16px 32px' }}>
+      <style>{`
+        .xi-screen { overflow-x: hidden; }
+        .xi-shell { max-width: 1320px; margin: 0 auto; }
+        .xi-hero { margin-bottom: 22px; background: linear-gradient(135deg, rgba(13,15,20,0.98), rgba(10,11,17,0.95)); border: 1px solid ${GOLD}22; border-radius: 24px; padding: 22px clamp(18px,3vw,30px); box-shadow: 0 24px 80px rgba(0,0,0,0.35); }
+        .xi-hero-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
+        .xi-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; flex: 1 1 360px; width: 100%; }
+        .xi-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.95fr); gap: 20px; align-items: start; }
+        .xi-squad-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+        .xi-side { min-width: 0; display: grid; gap: 16px; }
+        .xi-role-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+        .xi-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+        .xi-player-card { min-width: 0; touch-action: manipulation; }
+        @media (max-width: 900px) {
+          .xi-screen { padding: 14px 10px calc(22px + env(safe-area-inset-bottom)) !important; }
+          .xi-hero { border-radius: 18px !important; padding: 16px 14px !important; margin-bottom: 14px !important; }
+          .xi-hero-row { gap: 14px !important; }
+          .xi-hero-copy { flex-basis: 100% !important; }
+          .xi-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; flex-basis: 100% !important; gap: 8px !important; }
+          .xi-layout { grid-template-columns: 1fr !important; gap: 14px !important; }
+          .xi-side { order: -1; gap: 12px !important; }
+          .xi-squad-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
+          .xi-card-media { min-height: 104px !important; padding: 10px 10px 8px !important; }
+          .xi-card-avatar { width: 58px !important; height: 58px !important; border-radius: 16px !important; }
+          .xi-card-name { font-size: 14px !important; }
+          .xi-chip { font-size: 9px !important; letter-spacing: 1px !important; padding: 3px 6px !important; }
+        }
+        @media (max-width: 560px) {
+          .xi-title { font-size: 34px !important; letter-spacing: 2.5px !important; }
+          .xi-copy { font-size: 12px !important; line-height: 1.55 !important; }
+          .xi-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+          .xi-metric-card { border-radius: 13px !important; padding: 10px 8px !important; }
+          .xi-metric-label { font-size: 8px !important; letter-spacing: 1.2px !important; }
+          .xi-metric-value { font-size: 27px !important; }
+          .xi-squad-grid { grid-template-columns: 1fr !important; }
+          .xi-role-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
+          .xi-panel { border-radius: 16px !important; padding: 14px !important; }
+          .xi-selected-row { padding: 9px 10px !important; gap: 8px !important; }
+          .xi-selected-price { display: none; }
+          .xi-actions { display: grid !important; grid-template-columns: 1fr; }
+          .xi-actions button { width: 100%; min-width: 0 !important; }
+        }
+      `}</style>
+      <div className="xi-shell">
+        <div className="xi-hero">
+          <div className="xi-hero-row">
+            <div className="xi-hero-copy" style={{ flex:'1 1 420px' }}>
+              <div className="xi-title" style={{ fontFamily:"'Bebas Neue'", fontSize:'clamp(30px,6vw,56px)', color:GOLD, letterSpacing:4 }}>SELECT YOUR PLAYING XI</div>
+              <div className="xi-copy" style={{ color:'#CBD5E1', fontSize:13, lineHeight:1.7, marginTop:8, maxWidth:760 }}>
                 Auction is over. Build your strongest final XI with the best balance across roles.
                 Once every active team submits, results will open automatically.
                 {isHost ? ' If someone leaves, you can still finalize results and the game will auto-pick the best available XI for teams that did not submit.' : ''}
               </div>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))', gap:10, flex:'1 1 360px', width:'100%' }}>
-              <div style={{ background:'rgba(255,255,255,0.03)', border:`1px solid ${BORDER}`, borderRadius:16, padding:'14px 16px' }}>
-                <div style={{ color:'#64748B', fontSize:10, letterSpacing:2 }}>SELECTED</div>
-                <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2, marginTop:4 }}>{selected.length}<span style={{ color:'#475569', fontSize:22 }}>/ {playersNeeded}</span></div>
+            <div className="xi-metrics">
+              <div className="xi-metric-card" style={{ background:'rgba(255,255,255,0.03)', border:`1px solid ${BORDER}`, borderRadius:16, padding:'14px 16px' }}>
+                <div className="xi-metric-label" style={{ color:'#64748B', fontSize:10, letterSpacing:2 }}>SELECTED</div>
+                <div className="xi-metric-value" style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2, marginTop:4 }}>{selected.length}<span style={{ color:'#475569', fontSize:22 }}>/ {playersNeeded}</span></div>
               </div>
-              <div style={{ background:'rgba(255,255,255,0.03)', border:`1px solid ${BORDER}`, borderRadius:16, padding:'14px 16px' }}>
-                <div style={{ color:'#64748B', fontSize:10, letterSpacing:2 }}>TO PICK</div>
-                <div style={{ color:playersLeft === 0 ? '#34D399' : CYAN, fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2, marginTop:4 }}>{playersLeft}</div>
+              <div className="xi-metric-card" style={{ background:'rgba(255,255,255,0.03)', border:`1px solid ${BORDER}`, borderRadius:16, padding:'14px 16px' }}>
+                <div className="xi-metric-label" style={{ color:'#64748B', fontSize:10, letterSpacing:2 }}>TO PICK</div>
+                <div className="xi-metric-value" style={{ color:playersLeft === 0 ? '#34D399' : CYAN, fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2, marginTop:4 }}>{playersLeft}</div>
               </div>
-              <div style={{ background:'rgba(255,255,255,0.03)', border:`1px solid ${BORDER}`, borderRadius:16, padding:'14px 16px' }}>
-                <div style={{ color:'#64748B', fontSize:10, letterSpacing:2 }}>SQUAD SIZE</div>
-                <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2, marginTop:4 }}>{mySquad.length}<span style={{ color:'#475569', fontSize:22 }}>/ {squadLimit}</span></div>
+              <div className="xi-metric-card" style={{ background:'rgba(255,255,255,0.03)', border:`1px solid ${BORDER}`, borderRadius:16, padding:'14px 16px' }}>
+                <div className="xi-metric-label" style={{ color:'#64748B', fontSize:10, letterSpacing:2 }}>SQUAD SIZE</div>
+                <div className="xi-metric-value" style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2, marginTop:4 }}>{mySquad.length}<span style={{ color:'#475569', fontSize:22 }}>/ {squadLimit}</span></div>
               </div>
             </div>
           </div>
         </div>
 
-        <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1.7fr) minmax(320px, 0.95fr)', gap:20, alignItems:'start' }}>
+        <div className="xi-layout">
           <div style={{ minWidth:0 }}>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(190px, 1fr))', gap:14 }}>
+            <div className="xi-squad-grid">
               {enrichedSquad.map((p, i) => {
                 const sel = p.isSelected;
-                const rc = ROLE_C[p.role];
-                const rating = p.rating || p.overall || null;
+                const rc = ROLE_C[p.role] || CYAN;
+                const rating = p.rating || getPlayerRating(p.name, ratingMode);
                 return (
                   <button
+                    className="xi-player-card"
                     key={`${p.name}-${i}`}
                     type="button"
                     onClick={() => toggle(p)}
                     style={{ background:sel?`linear-gradient(180deg, ${rc}22, rgba(13,15,20,0.98) 38%)`:'linear-gradient(180deg, rgba(13,15,20,0.98), rgba(8,10,14,0.98))', border:`1px solid ${sel ? rc : BORDER}`, borderRadius:20, padding:0, cursor:'pointer', transition:'all .18s ease', transform:sel?'translateY(-3px)':'translateY(0)', boxShadow:sel?`0 16px 36px ${rc}20`:'0 10px 30px rgba(0,0,0,0.18)', overflow:'hidden', textAlign:'left' }}
                   >
-                    <div style={{ position:'relative', padding:'14px 14px 10px', minHeight:126, background:sel?`radial-gradient(circle at top right, ${rc}30, transparent 42%)`:'radial-gradient(circle at top right, rgba(34,211,238,0.08), transparent 42%)' }}>
+                    <div className="xi-card-media" style={{ position:'relative', padding:'14px 14px 10px', minHeight:126, background:sel?`radial-gradient(circle at top right, ${rc}30, transparent 42%)`:'radial-gradient(circle at top right, rgba(34,211,238,0.08), transparent 42%)' }}>
                       <div style={{ position:'absolute', inset:0, background:'linear-gradient(180deg, transparent 25%, rgba(0,0,0,0.32) 100%)' }} />
                       <div style={{ position:'relative', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
-                        <div style={{ width:72, height:72, borderRadius:20, overflow:'hidden', border:`1px solid ${sel ? rc : `${rc}50`}`, background:`linear-gradient(180deg, ${rc}16, rgba(255,255,255,0.03))`, flexShrink:0 }}>
+                        <div className="xi-card-avatar" style={{ width:72, height:72, borderRadius:20, overflow:'hidden', border:`1px solid ${sel ? rc : `${rc}50`}`, background:`linear-gradient(180deg, ${rc}16, rgba(255,255,255,0.03))`, flexShrink:0 }}>
                           {p.photoUrl ? (
                             <img src={p.photoUrl} alt={p.name} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top' }} />
                           ) : (
@@ -2279,7 +2393,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
                           )}
                         </div>
                         <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8 }}>
-                          <span style={{ fontSize:10, letterSpacing:2, color:sel ? '#081018' : rc, background:sel ? rc : `${rc}16`, border:`1px solid ${sel ? rc : `${rc}22`}`, borderRadius:999, padding:'4px 8px', fontWeight:800 }}>
+                          <span className="xi-chip" style={{ fontSize:10, letterSpacing:2, color:sel ? '#081018' : rc, background:sel ? rc : `${rc}16`, border:`1px solid ${sel ? rc : `${rc}22`}`, borderRadius:999, padding:'4px 8px', fontWeight:800 }}>
                             {sel ? 'SELECTED' : 'TAP TO PICK'}
                           </span>
                           <span style={{ fontSize:11, color:GOLD, fontWeight:700, letterSpacing:1.2 }}>{fmt(p.soldFor || p.base)}</span>
@@ -2287,7 +2401,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
                       </div>
                     </div>
                     <div style={{ padding:'0 14px 14px' }}>
-                      <div style={{ color:'#F8FAFC', fontWeight:800, fontSize:16, lineHeight:1.2 }}>{p.name}</div>
+                      <div className="xi-card-name" style={{ color:'#F8FAFC', fontWeight:800, fontSize:16, lineHeight:1.2 }}>{p.name}</div>
                       <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginTop:8 }}>
                         <span style={{ fontSize:11, color:rc, fontWeight:800, letterSpacing:1.4 }}>{ROLE_L[p.role]}</span>
                         {p.overseas && (
@@ -2308,8 +2422,8 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
             </div>
           </div>
 
-          <div style={{ minWidth:0, display:'grid', gap:16 }}>
-            <div style={{ background:'linear-gradient(180deg, rgba(13,15,20,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18, boxShadow:'0 18px 50px rgba(0,0,0,0.26)' }}>
+          <div className="xi-side">
+            <div className="xi-panel" style={{ background:'linear-gradient(180deg, rgba(13,15,20,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18, boxShadow:'0 18px 50px rgba(0,0,0,0.26)' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:14 }}>
                 <div>
                   <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:28, letterSpacing:2 }}>Your Final XI</div>
@@ -2318,7 +2432,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
                 <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2 }}>{selected.length}/{playersNeeded}</div>
               </div>
 
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:10, marginBottom:14 }}>
+              <div className="xi-role-grid">
                 {roleTargets.map((item) => {
                   const met = item.count >= item.min;
                   return (
@@ -2341,9 +2455,9 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
                 ) : (
                   selectedOrdered.map((player, index) => {
                     const photoUrl = getPlayerPhoto(player.name);
-                    const rc = ROLE_C[player.role];
+                    const rc = ROLE_C[player.role] || CYAN;
                     return (
-                      <div key={`${player.name}-${index}`} style={{ display:'flex', alignItems:'center', gap:10, border:`1px solid ${BORDER}`, background:'rgba(255,255,255,0.02)', borderRadius:16, padding:'10px 12px' }}>
+                      <div className="xi-selected-row" key={`${player.name}-${index}`} style={{ display:'flex', alignItems:'center', gap:10, border:`1px solid ${BORDER}`, background:'rgba(255,255,255,0.02)', borderRadius:16, padding:'10px 12px' }}>
                         <div style={{ width:34, color:'#475569', fontFamily:"'Bebas Neue'", fontSize:18, letterSpacing:1.5, textAlign:'center', flexShrink:0 }}>{String(index + 1).padStart(2, '0')}</div>
                         <div style={{ width:42, height:42, borderRadius:14, overflow:'hidden', background:`${rc}18`, border:`1px solid ${rc}55`, flexShrink:0 }}>
                           {photoUrl ? (
@@ -2358,7 +2472,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
                           <div style={{ color:'#E2E8F0', fontSize:14, fontWeight:800, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{player.name}</div>
                           <div style={{ color:rc, fontSize:10, fontWeight:800, letterSpacing:1.4, marginTop:4 }}>{ROLE_L[player.role]}</div>
                         </div>
-                        <div style={{ color:GOLD, fontSize:11, fontWeight:800, letterSpacing:1.1, flexShrink:0 }}>{fmt(player.soldFor || player.base)}</div>
+                        <div className="xi-selected-price" style={{ color:GOLD, fontSize:11, fontWeight:800, letterSpacing:1.1, flexShrink:0 }}>{fmt(player.soldFor || player.base)}</div>
                       </div>
                     );
                   })
@@ -2366,7 +2480,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
               </div>
             </div>
 
-            <div style={{ background:'linear-gradient(180deg, rgba(10,13,18,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18 }}>
+            <div className="xi-panel" style={{ background:'linear-gradient(180deg, rgba(10,13,18,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18 }}>
               <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:26, letterSpacing:2 }}>Selection Rules</div>
               <div style={{ display:'grid', gap:10, marginTop:14 }}>
                 {selectionRules.map((rule, index) => (
@@ -2380,10 +2494,12 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
               </div>
             </div>
 
-            <div style={{ textAlign:'center', background:'linear-gradient(180deg, rgba(13,15,20,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18 }}>
+            <div className="xi-panel" style={{ textAlign:'center', background:'linear-gradient(180deg, rgba(13,15,20,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18 }}>
               {validationError && (
                 <div style={{ color:'#F87171', fontSize:13, marginBottom:14, letterSpacing:1.1, fontWeight:800 }}>
-                  {selected.length === playersNeeded ? validationError.toUpperCase() : `PICK ${playersLeft} MORE PLAYER${playersLeft === 1 ? '' : 'S'} TO CONTINUE`}
+                  {(mySquad?.length || 0) < squadLimit
+                    ? `BUY ${squadLimit - (mySquad?.length || 0)} MORE PLAYER${squadLimit - (mySquad?.length || 0) === 1 ? '' : 'S'} TO REACH THE ${squadLimit}-PLAYER SQUAD LIMIT`
+                    : selected.length === playersNeeded ? validationError.toUpperCase() : `PICK ${playersLeft} MORE PLAYER${playersLeft === 1 ? '' : 'S'} TO CONTINUE`}
                 </div>
               )}
               {!validationError && (
@@ -2391,7 +2507,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, isH
                   XI BALANCE CHECK PASSED
                 </div>
               )}
-              <div style={{ display:'flex', justifyContent:'center', gap:12, flexWrap:'wrap' }}>
+              <div className="xi-actions">
                 <button onClick={() => canSubmit && onSubmit(selected)} disabled={!canSubmit}
                   style={{ background:canSubmit?`linear-gradient(135deg,${GOLD},#9a7610)`:'#111', border:`1px solid ${canSubmit?GOLD:'#333'}`, borderRadius:12, padding:'15px 30px', color:canSubmit?'#000':'#555', fontWeight:900, fontSize:16, letterSpacing:3, cursor:canSubmit?'pointer':'not-allowed', fontFamily:"'Barlow Condensed'", minWidth:220 }}>
                   SUBMIT PLAYING XI

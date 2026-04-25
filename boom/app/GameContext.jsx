@@ -22,6 +22,12 @@ const shuffle = arr => { const a = [...arr]; for (let i = a.length - 1; i > 0; i
 const getIncrement = p => p < 2 ? 0.10 : p < 5 ? 0.20 : p < 10 ? 0.25 : 0.50;
 export const fmt = c => c >= 1 ? `₹${c.toFixed(2)} Cr` : `₹${Math.round(c * 100)} L`;
 export const nextBid = c => +(c + getIncrement(c)).toFixed(2);
+export const getOverseasLimitForSquad = (squadLimit) => {
+  const limit = Number(squadLimit) || 15;
+  if (limit >= 25) return 8;
+  if (limit >= 20) return 7;
+  return 6;
+};
 const normalizePlayerName = (name) => String(name || '').replace(/\s*\(WK\)/gi, '').replace(/\./g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 const MEGA_PLAYER_LOOKUP = new Map(
   MEGA_SETS.flatMap((set) => set.players).map((player) => [normalizePlayerName(player.name), player])
@@ -510,9 +516,9 @@ export function GameProvider({ children }) {
     const nb = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
     const osCount = gs.squads[gs.myTeamId].filter(p => p.overseas).length;
     const playerOnAuction = gs.playerQueue[gs.currentIdx];
-    const isMiniMode = (playMode === 'multi' ? lobbyMode === 'mini' : auctionMode === 'mini');
     const maxSquadSize = gs.squadLimit || 15;
-    if (gs.purses[gs.myTeamId] < nb || gs.squads[gs.myTeamId].length >= maxSquadSize || (playerOnAuction.overseas && osCount >= 8)) return;
+    const maxOverseas = getOverseasLimitForSquad(maxSquadSize);
+    if (gs.purses[gs.myTeamId] < nb || gs.squads[gs.myTeamId].length >= maxSquadSize || (playerOnAuction.overseas && osCount >= maxOverseas)) return;
     gs.currentBid = nb; gs.currentBidder = gs.myTeamId; gs.timer = 10;
     gs.bidLog = [{ teamId: gs.myTeamId, bid: nb, isMe: true }, ...gs.bidLog].slice(0, 7);
     syncSingleGS();

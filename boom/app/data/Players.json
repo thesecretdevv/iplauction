@@ -2557,7 +2557,7 @@
         "role": "all_rounder",
         "country": "India",
         "base_price": 50,
-        "photo_url": "https://documents.iplt20.com/ipl/IPLHeadshot2025/54.png",
+        "photo_url": "https://documents.iplt20.com/ipl/IPLHeadshot2026/105.png",
         "stats": {
             "sr": 134.9,
             "avg": 16.2,
@@ -2603,7 +2603,7 @@
         "role": "batsman",
         "country": "India",
         "base_price": 50,
-        "photo_url": "https://documents.iplt20.com/ipl/IPLHeadshot2025/110.png",
+        "photo_url": "https://documents.iplt20.com/ipl/IPLHeadshot2026/148.png",
         "stats": {
             "sr": 133.4,
             "avg": 24.67,
@@ -2800,7 +2800,7 @@
         "created_at": "2026-03-22T19:07:52.742261+00:00",
         "ipl_team_code": "GT",
         "cricapi_player_id": "0d19f2fb-c524-48cf-9330-1f56c4f2ce54",
-        "image_url": null
+        "image_url": "https://documents.iplt20.com/ipl/IPLHeadshot2025/544.png"
     },
     {
         "id": "86bfdb6f-91cc-4805-a873-d404a66c5673",

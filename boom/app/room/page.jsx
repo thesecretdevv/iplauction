@@ -665,7 +665,7 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="rb-icon-btn" onClick={fetchRooms} title="Refresh" style={{ background: '#111' }}>
+            <button className="rb-icon-btn" onClick={fetchRooms} title="Refresh" disabled={loading} style={{ background: '#111', opacity: loading ? 0.55 : 1 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             </button>
             <button className="rb-create-btn" onClick={onCreate} style={{ height: 36, padding: '0 18px' }}>
@@ -716,7 +716,18 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
       {/* ── Rooms list ── */}
       <div className="rb-rooms-list" style={{ padding: '32px 32px 60px', background: '#080808' }}>
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
-          {displayRooms.length === 0 ? (
+          {loading && displayRooms.length === 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+              {[0, 1, 2, 3].map((item) => (
+                <div key={item} style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 16, padding: 24, minHeight: 180, overflow: 'hidden', position: 'relative' }}>
+                  <div style={{ width: '55%', height: 18, background: '#171717', borderRadius: 6, marginBottom: 18 }} />
+                  <div style={{ width: '82%', height: 10, background: '#121212', borderRadius: 6, marginBottom: 10 }} />
+                  <div style={{ width: '64%', height: 10, background: '#121212', borderRadius: 6 }} />
+                  <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)', animation: 'shimmer 1.1s linear infinite' }} />
+                </div>
+              ))}
+            </div>
+          ) : displayRooms.length === 0 ? (
             <div className="rb-empty" style={{ padding: '80px 20px', border: '1px dashed #222', borderRadius: 20 }}>
                <div style={{ fontSize: 40, marginBottom: 16 }}>{activeTab === 'live' ? '🍿' : activeTab === 'completed' ? '🏁' : '🏟️'}</div>
                <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, letterSpacing: 2, color: '#444' }}>
@@ -845,6 +856,7 @@ function RoomContent() {
   const [joinCode,    setJoinCode]    = useState('');
   const [error,       setError]       = useState('');
   const [loading,     setLoading]     = useState(false);
+  const [roomsLoading, setRoomsLoading] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [aMode,       setAMode]       = useState('mega');
@@ -862,6 +874,7 @@ function RoomContent() {
   const [matchmakingTimedOut, setMatchmakingTimedOut] = useState(false);
   const [matchmakingCycle, setMatchmakingCycle] = useState(0);
   const nameRef = useRef(null);
+  const roomsFetchSeqRef = useRef(0);
   const closeDialog = useCallback(() => setDialog(null), []);
   // Keep a ref to the current phase so the pagehide handler always sees fresh value
   const phaseRef = useRef(phase);
@@ -1002,12 +1015,40 @@ function RoomContent() {
 
   // ── Fetch public rooms ──
   const fetchRooms = useCallback(() => {
-    emit('get-rooms', (data) => {
-      console.log("[SOCKET] Received Rooms:", data);
+    const fetchSeq = ++roomsFetchSeqRef.current;
+    let settled = false;
+    setRoomsLoading(true);
+    const applyRooms = (data) => {
+      if (fetchSeq !== roomsFetchSeqRef.current) return;
+      settled = true;
       setServerRooms(data?.active || []);
       setCompletedRooms(data?.completed || []);
       setLiveStats({ rooms: data?.totalRooms || 0, players: data?.totalPlayers || 0 });
-    });
+      setRoomsLoading(false);
+    };
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 5000);
+    const fallbackTimeout = window.setTimeout(() => {
+      if (!settled && fetchSeq === roomsFetchSeqRef.current) setRoomsLoading(false);
+    }, 8000);
+
+    fetch(`${getBackendUrl()}/api/rooms`, { cache: 'no-store', signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        window.clearTimeout(timeout);
+        window.clearTimeout(fallbackTimeout);
+        if (data) applyRooms(data);
+        else throw new Error('Room fetch failed');
+      })
+      .catch(() => {
+        window.clearTimeout(timeout);
+        if (settled) return;
+        emit('get-rooms', (data) => {
+          window.clearTimeout(fallbackTimeout);
+          applyRooms(data);
+        });
+      });
   }, [emit]);
 
   useEffect(() => {
@@ -1788,13 +1829,13 @@ function RoomContent() {
           serverRooms={serverRooms}
           completedRooms={completedRooms}
           fetchRooms={fetchRooms}
-          loading={loading}
+          loading={roomsLoading}
           error={error}
           doJoin={doJoin}
           onRequireName={() => setError('Enter your name to join room')}
           onViewCompleted={viewCompletedRoom}
           liveStats={liveStats}
-          onBack={() => setPhase('home')}
+          onBack={() => router.push('/')}
           onCreate={() => setPhase('create-form')}
           TEAMS={TEAMS}
           GOLD={GOLD}

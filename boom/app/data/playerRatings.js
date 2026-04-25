@@ -73,7 +73,7 @@ export const PLAYER_RATINGS = {
   "Shivam Dube": 87,
   "Rajat Patidar": 86,
   "Nitish Kumar Reddy": 84,
-  "Tim David": 87,
+  "Tim David": 85,
   "Tristan Stubbs": 84,
   "Dewald Brevis": 86,
   "Ashutosh Sharma": 83,
@@ -85,7 +85,7 @@ export const PLAYER_RATINGS = {
   "Devdutt Padikkal": 83,
   "Sherfane Rutherford": 81,
   "Shimron Hetmyer": 80,
-  "Will Jacks": 80,
+  "Will Jacks": 82,
   "Steve Smith": 80,
   "Vaibhav Suryavanshi": 86,
   "Ayush Mhatre": 80,
@@ -128,7 +128,7 @@ export const PLAYER_RATINGS = {
   "Mohammad Siraj": 87,
   "Kagiso Rabada": 86,
   "Matheesha Pathirana": 85,
-  "Suyash Sharma": 85,
+  "Suyash Sharma": 81,
   "Anrich Nortje": 84,
   "Ravi Bishnoi": 84,
   "T. Natarajan": 84,
@@ -137,7 +137,7 @@ export const PLAYER_RATINGS = {
   "Matt Henry": 83,
   "Deepak Chahar": 82,
   "Sandeep Sharma": 84,
-  "Prasidh Krishna": 81,
+  "Prasidh Krishna": 86,
   "Lockie Ferguson": 81,
   "Lungisani Ngidi": 84,
   "Shardul Thakur": 81,
@@ -213,7 +213,7 @@ export const PLAYER_RATINGS = {
   "Marco Jansen": 82,
   "Jason Holder": 80,
   "Washington Sundar": 82,
-  "Venkatesh Iyer": 79,
+  "Venkatesh Iyer": 83,
   "Glenn Phillips": 79,
   "Azmatullah Omarzai": 77,
   "Kyle Mayers": 76,
@@ -319,6 +319,7 @@ export function calculateLeaderboard(teams, mode = 'mini') {
     // If team just has player names:
     // This assumes team objects are formatted correctly.
     const squad = team.squad || []; // Array of complete player objects
+    const requiredSquadSize = Number(team.squadLimit) || 0;
     let playingXI = team.playingXI;
 
     if ((!Array.isArray(playingXI) || playingXI.length === 0) && squad.length > 0) {
@@ -344,8 +345,20 @@ export function calculateLeaderboard(teams, mode = 'mini') {
     const bowlCount = playerScores.filter(p => p.role === 'bowler').length;
     const wkCount = playerScores.filter(p => p.role === 'wicket_keeper').length;
 
-    // Disqualified if < 11 players OR fails role counts
-    const isDisqualified = playingXI.length < 11 || batCount < 2 || bowlCount < 2 || wkCount < 1;
+    const squadShortfall = requiredSquadSize > 0 && squad.length < requiredSquadSize;
+    // Disqualified if the bought squad is incomplete, < 11 players, OR fails role counts
+    const isDisqualified = squadShortfall || playingXI.length < 11 || batCount < 2 || bowlCount < 2 || wkCount < 1;
+    const disqualificationReason = squadShortfall
+      ? `Only ${squad.length}/${requiredSquadSize} players bought`
+      : playingXI.length < 11
+        ? 'Fewer than 11 players in XI'
+        : batCount < 2
+          ? 'Needs at least 2 batters'
+          : bowlCount < 2
+            ? 'Needs at least 2 bowlers'
+            : wkCount < 1
+              ? 'Needs at least 1 wicketkeeper'
+              : '';
 
     const totalScore = playerScores.reduce((sum, p) => sum + p.rating, 0);
     return {
@@ -355,7 +368,10 @@ export function calculateLeaderboard(teams, mode = 'mini') {
       playerScores,
       averageScore: playingXI.length ? Math.round(totalScore / playingXI.length) : 0,
       playingXI,
-      isDisqualified
+      squadSize: squad.length,
+      squadLimit: requiredSquadSize,
+      isDisqualified,
+      disqualificationReason
     };
   });
 
@@ -411,12 +427,12 @@ export const MEGA_PLAYER_RATINGS = {
   "Shubman Gill": 90,
   "Sunil Narine": 90,
   "Suryakumar Yadav": 91,
-  "Tim David": 84,
+  "Tim David": 85,
   "Travis Head": 89,
   "Trent Boult": 89,
   "Varun Chakravarthy": 88,
   "Virat Kohli": 94,
-  "Will Jacks": 80,
+  "Will Jacks": 82,
   "Yashasvi Jaiswal": 89,
   "Yuzvendra Chahal": 90,
 
@@ -456,15 +472,18 @@ export const MEGA_PLAYER_RATINGS = {
   "Matt Henry": 83,
   "Sandeep Sharma": 84,
   "Ashutosh Sharma": 83,
-  "Suyash Sharma": 85,
+  "Suyash Sharma": 81,
   "Ravi Bishnoi": 86,
   "Nitish Kumar Reddy": 84,
   "Devdutt Padikkal": 84,
   "R. Sai Kishore": 80,
-  "Cameron Green": 83,
+  "Cameron Green": 84,
   "David Miller": 84,
   "Washington Sundar": 82,
+  "Ryan Rickelton": 80,
+  "Venkatesh Iyer": 83,
   "Cooper Connolly": 80,
+  "Karun Nair": 79,
   "Rovman Powell": 81,
   "Angkrish Raghuvanshi": 82,
   "Prabhsimran Singh": 82,
@@ -490,13 +509,11 @@ export const MEGA_PLAYER_RATINGS = {
   "Nathan Ellis": 78,
   "Nitish Rana": 76,
   "Nuwan Thushara": 75,
-  "Ryan Rickelton": 80,
   "Xavier Bartlett": 70,
 
   // SET 3
   "Ishant Sharma": 79,
   "Jayant Yadav": 69,
-  "Karun Nair": 79,
   "Manish Pandey": 79,
   "Shahbaz Ahmed": 79,
   "Shahrukh Khan": 78,
@@ -574,7 +591,6 @@ export const MEGA_PLAYER_RATINGS = {
   "Gus Atkinson": 72,
   "Liam Livingstone": 80,
   "Rachin Ravindra": 80,
-  "Venkatesh Iyer": 79,
   "Wanindu Hasaranga": 83,
   "Wiaan Mulder": 66,
 
@@ -1071,11 +1087,15 @@ export const MEGA_AUCTION_SET_ORDER = [
       "Matheesha Pathirana",
       "Matt Henry",
       "Sandeep Sharma",
+      "Prabhsimran Singh",
       "Ravi Bishnoi",
       "Nitish Kumar Reddy",
+      "R. Sai Kishore",
       "Devdutt Padikkal",
       "Cameron Green",
+      "Priyansh Arya",
       "David Miller",
+      "Ryan Rickelton",
       "Washington Sundar",
       "Angkrish Raghuvanshi"
     ],
@@ -1098,14 +1118,12 @@ export const MEGA_AUCTION_SET_ORDER = [
       "Matthew Breetzke",
       "Avesh Khan",
       "Harshal Patel",
-      "Azmatullah Omarzai",
       "Mitchell Owen",
       "Mukesh Kumar",
       "Nandre Burger",
       "Nathan Ellis",
       "Nitish Rana",
       "Nuwan Thushara",
-      "Ryan Rickelton",
       "Xavier Bartlett"
     ],
   },
@@ -1113,10 +1131,10 @@ export const MEGA_AUCTION_SET_ORDER = [
     setName: "Set 3",
     playerNames: [
       "Ishant Sharma",
+      "Azmatullah Omarzai",
       "Jayant Yadav",
       "Karun Nair",
       "Manish Pandey",
-      "R. Sai Kishore",
       "Shahbaz Ahmed",
       "Shahrukh Khan",
       "Tushar Deshpande",
@@ -1165,9 +1183,7 @@ export const MEGA_AUCTION_SET_ORDER = [
       "Naman Dhir",
       "Nehal Wadhera",
       "Nishant Sindhu",
-      "Prabhsimran Singh",
       "Prince Yadav",
-      "Priyansh Arya",
       "Pyla Avinash",
       "Raghu Sharma",
       "Raj Angad Bawa",

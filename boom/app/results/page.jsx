@@ -28,6 +28,7 @@ const TEAM_LOGOS = {
 };
 
 function buildLeaderboardResults(gs, mode, teams) {
+  const squadLimit = Number(gs?.squadLimit) || 15;
   const teamsPayload = teams.map((team) => {
     const squad = gs.squads?.[team.id] || [];
     const rawXI = gs.playingXI?.[team.id] || [];
@@ -45,6 +46,7 @@ function buildLeaderboardResults(gs, mode, teams) {
       teamId: team.id,
       teamName: team.name,
       squad,
+      squadLimit,
       playingXI: xi,
     };
   });
@@ -244,6 +246,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
   // For the active team: decide what to display
   const rawXI    = gs.playingXI?.[activeId] || [];
   const fullSquad = gs.squads?.[activeId] || [];
+  const squadLimit = Number(gs?.squadLimit) || 15;
 
   // Edge-case: player may have submitted <11 or exactly 10 players.
   // If rawXI has ≥ 1 and ≤ 11 players, respect it; otherwise fall back to selectPlayingXI.
@@ -312,7 +315,19 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
   const batCount = normalizedXI.filter(p => p.role === 'batsman').length;
   const bowlCount = normalizedXI.filter(p => p.role === 'bowler').length;
   const wkCount = normalizedXI.filter(p => p.role === 'wicket_keeper').length;
-  const isDisqualified = playingXI.length < 11 || batCount < 2 || bowlCount < 2 || wkCount < 1;
+  const squadShortfall = fullSquad.length < squadLimit;
+  const isDisqualified = squadShortfall || playingXI.length < 11 || batCount < 2 || bowlCount < 2 || wkCount < 1;
+  const disqualificationReason = squadShortfall
+    ? `Only ${fullSquad.length}/${squadLimit} players bought`
+    : playingXI.length < 11
+      ? 'Fewer than 11 players in XI'
+      : batCount < 2
+        ? 'Needs at least 2 batters'
+        : bowlCount < 2
+          ? 'Needs at least 2 bowlers'
+          : wkCount < 1
+            ? 'Needs at least 1 wicketkeeper'
+            : '';
 
   return (
     <div style={{ minHeight: '100vh', background: BG, fontFamily: "'Rajdhani',sans-serif" }}>
@@ -374,6 +389,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
             spent={spent} soldCount={soldCount} unsoldCount={unsoldCount}
             teamTotalRating={teamTotalRating} teamAvgRating={teamAvgRating}
             isDisqualified={isDisqualified}
+            disqualificationReason={disqualificationReason}
             shareText={shareText} shareWhatsApp={shareWhatsApp} downloadSheet={downloadSheet}
             getTeamLabel={getTeamLabel}
           />
@@ -394,16 +410,18 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
 // ─────────────────────────────────────────────────────────────────────────────
 // Squad Tab
 // ─────────────────────────────────────────────────────────────────────────────
-function SquadTab({ gs, mti, mode, teams, activeId, setActiveId, team, displayList, playingXI, fullSquad, spent, soldCount, unsoldCount, teamTotalRating, teamAvgRating, isDisqualified, shareText, shareWhatsApp, downloadSheet, getTeamLabel }) {
+function SquadTab({ gs, mti, mode, teams, activeId, setActiveId, team, displayList, playingXI, fullSquad, spent, soldCount, unsoldCount, teamTotalRating, teamAvgRating, isDisqualified, disqualificationReason, shareText, shareWhatsApp, downloadSheet, getTeamLabel }) {
   return (
     <div style={{ maxWidth: 1600, margin: '0 auto' }}>
       {/* Disqualified Alert */}
-      {isDisqualified && playingXI.length > 0 && (
+      {isDisqualified && (
         <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef444444', borderRadius: 12, padding: '16px 24px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 16, animation: 'fadeUp 0.4s ease' }}>
           <div style={{ fontSize: 28 }}>🚨</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, color: '#ef4444', letterSpacing: 1 }}>SQUAD DISQUALIFIED</div>
-            <div style={{ color: '#ef4444aa', fontSize: 13, letterSpacing: 1, marginTop: 2 }}>This team fails the minimum required criteria: 2 Batters, 2 Bowlers, 1 Wicketkeeper.</div>
+            <div style={{ color: '#ef4444aa', fontSize: 13, letterSpacing: 1, marginTop: 2 }}>
+              {disqualificationReason || 'This team fails the minimum required criteria: 2 Batters, 2 Bowlers, 1 Wicketkeeper.'}
+            </div>
           </div>
         </div>
       )}
@@ -530,12 +548,12 @@ function LeaderboardTab({ gs, mode, mti, teams, isRivals, getTeamLabel }) {
         Each team's <strong style={{ color: '#aaa' }}>Playing XI</strong> is evaluated: every player has a pre-set rating (out of 100) based on IPL 2025 performance &amp; expert analysis.
         The <strong style={{ color: '#aaa' }}>Total Score</strong> is the sum of all 11 player ratings. The <strong style={{ color: '#aaa' }}>Average Score</strong> is Total ÷ XI size.
         {mode?.toLowerCase() === 'mini' ? (
-          <span style={{ color: '#777' }}>Minimum criteria: 2 Batters, 2 Bowlers, 1 Wicketkeeper. Teams failing this are <span style={{ color: '#ef4444' }}>DISQUALIFIED</span>.</span>
+          <span style={{ color: '#777' }}>Minimum criteria: full configured squad size, 2 Batters, 2 Bowlers, 1 Wicketkeeper. Teams failing this are <span style={{ color: '#ef4444' }}>DISQUALIFIED</span>.</span>
         ) : (
-          <span style={{ color: '#777' }}>Selection rules: Best-rated 11 players, max 4 overseas, at least 1 wicket-keeper.</span>
+          <span style={{ color: '#777' }}>Selection rules: full configured squad size, best-rated 11 players, at least 1 wicket-keeper.</span>
         )}
         <br />
-        Teams that submitted fewer than 11 players are scored on their submitted XI size.
+        Teams that bought fewer than the selected squad limit are disqualified.
         <br />
         <span style={{ color: '#333' }}>Rating scale: 90–100 Elite · 80–89 Excellent · 70–79 Good · 60–69 Average · 50–59 Below Avg · &lt;50 Reserve</span>
       </div>
@@ -583,6 +601,8 @@ function LeaderboardTab({ gs, mode, mti, teams, isRivals, getTeamLabel }) {
                   </div>
                   <div style={{ color: '#444', fontSize: 11, marginTop: 2, letterSpacing: 1 }}>
                     Avg: <strong style={{ color: '#777' }}>{r.averageScore}</strong> pts · {r.playingXI.length} players in XI
+                    {r.squadLimit ? ` · Squad ${r.squadSize}/${r.squadLimit}` : ''}
+                    {r.disqualificationReason ? ` · ${r.disqualificationReason}` : ''}
                   </div>
                 </div>
                 {/* Score */}
