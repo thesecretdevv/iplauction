@@ -405,7 +405,7 @@ export const MEGA_PLAYER_RATINGS = {
   "Marcus Stoinis": 84,
   "Mitchell Marsh": 83,
   "Quinton De Kock": 86,
-  "Mitchell Starc": 91,
+  "Mitchell Starc": 89,
   "Mohammad Shami": 88,
   "Mohammad Siraj": 87,
   "MS Dhoni": 85,

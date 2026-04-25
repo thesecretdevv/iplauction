@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, Suspense, useCallback, useMemo, memo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useGame } from '../GameContext';
 import AppDialog from '../components/AppDialog';
@@ -558,6 +558,127 @@ const globalStyles = `
   .lobby-start-btn:disabled { opacity:.4; cursor:not-allowed; }
   .lobby-waiting { font-family:'Courier Prime',monospace; font-size:13px; color:#888; letter-spacing:.1em; text-align:center; padding:14px 32px; border:1px dashed #222; border-radius:6px; animation:pulse 2.5s ease-in-out infinite; }
 
+  /* ── LOBBY CHAT ── */
+  .lc-panel {
+    background: #080b10;
+    border: 1px solid #1a1d27;
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 240px;
+    max-height: 320px;
+    margin-top: 16px;
+  }
+  .lc-header {
+    padding: 8px 13px;
+    border-bottom: 1px solid #171a24;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+  }
+  .lc-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: ${CYAN}; animation: pulse 2.2s ease-in-out infinite;
+  }
+  .lc-title {
+    font-family: 'Courier Prime', monospace;
+    font-size: 9px; letter-spacing: 3px; color: ${CYAN}; text-transform: uppercase;
+  }
+  .lc-messages {
+    flex: 1; overflow-y: auto; padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 7px;
+    overscroll-behavior: contain;
+  }
+  .lc-messages::-webkit-scrollbar { width: 3px; }
+  .lc-messages::-webkit-scrollbar-track { background: transparent; }
+  .lc-messages::-webkit-scrollbar-thumb { background: #1f2430; border-radius: 2px; }
+  .lc-msg { display: flex; flex-direction: column; animation: fadeUp .2s ease both; }
+  .lc-sender { font-size: 9px; font-weight: 700; letter-spacing: .3px; margin-bottom: 2px; }
+  .lc-bubble {
+    max-width: 88%; padding: 5px 9px;
+    border-radius: 10px 10px 10px 3px;
+    font-size: 12px; color: #d1d5db; line-height: 1.4;
+    word-break: break-word;
+    background: #141720; border: 1px solid #222a36;
+  }
+  .lc-bubble.own {
+    align-self: flex-end;
+    border-radius: 10px 10px 3px 10px;
+    background: ${CYAN}14; border-color: ${CYAN}30; color: #e5e7eb;
+  }
+  .lc-empty {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: #374151; gap: 6px; padding: 20px; text-align: center;
+  }
+  .lc-input-row {
+    display: flex; gap: 6px; padding: 8px 10px;
+    border-top: 1px solid #171a24; flex-shrink: 0;
+  }
+  .lc-input {
+    flex: 1; background: #0e1118; border: 1px solid #1e2433;
+    color: #e5e7eb; padding: 7px 11px; border-radius: 9px;
+    font-size: 12px; outline: none; min-width: 0; font-family: inherit;
+  }
+  .lc-input::placeholder { color: #374151; }
+  .lc-send {
+    background: ${CYAN}; color: #000; border: none;
+    min-width: 34px; border-radius: 9px;
+    font-weight: 900; cursor: pointer; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: opacity .15s;
+  }
+  .lc-send:disabled { opacity: .3; cursor: not-allowed; }
+
+  /* Mobile chat FAB + drawer */
+  .lc-fab {
+    position: fixed; right: 16px;
+    bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+    width: 46px; height: 46px; border-radius: 50%;
+    background: linear-gradient(135deg, ${CYAN}, #0891b2);
+    color: #000; border: none;
+    box-shadow: 0 6px 22px ${CYAN}55;
+    font-size: 20px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 120; transition: transform .2s;
+  }
+  .lc-fab:active { transform: scale(.88); }
+  .lc-drawer-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,.52);
+    z-index: 130; backdrop-filter: blur(3px);
+  }
+  .lc-drawer {
+    position: fixed; left: 0; right: 0;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    height: 58vh; z-index: 140;
+    background: #080b12; border: 1px solid #1a1d27;
+    border-radius: 20px 20px 0 0;
+    display: flex; flex-direction: column;
+    box-shadow: 0 -12px 48px rgba(0,0,0,.6);
+    animation: slideUp .26s cubic-bezier(.16,1,.3,1) both;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  .lc-drawer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 16px 10px; border-bottom: 1px solid #171a24; flex-shrink: 0;
+  }
+  .lc-drawer-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 17px; letter-spacing: 2.5px; color: ${CYAN};
+  }
+  .lc-drawer-close {
+    background: none; border: none; color: #555;
+    font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 6px;
+  }
+  /* Desktop: show panel, hide FAB/drawer. Mobile: hide panel, show FAB */
+  @media (min-width: 901px) { .lc-fab { display: none !important; } }
+  @media (max-width: 900px)  { .lc-panel { display: none !important; } }
+
   /* ── Marquee ── */
   .rp-marquee-container { position:fixed; bottom:0; left:0; width:100%; overflow:hidden; background:#000; border-top:1px solid #0d0d0d; z-index:10; padding:6px 0; }
   .rp-marquee-track { display:flex; white-space:nowrap; width:max-content; animation:scrollMq 30s linear infinite; }
@@ -634,6 +755,84 @@ function getPrivateActivityEstimate(publicRooms, publicPlayers) {
     players: playerBase,
   };
 }
+
+// ─── Lobby Chat Box ──────────────────────────────────────────────────────────
+const TEAM_CLRS = {
+  CSK:'#F9CA24',MI:'#4FC3F7',RCB:'#FF5252',KKR:'#CE93D8',SRH:'#FF8A65',
+  DC:'#64B5F6',PBKS:'#EF9A9A',RR:'#F48FB1',GT:'#4DD0E1',LSG:'#81D4FA',
+};
+const LobbyChatBox = memo(function LobbyChatBox({ chatLog, emit, roomCode, myName, isSpectator }) {
+  const [msg, setMsg] = useState('');
+  const endRef = useRef(null);
+
+  const visible = useMemo(
+    () => (chatLog || []).filter(m => m?.type === 'text' || m?.type === 'gif').slice(-80),
+    [chatLog]
+  );
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [visible.length]);
+
+  const send = useCallback((e) => {
+    e.preventDefault();
+    if (!msg.trim() || !roomCode) return;
+    emit('send-chat', { text: msg.trim(), isGif: false });
+    setMsg('');
+  }, [msg, roomCode, emit]);
+
+  return (
+    <>
+      <div className="lc-header">
+        <span className="lc-dot" />
+        <span className="lc-title">Lobby Chat</span>
+      </div>
+      <div className="lc-messages">
+        {visible.length === 0 ? (
+          <div className="lc-empty">
+            <span style={{ fontSize: 22 }}>💬</span>
+            <span style={{ fontSize: 10, letterSpacing: 1 }}>Be the first to say hi!</span>
+          </div>
+        ) : (
+          visible.map(m => {
+            const isOwn = m.senderName === myName;
+            const clr = TEAM_CLRS[m.senderTeamId] || '#22D3EE';
+            return (
+              <div key={m.id} className="lc-msg" style={{ alignItems: isOwn ? 'flex-end' : 'flex-start' }}>
+                <span className="lc-sender" style={{ color: clr }}>{m.senderName}</span>
+                <div className={`lc-bubble${isOwn ? ' own' : ''}`}>
+                  {m.type === 'gif'
+                    ? <img src={m.text} alt="GIF" style={{ maxWidth: '100%', borderRadius: 6 }} />
+                    : m.text}
+                </div>
+              </div>
+            );
+          })
+        )}
+        <div ref={endRef} style={{ height: 1 }} />
+      </div>
+      <div className="lc-input-row">
+        {!isSpectator ? (
+          <form onSubmit={send} style={{ display: 'flex', gap: 6, width: '100%' }}>
+            <input
+              className="lc-input"
+              value={msg}
+              onChange={e => setMsg(e.target.value)}
+              placeholder="Chat with the lobby…"
+              autoComplete="off"
+              autoCorrect="off"
+            />
+            <button type="submit" className="lc-send" disabled={!msg.trim()}>↑</button>
+          </form>
+        ) : (
+          <div style={{ fontSize: 10, color: '#4b5563', letterSpacing: 1, padding: '4px 2px', width: '100%', textAlign: 'center' }}>
+            👁 Spectator mode
+          </div>
+        )}
+      </div>
+    </>
+  );
+});
 
 function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetchRooms, loading, error, doJoin, onRequireName, onViewCompleted, liveStats, onBack, onCreate, TEAMS, GOLD, CYAN }) {
   const [activeTab, setActiveTab] = useState('waiting'); // Show joinable rooms first!
@@ -847,7 +1046,7 @@ function RoomContent() {
     roomCode, setRoomCode, lobbyPlayers, setLobbyPlayers,
     isHost, setIsHost, myName, setMyName, setPlayMode,
     lobbyMode, setLobbyMode, multiGS, setMultiGS, startMultiAuction, isSpectator, setIsSpectator,
-    roomMeta, setRoomMeta,
+    roomMeta, setRoomMeta, chatLog,
   } = useGame();
 
   const [phase,       setPhase]       = useState(() => getPhaseFromAction(action));
@@ -873,6 +1072,7 @@ function RoomContent() {
   const [matchmakingStartedAt, setMatchmakingStartedAt] = useState(null);
   const [matchmakingTimedOut, setMatchmakingTimedOut] = useState(false);
   const [matchmakingCycle, setMatchmakingCycle] = useState(0);
+  const [showLobbyChatMobile, setShowLobbyChatMobile] = useState(false);
   const nameRef = useRef(null);
   const roomsFetchSeqRef = useRef(0);
   const closeDialog = useCallback(() => setDialog(null), []);
@@ -2129,9 +2329,51 @@ function RoomContent() {
                   </div>
                 ))
               )}
+
+              {/* ── Desktop Lobby Chat ── */}
+              <div className="lc-panel">
+                <LobbyChatBox
+                  chatLog={chatLog}
+                  emit={emit}
+                  roomCode={roomCode}
+                  myName={myName}
+                  isSpectator={isSpectator}
+                />
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Mobile Chat FAB + Drawer (lobby only) ── */}
+      {phase === 'lobby' && roomCode && (
+        <>
+          <button
+            className="lc-fab"
+            onClick={() => setShowLobbyChatMobile(v => !v)}
+            aria-label="Open lobby chat"
+          >
+            💬
+          </button>
+          {showLobbyChatMobile && (
+            <>
+              <div className="lc-drawer-bg" onClick={() => setShowLobbyChatMobile(false)} />
+              <div className="lc-drawer">
+                <div className="lc-drawer-header">
+                  <span className="lc-drawer-title">LOBBY CHAT</span>
+                  <button className="lc-drawer-close" onClick={() => setShowLobbyChatMobile(false)}>✕</button>
+                </div>
+                <LobbyChatBox
+                  chatLog={chatLog}
+                  emit={emit}
+                  roomCode={roomCode}
+                  myName={myName}
+                  isSpectator={isSpectator}
+                />
+              </div>
+            </>
+          )}
+        </>
       )}
 
       {/* ── Fixed bottom start bar (lobby only) ── */}
