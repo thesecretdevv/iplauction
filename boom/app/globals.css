@@ -1,6 +1,15 @@
 /* Base reset — keep minimal so landing.css takes full control */
 *, *::before, *::after { box-sizing: border-box; }
 
+:root {
+  --app-bg: #08111b;
+  --app-surface: rgba(9, 13, 20, 0.88);
+  --app-border: rgba(163, 184, 209, 0.14);
+  --app-gold: #e8b84b;
+  --app-cyan: #22d3ee;
+  --app-text: #f5f7fb;
+}
+
 html,
 body {
   margin: 0;
@@ -9,10 +18,56 @@ body {
   width: 100%;
   max-width: 100%;
   min-height: 100vh;
-  background: #080808;
+  background-color: var(--app-bg);
+  background-image:
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.14), transparent 24%),
+    radial-gradient(circle at 85% 12%, rgba(232, 184, 75, 0.16), transparent 26%),
+    radial-gradient(circle at 50% 100%, rgba(76, 29, 149, 0.12), transparent 30%),
+    linear-gradient(180deg, #09111a 0%, #06090f 48%, #05070b 100%);
+  background-attachment: fixed;
   overflow-x: hidden;
+}
+
+body {
+  color: var(--app-text);
 }
 
 a {
   text-decoration: inherit;
+}
+
+.site-brand {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #fff;
+  text-decoration: none;
+  line-height: 1;
+}
+
+.site-brand-domain {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(1.1rem, 2.4vw, 1.7rem);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: lowercase;
+  text-shadow: 0 0 22px rgba(34, 211, 238, 0.12);
+}
+
+.site-brand-tag {
+  color: rgba(232, 184, 75, 0.92);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+}
+
+.site-brand-compact .site-brand-domain {
+  font-size: clamp(1rem, 2vw, 1.28rem);
+  letter-spacing: 0.14em;
+}
+
+.site-brand-compact .site-brand-tag {
+  font-size: 0.62rem;
+  letter-spacing: 0.33em;
 }

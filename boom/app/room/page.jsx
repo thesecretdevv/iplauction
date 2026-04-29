@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense, useCallback, useMemo, memo } fro
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useGame } from '../GameContext';
 import AppDialog from '../components/AppDialog';
+import BrandLink from '../components/BrandLink';
 import { getBackendUrl } from '../lib/backendUrl';
 
 const GOLD  = '#E8B84B';
@@ -899,7 +900,8 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
               PRIVATE ACTIVITY: {privateActivity.rooms}+ ROOMS · {privateActivity.players}+ PLAYERS
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <BrandLink compact={true} />
             <button className="rb-icon-btn" onClick={fetchRooms} title="Refresh" disabled={loading} style={{ background: '#111', opacity: loading ? 0.55 : 1 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             </button>
@@ -1185,16 +1187,18 @@ function RoomContent() {
     };
   }, [phase, matchmakingCycle]);
 
+  const rivalsFoundRoomCode = urlRoomCode || roomCode || multiGS?.roomCode || '';
+
   useEffect(() => {
-    // Use the room code from URL param as primary source so we don't depend on
-    // async state (multiGS set via startTransition may not be ready yet).
-    const effectiveRoom = urlRoomCode || roomCode || multiGS?.roomCode;
-    if (phase !== 'rivals-found' || !effectiveRoom) return undefined;
+    // Use a stable room-code dependency here. If we depend on the whole game
+    // state object, live timer/game updates reset this timeout and trap users
+    // on the VS screen while the auction already runs in the background.
+    if (phase !== 'rivals-found' || !rivalsFoundRoomCode) return undefined;
     const timer = window.setTimeout(() => {
-      router.push(`/auction?room=${effectiveRoom}&mode=RIVALS${isSpectator ? '&spectator=1' : ''}`);
+      router.push(`/auction?room=${rivalsFoundRoomCode}&mode=RIVALS${isSpectator ? '&spectator=1' : ''}`);
     }, 3600);
     return () => window.clearTimeout(timer);
-  }, [phase, multiGS, router, roomCode, urlRoomCode, isSpectator]);
+  }, [phase, rivalsFoundRoomCode, router, isSpectator]);
 
   // ── Auto-focus name input ──
   useEffect(() => {
@@ -1659,7 +1663,7 @@ function RoomContent() {
             else if (phase === 'rivals') router.push('/');
             else router.push('/');
           }}>← Back</button>
-          <div className="rp-brand">IPL <span>AUCTION ONLINE</span></div>
+          <BrandLink compact={true} />
         </nav>
       )}
 

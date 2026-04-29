@@ -2,8 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import CircularGallery from './components/CircularGallery';
+import Stack from './components/Stack';
+import BrandLink from './components/BrandLink';
 import ALL_PLAYERS from './data/Players.json';
 import { getBackendUrl } from './lib/backendUrl';
 import './landing.css';
@@ -34,6 +37,7 @@ const TEAMS = [
 ];
 
 const TEAM_LOOKUP = Object.fromEntries(TEAMS.map((team) => [team.id, team]));
+const PLAYER_LOOKUP = Object.fromEntries(ALL_PLAYERS.map((player) => [player.name, player]));
 
 function getDateKey(date) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -118,6 +122,14 @@ const HOW_STEPS = [
   { num: '03', title: 'WIN THE AUCTION', body: 'The franchise with the best squad balance wins. Star-studded lineups only work if you have the budget to back them. Dominate the table.' },
 ];
 
+const HERO_STACK_PLAYERS = [
+  { name: 'KL Rahul', accent: '#81D4FA', tag: 'BATTING ANCHOR' },
+  { name: 'MS Dhoni', accent: '#F9CA24', tag: 'FINISHER ICON' },
+  { name: 'Rohit Sharma', accent: '#4FC3F7', tag: 'TACTICAL CAPTAIN' },
+  { name: 'Jasprit Bumrah', accent: '#FF5252', tag: 'DEATH OVERS ACE' },
+  { name: 'Virat Kohli', accent: '#E8B84B', tag: 'POWER OPENER' },
+];
+
 /* ── Components ── */
 function CdBox({ value, label, pulse }) {
   return (
@@ -147,12 +159,50 @@ function PlayerCard({ name, role, path }) {
   );
 }
 
+function HeroStackCard({ player }) {
+  const record = PLAYER_LOOKUP[player.name];
+  const photoUrl = record?.photo_url || record?.image_url || '/assets/Kohli.avif';
+
+  return (
+    <div className="l-hero-stack-card">
+      <div className="l-hero-stack-card-glow" style={{ background: `${player.accent}22` }} />
+      <div className="l-hero-stack-card-top">
+        <span className="l-hero-stack-chip" style={{ color: player.accent, borderColor: `${player.accent}66`, background: `${player.accent}12` }}>
+          {player.tag}
+        </span>
+        <span className="l-hero-stack-rating">IPL 2026</span>
+      </div>
+      <div className="l-hero-stack-image-wrap">
+        <img
+          src={photoUrl}
+          alt={`${player.name} IPL player headshot`}
+          className="l-hero-stack-image"
+          loading="eager"
+        />
+      </div>
+      <div className="l-hero-stack-info">
+        <div className="l-hero-stack-name">{player.name}</div>
+        <div className="l-hero-stack-meta">
+          <span>{record?.role || 'Player'}</span>
+          <span>{record?.ipl_team_code || 'IPL'}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Page ── */
 export default function LandingPage() {
   const router = useRouter();
   const [rivalsMatches, setRivalsMatches] = useState([]);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [isCompactCard, setIsCompactCard] = useState(false);
+  const heroStackCards = useMemo(
+    () => HERO_STACK_PLAYERS.map((player) => (
+      <HeroStackCard key={player.name} player={player} />
+    )),
+    []
+  );
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -197,8 +247,8 @@ export default function LandingPage() {
     <div className="landing-root">
 
       {/* NAVBAR */}
-      <nav className="l-nav anim-hide-init nav-reveal">
-        <div className="l-nav-logo font-bebas">IPL <span style={{ color: '#E8B84B' }}>AUCTION ONLINE</span></div>
+      <nav className="l-nav">
+        <BrandLink compact={true} className="l-nav-logo" />
 
         <div className="l-nav-links">
           {[
@@ -222,8 +272,8 @@ export default function LandingPage() {
       {/* HERO */}
       <section className="l-hero">
         {/* Left */}
-        <div className="l-hero-left anim-hide-init hero-reveal">
-          <span className="l-hero-eyebrow">IPL Auction Online Game</span>
+        <div className="l-hero-left">
+          <span className="l-hero-eyebrow">Live Cricket Auction Simulator</span>
 
           <h1 className="l-hero-h1">
             IPL AUCTION<br />
@@ -232,12 +282,12 @@ export default function LandingPage() {
           </h1>
 
           <p className="l-hero-subtext">
-            Play IPL auction online with live bidding, private room codes, and real-time cricket auction strategy.<br />
-            10 franchises. 520+ players. Competitive multiplayer auction rooms.
+            Build your franchise in fast live auctions with private room codes, real-time bidding, and smart purse strategy.<br />
+            10 franchises. 520+ players. Multiplayer rooms that feel like draft night.
           </p>
 
           <p className="l-hero-keywords">
-            IPL auction game, cricket auction online, live auction rooms, and private IPL room matches in one place.
+            Create a room, challenge friends, chase value picks, and assemble your dream IPL squad in one place.
           </p>
 
           {/* Static Game Stats - Refined */}
@@ -278,22 +328,26 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Right – Hero Image */}
+        {/* Right – Hero Stack */}
         <div className="l-hero-right">
-          <div className="l-hero-art-wrap anim-hide-init hero-reveal" style={{ animationDelay: '0.4s' }}>
-            {/* Ambient Gold Glow Behind Players */}
+          <div className="l-hero-art-wrap">
             <div className="l-hero-glow" />
-
-            {/* Hero Players Image */}
-            <Image
-              className="l-hero-players"
-              src="/assets/Hero_players.png"
-              alt="IPL Auction Online hero artwork showing marquee cricket players ready for a live auction game"
-              width={1280}
-              height={713}
-              priority
-              sizes="(max-width: 860px) 100vw, 45vw"
-            />
+            <div className="l-hero-stack-shell">
+              <div className="l-hero-stack-frame">
+                <Stack
+                  randomRotation={true}
+                  sensitivity={180}
+                  sendToBackOnClick={true}
+                  autoplay={false}
+                  pauseOnHover={false}
+                  mobileClickOnly={true}
+                  cards={heroStackCards}
+                />
+              </div>
+              <div className="l-hero-stack-caption">
+                Drag or tap the stack to cycle marquee players before you jump into the auction.
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -372,7 +426,7 @@ export default function LandingPage() {
       </section>
 
       {/* STATS TICKER */}
-      <div className="l-ticker anim-hide-init sr1">
+      <div className="l-ticker">
         <div className="l-ticker-track marquee-anim">
           {[0, 1].map(i => (
             <div key={i} className="l-ticker-set">
@@ -386,7 +440,7 @@ export default function LandingPage() {
       </div>
 
       {/* MARQUEE PLAYERS */}
-      <section className="l-players anim-hide-init sr2">
+      <section className="l-players">
         <div className="l-players-inner">
           <div className="l-section-title-row">
             <div className="l-gold-bar" />
@@ -415,7 +469,7 @@ export default function LandingPage() {
       </section>
 
       {/* HOW IT WORKS */}
-      <section className="l-how anim-hide-init sr3">
+      <section className="l-how">
         <div className="l-how-grid">
           {HOW_STEPS.map(({ num, title, body }) => (
             <div key={num} className="l-step">
@@ -436,7 +490,7 @@ export default function LandingPage() {
             <div
               key={t.id}
               className="l-team-badge"
-              onClick={() => router.push('/teams')}
+              onClick={() => router.push(`/teams?team=${encodeURIComponent(t.id)}`)}
               title={t.name}
               style={{ borderColor: '#1c1c1c', background: `${t.color}08` }}
             >
@@ -457,8 +511,8 @@ export default function LandingPage() {
         <div className="l-footer-inner">
           <div className="l-footer-top">
             <div className="l-footer-brand">
-              <div className="l-footer-logo font-bebas">IPL <span style={{ color: '#E8B84B' }}>AUCTION ONLINE</span></div>
-              <p className="l-footer-tagline">The free online IPL auction game.</p>
+              <BrandLink className="l-footer-logo" />
+              <p className="l-footer-tagline">The free online IPL auction game at iplauction.fun.</p>
             </div>
             <div className="l-footer-links">
               {[
@@ -467,7 +521,7 @@ export default function LandingPage() {
                 { label: 'Teams', href: '/teams' },
                 { label: 'Live Rooms', href: '/room?action=browse' },
               ].map((link) => (
-                <a key={link.label} href={link.href} className="l-footer-link">{link.label}</a>
+                <Link key={link.label} href={link.href} className="l-footer-link">{link.label}</Link>
               ))}
             </div>
           </div>

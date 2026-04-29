@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import BrandLink from '../components/BrandLink';
 import { SQUADS } from '../data/squads';
 
 // Logo map — matches filenames in /public/assets
@@ -22,24 +23,56 @@ export default function TeamsPage() {
   const router = useRouter();
   const [selectedTeam, setSelectedTeam] = useState(null);
 
+  useEffect(() => {
+    const syncSelectedTeamFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const requestedTeamId = params.get('team');
+
+      if (!requestedTeamId) {
+        setSelectedTeam(null);
+        return;
+      }
+
+      const matchedTeam = SQUADS.find((team) => team.id === requestedTeamId.toUpperCase()) || null;
+      setSelectedTeam(matchedTeam);
+    };
+
+    syncSelectedTeamFromUrl();
+    window.addEventListener('popstate', syncSelectedTeamFromUrl);
+
+    return () => {
+      window.removeEventListener('popstate', syncSelectedTeamFromUrl);
+    };
+  }, []);
+
+  function openTeam(team) {
+    setSelectedTeam(team);
+    router.replace(`/teams?team=${encodeURIComponent(team.id)}`, { scroll: false });
+  }
+
+  function clearSelectedTeam() {
+    setSelectedTeam(null);
+    router.replace('/teams', { scroll: false });
+  }
+
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#080808', color: '#fff', fontFamily: "'Courier Prime', monospace" }}>
+    <div className="min-h-screen" style={{ background: 'transparent', color: '#fff', fontFamily: "'Courier Prime', monospace" }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px' }}>
 
         {/* HEADER */}
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '48px', borderBottom: '1px solid #1a1a1a', paddingBottom: '24px' }}>
-          <button
-            onClick={() => selectedTeam ? setSelectedTeam(null) : router.push('/')}
-            style={{ color: '#E8B84B', cursor: 'pointer', background: 'transparent', border: 'none', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '2px', textTransform: 'uppercase', fontSize: '13px' }}
-            onMouseOver={e => e.target.style.color = '#fff'}
-            onMouseOut={e => e.target.style.color = '#E8B84B'}
-          >
-            {selectedTeam ? '← All Franchises' : '← Back to Home'}
-          </button>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '48px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '24px', gap: '18px', flexWrap: 'wrap' }}>
+          <BrandLink compact={true} />
           <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'clamp(2rem,5vw,3.5rem)', margin: 0, letterSpacing: '4px', textAlign: 'center', flex: 1 }}>
             IPL 2026 <span style={{ color: '#E8B84B' }}>FRANCHISES</span>
           </h1>
-          <div className="mobile-hide" style={{ width: '140px' }} />
+          <button
+            onClick={() => selectedTeam ? clearSelectedTeam() : router.push('/')}
+            style={{ color: '#E8B84B', cursor: 'pointer', background: 'rgba(232,184,75,0.08)', border: '1px solid rgba(232,184,75,0.25)', borderRadius: '999px', padding: '10px 16px', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '2px', textTransform: 'uppercase', fontSize: '13px' }}
+            onMouseOver={e => e.target.style.color = '#fff'}
+            onMouseOut={e => e.target.style.color = '#E8B84B'}
+          >
+            {selectedTeam ? 'All Franchises' : 'Back Home'}
+          </button>
         </header>
 
         <style dangerouslySetInnerHTML={{__html: `
@@ -53,7 +86,7 @@ export default function TeamsPage() {
         `}} />
 
         {selectedTeam ? (
-          <TeamDetails team={selectedTeam} onBack={() => setSelectedTeam(null)} />
+          <TeamDetails team={selectedTeam} onBack={clearSelectedTeam} />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
             {SQUADS.map(team => {
@@ -61,16 +94,16 @@ export default function TeamsPage() {
               return (
                 <div
                   key={team.id}
-                  onClick={() => setSelectedTeam(team)}
+                  onClick={() => openTeam(team)}
                   style={{
-                    backgroundColor: '#0d0d0d',
+                    backgroundColor: 'rgba(10, 14, 22, 0.82)',
                     border: `1px solid ${team.primaryColor}30`,
                     padding: '28px 24px',
                     borderRadius: '12px',
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
                     cursor: 'pointer', transition: 'all 0.22s cubic-bezier(.175,.885,.32,1.275)',
                     position: 'relative', overflow: 'hidden',
-                    background: `linear-gradient(160deg, ${team.primaryColor}0a, #0d0d0d)`
+                    background: `linear-gradient(160deg, ${team.primaryColor}12, rgba(10,14,22,0.92))`
                   }}
                   onMouseOver={e => {
                     e.currentTarget.style.borderColor = team.primaryColor;
@@ -162,7 +195,7 @@ function TeamDetails({ team, onBack }) {
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
             {[['Captain', team.captain], ['Head Coach', team.coach], ['Home Ground', team.home]].map(([label, val]) => (
-              <div key={label} style={{ backgroundColor: '#111', padding: '14px 16px', border: '1px solid #1a1a1a', borderRadius: '6px', borderLeft: `3px solid ${team.primaryColor}` }}>
+              <div key={label} style={{ backgroundColor: 'rgba(12,16,24,0.9)', padding: '14px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', borderLeft: `3px solid ${team.primaryColor}` }}>
                 <span style={{ color: '#555', textTransform: 'uppercase', fontSize: '9px', letterSpacing: '2px', display: 'block', marginBottom: '6px' }}>{label}</span>
                 <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, color: '#ddd', letterSpacing: '1px', fontSize: '15px' }}>{val}</span>
               </div>
@@ -186,7 +219,7 @@ function TeamDetails({ team, onBack }) {
 
 function RoleSection({ title, players, color }) {
   return (
-    <div style={{ backgroundColor: '#0A0A0A', border: '1px solid #1A1A1A', padding: '24px', borderRadius: '10px', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ backgroundColor: 'rgba(10,14,22,0.88)', border: '1px solid rgba(255,255,255,0.08)', padding: '24px', borderRadius: '10px', position: 'relative', overflow: 'hidden', backdropFilter: 'blur(12px)' }}>
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '3px', backgroundColor: color }} />
       <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.8rem', margin: '0 0 20px 0', color: '#E8B84B', display: 'flex', alignItems: 'center', gap: '12px' }}>
         {title}

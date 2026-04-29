@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/react"
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import './globals.css';
 import { GameProvider } from './GameContext';
+import ClickSpark from './components/ClickSpark';
 
 export const metadata = {
   title: 'IPL Auction Online Game | Live Cricket Auction Simulator',
@@ -63,11 +64,11 @@ export default function RootLayout({ children }) {
         <link
           rel="preload"
           as="style"
-          href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=Barlow+Condensed:wght@300;400;600;700;900&family=Courier+Prime:wght@400;700&family=Montserrat:wght@700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=Barlow+Condensed:wght@300;400;600;700;900&family=Courier+Prime:wght@400;700&family=Montserrat:wght@700&family=Orbitron:wght@600;700;800&display=swap"
         />
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=Barlow+Condensed:wght@300;400;600;700;900&family=Courier+Prime:wght@400;700&family=Montserrat:wght@700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=Barlow+Condensed:wght@300;400;600;700;900&family=Courier+Prime:wght@400;700&family=Montserrat:wght@700&family=Orbitron:wght@600;700;800&display=swap"
         />
         {/* Google tag (gtag.js) */}
         <Script
@@ -92,7 +93,15 @@ export default function RootLayout({ children }) {
         </Script>
       </head>
       <body>
-        <GameProvider>{children}</GameProvider>
+        <ClickSpark
+          sparkColor="#E8B84B"
+          sparkSize={12}
+          sparkRadius={15}
+          sparkCount={8}
+          duration={400}
+        >
+          <GameProvider>{children}</GameProvider>
+        </ClickSpark>
         <Analytics />
         <SpeedInsights />
       </body>

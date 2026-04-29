@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import BrandLink from '../components/BrandLink';
 import { getBackendUrl } from '../lib/backendUrl';
 
 const GOLD = '#E8B84B';
@@ -80,12 +81,15 @@ export default function SchedulePage() {
   }, [matches]);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#060606', color: '#fff' }}>
-      <div style={{ position: 'sticky', top: 0, zIndex: 10, backdropFilter: 'blur(12px)', background: 'rgba(6,6,6,0.92)', borderBottom: '1px solid #131313' }}>
+    <div style={{ minHeight: '100vh', background: 'transparent', color: '#fff' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 10, backdropFilter: 'blur(12px)', background: 'rgba(6,10,16,0.82)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <div style={{ maxWidth: 1240, margin: '0 auto', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <BrandLink compact={true} />
+            <div>
             <div style={{ color: GOLD, fontSize: 11, letterSpacing: 3, fontWeight: 800, marginBottom: 6 }}>IPL 2026</div>
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 42, letterSpacing: 1.5 }}>FULL SCHEDULE</div>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <Link href="/" style={{ border: '1px solid #272727', color: '#fff', textDecoration: 'none', borderRadius: 999, padding: '11px 16px', fontWeight: 800, letterSpacing: 1 }}>HOME</Link>
@@ -97,15 +101,15 @@ export default function SchedulePage() {
 
       <div style={{ maxWidth: 1240, margin: '0 auto', padding: '36px 24px 64px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 28 }}>
-          <div style={{ padding: '18px 18px', borderRadius: 18, border: '1px solid #1a1a1a', background: 'linear-gradient(160deg, rgba(232,184,75,0.14), rgba(11,11,11,0.96))' }}>
+          <div style={{ padding: '18px 18px', borderRadius: 18, border: '1px solid rgba(255,255,255,0.08)', background: 'linear-gradient(160deg, rgba(232,184,75,0.18), rgba(11,14,21,0.94))' }}>
             <div style={{ color: '#8b8b8b', fontSize: 11, letterSpacing: 2 }}>SEASON WINDOW</div>
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: GOLD }}>28 MAR - 24 MAY</div>
           </div>
-          <div style={{ padding: '18px 18px', borderRadius: 18, border: '1px solid #1a1a1a', background: 'linear-gradient(160deg, rgba(34,211,238,0.14), rgba(11,11,11,0.96))' }}>
+          <div style={{ padding: '18px 18px', borderRadius: 18, border: '1px solid rgba(255,255,255,0.08)', background: 'linear-gradient(160deg, rgba(34,211,238,0.18), rgba(11,14,21,0.94))' }}>
             <div style={{ color: '#8b8b8b', fontSize: 11, letterSpacing: 2 }}>TOTAL MATCHES</div>
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: CYAN }}>{matches.length || 70}</div>
           </div>
-          <div style={{ padding: '18px 18px', borderRadius: 18, border: '1px solid #1a1a1a', background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(11,11,11,0.96))' }}>
+          <div style={{ padding: '18px 18px', borderRadius: 18, border: '1px solid rgba(255,255,255,0.08)', background: 'linear-gradient(160deg, rgba(255,255,255,0.08), rgba(11,14,21,0.94))' }}>
             <div style={{ color: '#8b8b8b', fontSize: 11, letterSpacing: 2 }}>MATCH WINDOWS</div>
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32 }}>3:30 PM / 7:30 PM</div>
           </div>
@@ -122,7 +126,7 @@ export default function SchedulePage() {
               {monthMatches.map((match) => {
                 const state = getMatchState(match, nowMs);
                 return (
-                  <div key={match.key} style={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr) auto', gap: 18, alignItems: 'center', border: '1px solid #1a1a1a', background: '#0b0b0d', borderRadius: 20, padding: '18px 18px' }}>
+                  <div key={match.key} style={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr) auto', gap: 18, alignItems: 'center', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(11,14,21,0.9)', borderRadius: 20, padding: '18px 18px', backdropFilter: 'blur(12px)' }}>
                     <div>
                       <div style={{ color: GOLD, fontFamily: "'Bebas Neue', sans-serif", fontSize: 30, letterSpacing: 1 }}>#{match.matchNumber}</div>
                       <div style={{ color: '#7f8794', fontSize: 11, letterSpacing: 1.4 }}>MATCH</div>

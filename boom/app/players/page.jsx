@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import BrandLink from '../components/BrandLink';
 import playersData from '../data/Players.json';
 import PlayerFlipCard from '../components/PlayerFlipCard';
 
@@ -39,26 +40,19 @@ export default function PlayersPage() {
   const displayedPlayers = filteredPlayers.slice(0, visibleCount);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#080808', color: '#fff', fontFamily: "'Courier Prime', monospace", minHeight: '100vh', padding: '24px 5vw' }}>
+    <div className="min-h-screen" style={{ background: 'transparent', color: '#fff', fontFamily: "'Courier Prime', monospace", minHeight: '100vh', padding: '24px 5vw' }}>
       <div style={{ width: '100%', margin: '0 auto' }}>
         
-        <header style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '1px solid #222', paddingBottom: '24px', gap: '24px' }}>
-          <button 
-            onClick={() => router.push('/')}
-            style={{ color: '#E8B84B', cursor: 'pointer', background: 'transparent', border: 'none', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '2px', textTransform: 'uppercase' }}
-            onMouseOver={e => e.target.style.color = '#fff'}
-            onMouseOut={e => e.target.style.color = '#E8B84B'}
-          >
-            ← BACK TO HOME
-          </button>
+        <header style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '24px', gap: '24px' }}>
+          <BrandLink compact={true} />
           <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '3.5rem', margin: 0, letterSpacing: '4px', color: '#E8B84B' }}>
             PLAYER <span style={{ color: '#fff' }}>DIRECTORY</span>
           </h1>
-          <div style={{ color: '#555', fontSize: '0.875rem' }}>{filteredPlayers.length} matches / {playersData.length} total</div>
+          <div style={{ color: '#9aa4b2', fontSize: '0.875rem' }}>{filteredPlayers.length} matches / {playersData.length} total</div>
         </header>
 
         {/* Filters Panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '32px', backgroundColor: '#111', padding: '24px', border: '1px solid #222', borderRadius: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '32px', backgroundColor: 'rgba(11,15,23,0.86)', padding: '24px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '18px', backdropFilter: 'blur(12px)' }}>
           
           {/* Search Row */}
           <input 
@@ -66,7 +60,7 @@ export default function PlayersPage() {
             placeholder="Search players by name..." 
             value={search}
             onChange={e => { setSearch(e.target.value); setVisibleCount(24); }}
-            style={{ width: '100%', backgroundColor: '#050505', border: '1px solid #333', color: '#fff', padding: '16px 20px', fontSize: '1.2rem', borderRadius: '4px', outline: 'none', fontFamily: 'inherit' }}
+            style={{ width: '100%', backgroundColor: 'rgba(4,7,12,0.94)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', padding: '16px 20px', fontSize: '1.2rem', borderRadius: '12px', outline: 'none', fontFamily: 'inherit' }}
             onFocus={e => e.target.style.borderColor = '#E8B84B'}
             onBlur={e => e.target.style.borderColor = '#333'}
           />
@@ -83,8 +77,8 @@ export default function PlayersPage() {
                     padding: '8px 16px',
                     borderRadius: '20px',
                     border: '1px solid',
-                    borderColor: filterRole === role ? '#E8B84B' : '#333',
-                    backgroundColor: filterRole === role ? '#E8B84B' : '#050505',
+                    borderColor: filterRole === role ? '#E8B84B' : 'rgba(255,255,255,0.12)',
+                    backgroundColor: filterRole === role ? '#E8B84B' : 'rgba(4,7,12,0.94)',
                     color: filterRole === role ? '#000' : '#fff',
                     cursor: 'pointer',
                     fontWeight: filterRole === role ? 'bold' : 'normal',
@@ -106,8 +100,8 @@ export default function PlayersPage() {
                     padding: '8px 16px',
                     borderRadius: '20px',
                     border: '1px solid',
-                    borderColor: filterNation === nation ? '#00BCD4' : '#333',
-                    backgroundColor: filterNation === nation ? '#00BCD4' : '#050505',
+                    borderColor: filterNation === nation ? '#00BCD4' : 'rgba(255,255,255,0.12)',
+                    backgroundColor: filterNation === nation ? '#00BCD4' : 'rgba(4,7,12,0.94)',
                     color: filterNation === nation ? '#000' : '#fff',
                     cursor: 'pointer',
                     fontWeight: filterNation === nation ? 'bold' : 'normal',
@@ -125,6 +119,7 @@ export default function PlayersPage() {
             .filters-container { gap: 16px !important; }
             header h1 { font-size: 2.5rem !important; }
             header { flex-direction: column; text-align: center; gap: 16px !important; }
+            header .site-brand { align-items: center; }
           }
         `}} />
 

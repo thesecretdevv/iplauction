@@ -483,7 +483,8 @@ export const MEGA_PLAYER_RATINGS = {
   "Ryan Rickelton": 80,
   "Venkatesh Iyer": 83,
   "Cooper Connolly": 80,
-  "Karun Nair": 79,
+  "Nitish Rana": 82,
+  "Karun Nair": 80,
   "Rovman Powell": 81,
   "Angkrish Raghuvanshi": 82,
   "Prabhsimran Singh": 82,
@@ -507,7 +508,6 @@ export const MEGA_PLAYER_RATINGS = {
   "Mukesh Kumar": 77,
   "Nandre Burger": 77,
   "Nathan Ellis": 78,
-  "Nitish Rana": 76,
   "Nuwan Thushara": 75,
   "Xavier Bartlett": 70,
 
@@ -1093,6 +1093,7 @@ export const MEGA_AUCTION_SET_ORDER = [
       "R. Sai Kishore",
       "Devdutt Padikkal",
       "Cameron Green",
+      "Nitish Rana",
       "Priyansh Arya",
       "David Miller",
       "Ryan Rickelton",
@@ -1122,7 +1123,6 @@ export const MEGA_AUCTION_SET_ORDER = [
       "Mukesh Kumar",
       "Nandre Burger",
       "Nathan Ellis",
-      "Nitish Rana",
       "Nuwan Thushara",
       "Xavier Bartlett"
     ],
