@@ -4,6 +4,34 @@ import { useRef, useEffect, useCallback } from "react";
 import { io } from "socket.io-client";
 import { getSocketUrl } from "../app/lib/backendUrl";
 
+const AUDIO_MUTE_STORAGE_KEY = "ipl_audio_muted";
+let audioMuted = false;
+
+function readStoredAudioMuted() {
+    if (typeof window === "undefined") return false;
+    try {
+        return localStorage.getItem(AUDIO_MUTE_STORAGE_KEY) === "1";
+    } catch {
+        return false;
+    }
+}
+
+export function isAudioMuted() {
+    if (typeof window !== "undefined") {
+        audioMuted = readStoredAudioMuted();
+    }
+    return audioMuted;
+}
+
+export function setAudioMuted(nextMuted) {
+    audioMuted = !!nextMuted;
+    if (typeof window !== "undefined") {
+        try {
+            localStorage.setItem(AUDIO_MUTE_STORAGE_KEY, audioMuted ? "1" : "0");
+        } catch { }
+    }
+}
+
 export function useSocket() {
     const sock = useRef(null);
 
@@ -53,6 +81,7 @@ export function useSocket() {
 let audioCtx = null;
 export function playPulse() {
     try {
+        if (isAudioMuted()) return;
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
@@ -69,6 +98,7 @@ export function playPulse() {
 
 export function playSaleSound(isSold = true) {
     try {
+        if (isAudioMuted()) return;
         const audio = new Audio(isSold ? '/assets/tadaa.mp3' : '/assets/fahhh.mp3');
         audio.volume = 0.6;
         audio.play().catch(e => console.warn("Audio play failed:", e));

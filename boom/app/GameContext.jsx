@@ -118,6 +118,7 @@ function mergeGameState(prev, next) {
     roomName: next.roomName ?? prev.roomName,
     roomType: next.roomType ?? prev.roomType,
     auctionMode: next.auctionMode ?? prev.auctionMode,
+    showPlayerRatings: next.showPlayerRatings ?? prev.showPlayerRatings,
     totalPlayers: next.totalPlayers ?? prev.totalPlayers,
     timerDuration: next.timerDuration ?? prev.timerDuration,
     squadLimit: next.squadLimit ?? prev.squadLimit,
@@ -252,6 +253,7 @@ export function GameProvider({ children }) {
             activeTeamIds: res.activeTeamIds || null,
             rivalsMatch: res.rivalsMatch || null,
             roomName: res.roomName || null,
+            showPlayerRatings: !!res.showPlayerRatings,
           });
           if (res.roomStatus === "active") {
             setMultiGS(res.gameState);
@@ -327,7 +329,7 @@ export function GameProvider({ children }) {
   // Socket listeners for multiplayer
   useEffect(() => {
     if (playMode !== "multi") return;
-    const off1 = on("lobby-update", ({ players, auctionMode: m, hostId, roomType, activeTeamIds, rivalsMatch, roomName, squadLimit }) => {
+    const off1 = on("lobby-update", ({ players, auctionMode: m, hostId, roomType, activeTeamIds, rivalsMatch, roomName, squadLimit, showPlayerRatings }) => {
       setLobbyPlayers(players);
       if (m) setLobbyMode(m);
       if (hostId) setIsHost(hostId === playerId);
@@ -337,6 +339,7 @@ export function GameProvider({ children }) {
         rivalsMatch: rivalsMatch || prev?.rivalsMatch || null,
         roomName: roomName || prev?.roomName || null,
         squadLimit: squadLimit || prev?.squadLimit || null,
+        showPlayerRatings: showPlayerRatings ?? prev?.showPlayerRatings ?? false,
       }));
     });
     const off2 = on("game-started", (gs) => {
@@ -350,6 +353,7 @@ export function GameProvider({ children }) {
           rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
           roomName: gs?.roomName || prev?.roomName || null,
           squadLimit: gs?.squadLimit || prev?.squadLimit || null,
+          showPlayerRatings: gs?.showPlayerRatings ?? prev?.showPlayerRatings ?? false,
         }));
       });
       if (gs?.roomType === 'rivals' && pathname === '/room') {
@@ -367,6 +371,7 @@ export function GameProvider({ children }) {
           rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
           roomName: gs?.roomName || prev?.roomName || null,
           squadLimit: gs?.squadLimit || prev?.squadLimit || null,
+          showPlayerRatings: gs?.showPlayerRatings ?? prev?.showPlayerRatings ?? false,
         }));
       });
     });
@@ -380,6 +385,7 @@ export function GameProvider({ children }) {
           rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
           roomName: gs?.roomName || prev?.roomName || null,
           squadLimit: gs?.squadLimit || prev?.squadLimit || null,
+          showPlayerRatings: gs?.showPlayerRatings ?? prev?.showPlayerRatings ?? false,
         }));
       });
       router.push(buildUrl('/results', { room: roomCode || gs?.roomCode, mode: (lobbyMode || gs?.auctionMode || 'MEGA').toUpperCase() }));
@@ -614,6 +620,7 @@ export function GameProvider({ children }) {
         rivalsMatch: res.rivalsMatch || null,
         roomName: null,
         squadLimit: res.squadLimit || null,
+        showPlayerRatings: !!res.showPlayerRatings,
       });
       router.push(buildUrl('/room', { action: 'lobby', room: res.code, public: !isPrivate }));
     });
@@ -639,6 +646,7 @@ export function GameProvider({ children }) {
           rivalsMatch: res.rivalsMatch || null,
           roomName: res.roomName || null,
           squadLimit: res.squadLimit || null,
+          showPlayerRatings: !!res.showPlayerRatings,
         });
 
         if (res.roomStatus === "active") {

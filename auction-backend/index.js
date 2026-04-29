@@ -137,6 +137,7 @@ function getLobbyStatePayload(room) {
     return {
         players: Object.values(room.players).map(player => ({ ...player, socketId: undefined })),
         auctionMode: room.auctionMode,
+        showPlayerRatings: !!room.showPlayerRatings,
         squadLimit: room.squadLimit,
         hostId: room.hostId,
         roomType: room.roomType || 'standard',
@@ -736,6 +737,7 @@ function getClientState(room, options = {}) {
         bidLog: gs.bidLog,
         auctionLog: gs.auctionLog.slice(0, 20),
         auctionMode: room.auctionMode || 'mega',
+        showPlayerRatings: !!room.showPlayerRatings,
         totalPlayers: gs.playerQueue?.length || 0,
         roomCode: room.code,
         roomType: room.roomType || 'standard',
@@ -1043,6 +1045,7 @@ io.on('connection', (socket) => {
                 }
             },
             auctionMode: isRivalsRoom ? 'rivals' : null,
+            showPlayerRatings: false,
             squadLimit: isRivalsRoom ? RIVALS_MAX_SQUAD_SIZE : getDefaultSquadLimit('mega'),
             gameState: null,
             timerInterval: null,
@@ -1062,6 +1065,7 @@ io.on('connection', (socket) => {
             ok: true,
             code,
             players: state.players,
+            showPlayerRatings: room.showPlayerRatings,
             squadLimit: room.squadLimit,
             roomType: room.roomType,
             activeTeamIds: room.activeTeamIds,
@@ -1120,6 +1124,7 @@ io.on('connection', (socket) => {
                     }
                 },
                 auctionMode: 'rivals',
+                showPlayerRatings: false,
                 squadLimit: RIVALS_MAX_SQUAD_SIZE,
                 gameState: null,
                 timerInterval: null,
@@ -1153,6 +1158,7 @@ io.on('connection', (socket) => {
                 roomStatus: room.status,
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
+                showPlayerRatings: room.showPlayerRatings,
                 squadLimit: room.squadLimit,
                 roomType: room.roomType,
                 activeTeamIds: getActiveTeamIds(room),
@@ -1207,6 +1213,7 @@ io.on('connection', (socket) => {
             roomStatus: room.status,
             hostId: room.hostId,
             auctionMode: room.auctionMode,
+            showPlayerRatings: room.showPlayerRatings,
             squadLimit: room.squadLimit,
             roomType: room.roomType,
             activeTeamIds: getActiveTeamIds(room),
@@ -1257,6 +1264,7 @@ io.on('connection', (socket) => {
                 roomStatus: isRoomOver(room) ? 'finished' : room.status,
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
+                showPlayerRatings: room.showPlayerRatings,
                 squadLimit: room.squadLimit,
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
@@ -1280,6 +1288,7 @@ io.on('connection', (socket) => {
                 roomStatus: 'finished',
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
+                showPlayerRatings: room.showPlayerRatings,
                 squadLimit: room.squadLimit,
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
@@ -1318,6 +1327,7 @@ io.on('connection', (socket) => {
                     roomStatus: room.status,
                     hostId: room.hostId,
                     auctionMode: room.auctionMode,
+                    showPlayerRatings: room.showPlayerRatings,
                     squadLimit: room.squadLimit,
                     roomType: room.roomType || 'standard',
                     activeTeamIds: getActiveTeamIds(room),
@@ -1332,8 +1342,9 @@ io.on('connection', (socket) => {
             const availableTeamIds = getAvailableTeamIds(room);
             const participantCount = getParticipantPlayers(room).length;
 
-            // If there's an available team and the user wants to play, let them join and choose a team.
-            if (!wantsSpectator && availableTeamIds.length > 0 && participantCount < getRoomPlayerLimit(room)) {
+            // Public active rooms may still accept late players if a franchise slot is free.
+            // Private active rooms should never allow that; late joiners must spectate.
+            if (!room.isPrivate && !wantsSpectator && availableTeamIds.length > 0 && participantCount < getRoomPlayerLimit(room)) {
                 room.players[playerId] = {
                     id: playerId,
                     socketId: socket.id,
@@ -1359,6 +1370,7 @@ io.on('connection', (socket) => {
                     roomStatus: room.status,
                     hostId: room.hostId,
                     auctionMode: room.auctionMode,
+                    showPlayerRatings: room.showPlayerRatings,
                     squadLimit: room.squadLimit,
                     roomType: room.roomType || 'standard',
                     activeTeamIds: getActiveTeamIds(room),
@@ -1395,6 +1407,7 @@ io.on('connection', (socket) => {
                     roomStatus: room.status,
                     hostId: room.hostId,
                     auctionMode: room.auctionMode,
+                    showPlayerRatings: room.showPlayerRatings,
                     roomType: room.roomType || 'standard',
                     activeTeamIds: getActiveTeamIds(room),
                     availableTeamIds,
@@ -1449,6 +1462,7 @@ io.on('connection', (socket) => {
                 roomStatus: room.status,
                 hostId: room.hostId,
                 auctionMode: room.auctionMode,
+                showPlayerRatings: room.showPlayerRatings,
                 squadLimit: room.squadLimit,
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
@@ -1486,6 +1500,7 @@ io.on('connection', (socket) => {
             roomStatus: room.status,
             hostId: room.hostId,
             auctionMode: room.auctionMode,
+            showPlayerRatings: room.showPlayerRatings,
             squadLimit: room.squadLimit,
             roomType: room.roomType || 'standard',
             activeTeamIds: getActiveTeamIds(room),
@@ -1610,6 +1625,24 @@ io.on('connection', (socket) => {
         }
         await persistRoom(room);
         cb?.({ ok: true, squadLimit: nextLimit });
+    });
+
+    socket.on('set-player-ratings-visibility', async ({ showPlayerRatings }, cb) => {
+        if (!currentRoom || !currentPlayerId) return cb?.({ ok: false, error: 'Missing room context' });
+        const room = await getRoom(currentRoom);
+        if (!room || currentPlayerId !== room.hostId) return cb?.({ ok: false, error: 'Only the host can change player ratings visibility' });
+
+        room.showPlayerRatings = !!showPlayerRatings;
+        markRoomDirty(room);
+
+        const state = getLobbyState(room);
+        io.to(currentRoom).emit('lobby-update', state);
+        if (room.gameState) {
+            io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: room.gameState.phase === 'selection' }));
+        }
+
+        await persistRoom(room);
+        cb?.({ ok: true, showPlayerRatings: room.showPlayerRatings });
     });
 
     // ── Start Game ──
@@ -1817,18 +1850,19 @@ io.on('connection', (socket) => {
         cb?.({ ok: true });
     });
 
-    socket.on('finalize-selection', async (cb) => {
-        if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
+    socket.on('finalize-selection', async (_payload, cb) => {
+        const ack = typeof _payload === 'function' ? _payload : cb;
+        if (!currentRoom || !currentPlayerId) return ack?.({ ok: false });
         const room = await getRoom(currentRoom);
-        if (!room || currentPlayerId !== room.hostId || !room.gameState) return cb?.({ ok: false, error: 'Only the host can finalize results' });
-        if (room.gameState.phase !== 'selection') return cb?.({ ok: false, error: 'Selection phase is not active' });
+        if (!room || currentPlayerId !== room.hostId || !room.gameState) return ack?.({ ok: false, error: 'Only the host can finalize results' });
+        if (room.gameState.phase !== 'selection') return ack?.({ ok: false, error: 'Selection phase is not active' });
 
         pushSystemMessage(room, `Results were finalized by ${room.players[currentPlayerId]?.name || 'the host'}`);
         finalizeSelection(room, { reason: room.endReason || 'completed' });
         io.to(currentRoom).emit('game-over', getClientState(room));
         await persistRoom(room);
         if (!room.isPrivate) broadcastRoomList();
-        cb?.({ ok: true });
+        ack?.({ ok: true });
     });
 
     // ── Leave Lobby (explicit navigation away) ────────────────────────────────

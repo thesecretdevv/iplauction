@@ -8,6 +8,7 @@ import { StatsModal } from '../../src/StatsModal';
 import { SquadModal } from '../../src/SquadModal';
 import { getPlayerRating, getPlayerRecord, selectPlayingXI } from '../data/playerRatings';
 import AppDialog from '../components/AppDialog';
+import { isAudioMuted, setAudioMuted } from '../../src/useSocket';
 
 const kohliImg = '/assets/Kohli.avif';
 const CYAN = '#22D3EE';
@@ -38,6 +39,7 @@ function fmtIncrement(currentBid, nextPrice) {
 
 function playBidClick() {
   try {
+    if (isAudioMuted()) return;
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -181,7 +183,7 @@ function AuctionContent() {
     lobbyPlayers, myName, myTeamId, roomCode,
     lobbyMode, auctionMode, isSpectator, chatLog,
     playerId, setRoomCode, setLobbyPlayers, setIsHost, setMyName,
-    setPlayMode, setMultiGS, setLobbyMode, setIsSpectator, setRoomMeta,
+    setPlayMode, setMultiGS, setLobbyMode, setIsSpectator, setRoomMeta, roomMeta,
     handleRestart
   } = useGame();
 
@@ -199,10 +201,16 @@ function AuctionContent() {
   const [expandedTeam, setExpandedTeam] = useState(null);
   const [showDesktopSettings, setShowDesktopSettings] = useState(false);
   const [dialog, setDialog] = useState(null);
+  const [audioMuted, setAudioMutedState] = useState(false);
   const playerQueue = gs?.playerQueue ?? [];
   const currentIdx = gs?.currentIdx ?? -1;
   const currentMode = (isMulti ? lobbyMode : auctionMode) || gs?.auctionMode || 'mega';
   const isRivals = gs?.roomType === 'rivals' || currentMode?.toLowerCase() === 'rivals';
+  const showPlayerRatings = isMulti ? (gs?.showPlayerRatings ?? roomMeta?.showPlayerRatings ?? false) : true;
+
+  useEffect(() => {
+    setAudioMutedState(isAudioMuted());
+  }, []);
 
   const handleBid = useCallback(() => {
     humanBid();
@@ -269,6 +277,16 @@ function AuctionContent() {
   const handleSquadLimitChange = useCallback((limit) => {
     emit('set-squad-limit', { squadLimit: limit });
   }, [emit]);
+  const handleAudioMuteToggle = useCallback(() => {
+    const nextMuted = !audioMuted;
+    setAudioMuted(nextMuted);
+    setAudioMutedState(nextMuted);
+  }, [audioMuted]);
+  const handlePlayerRatingsVisibilityChange = useCallback((shouldShow) => {
+    emit('set-player-ratings-visibility', { showPlayerRatings: shouldShow });
+    setRoomMeta(prev => ({ ...(prev || {}), showPlayerRatings: shouldShow }));
+    setMultiGS(prev => prev ? { ...prev, showPlayerRatings: shouldShow } : prev);
+  }, [emit, setMultiGS, setRoomMeta]);
   const handleFinalizeSelection = useCallback(() => {
     emit('finalize-selection', {}, (res) => {
       if (!res?.ok) {
@@ -503,6 +521,7 @@ function AuctionContent() {
   if (gs.phase === 'finished') { return null; }
 
   const player      = gs.playerQueue[gs.currentIdx];
+  const livePlayerRating = getPlayerRating(player.name, currentMode);
   const pRecord     = getPlayerRecord(player.name);
   const photoUrl    = pRecord?.photo_url || null;
   const stats       = pRecord?.stats || {};
@@ -1126,11 +1145,13 @@ function AuctionContent() {
           }
           .ac-mobile-host-bar {
             display:flex;
+            flex-wrap:wrap;
             gap:8px;
             padding:0 10px 10px;
           }
           .ac-host-action {
             flex:1;
+            min-width:0;
             height:34px;
             padding:0 12px;
             border-radius:999px;
@@ -1233,8 +1254,13 @@ function AuctionContent() {
             )}
 
             <button className="ac-top-btn ac-desktop-only" onClick={openRulesDialog} style={{ marginLeft: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>INFO</span>
+              <span>RULES</span>
               <span style={{ background: `${GOLD}22`, color: GOLD, padding: '2px 6px', borderRadius: 999, fontSize: 9 }}>(i)</span>
+            </button>
+
+            <button className="ac-top-btn ac-desktop-only" onClick={handleAudioMuteToggle} style={{ marginLeft: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>{audioMuted ? 'UNMUTE' : 'MUTE'}</span>
+              <span style={{ fontSize: 12, lineHeight: 1 }}>{audioMuted ? '🔇' : '🔊'}</span>
             </button>
             
             <button className="ac-top-btn ac-desktop-only" onClick={() => setShowUpcoming(true)} style={{ marginLeft: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1305,8 +1331,19 @@ function AuctionContent() {
 
         <div className="ac-mobile-host-bar" style={{ paddingTop: 0 }}>
           <button className="ac-host-action" onClick={openRulesDialog}>
-            INFO (i)
+            RULES
           </button>
+          <button className={`ac-host-action${audioMuted ? ' active' : ''}`} onClick={handleAudioMuteToggle}>
+            {audioMuted ? 'UNMUTE' : 'MUTE'}
+          </button>
+          {isMulti && isHost && (
+            <button
+              className={`ac-host-action${showPlayerRatings ? ' active' : ''}`}
+              onClick={() => handlePlayerRatingsVisibilityChange(!showPlayerRatings)}
+            >
+              RATINGS {showPlayerRatings ? 'ON' : 'OFF'}
+            </button>
+          )}
         </div>
 
         {isRivals && rivalsMatch && (
@@ -1440,6 +1477,45 @@ function AuctionContent() {
               <div style={{ background:'#0f0f12', border:'1px solid #1c1c1c', borderRadius:12, padding:'14px', marginTop:12 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom:10 }}>
                   <div>
+                    <div style={{ color:'#ddd', fontSize:15, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}>📊 Player Ratings</div>
+                    <div style={{ color:'#555', fontSize:11, marginTop:3 }}>Choose whether live bidders can see player ratings during the auction.</div>
+                  </div>
+                  <div style={{ color:showPlayerRatings ? GOLD : '#94A3B8', fontFamily:"'Bebas Neue'", fontSize:20, letterSpacing:1 }}>
+                    {showPlayerRatings ? 'SHOWN' : 'HIDDEN'}
+                  </div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:8 }}>
+                  {[
+                    { label: 'HIDDEN', value: false, color: '#94A3B8' },
+                    { label: 'SHOWN', value: true, color: GOLD },
+                  ].map((option) => (
+                    <button
+                      key={option.label}
+                      onClick={() => {
+                        handlePlayerRatingsVisibilityChange(option.value);
+                        closeDesktopSettings();
+                      }}
+                      style={{
+                        padding:'10px 0',
+                        background: showPlayerRatings === option.value ? option.color : '#18181b',
+                        color: showPlayerRatings === option.value ? '#000' : '#bbb',
+                        border:`1px solid ${showPlayerRatings === option.value ? option.color : '#2a2a2a'}`,
+                        borderRadius:8,
+                        fontFamily:"'Barlow Condensed'",
+                        fontWeight:700,
+                        fontSize:14,
+                        cursor:'pointer',
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ background:'#0f0f12', border:'1px solid #1c1c1c', borderRadius:12, padding:'14px', marginTop:12 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom:10 }}>
+                  <div>
                     <div style={{ color:'#ddd', fontSize:15, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}>🚫 Player Control</div>
                     <div style={{ color:'#555', fontSize:11, marginTop:3 }}>Remove unknown players and free their room slot.</div>
                   </div>
@@ -1492,6 +1568,13 @@ function AuctionContent() {
             <div style={{ fontFamily:"'Bebas Neue'", fontSize:24, color:'#fff', letterSpacing:2, lineHeight:1.1, marginBottom:4 }}>{player.name.toUpperCase()}</div>
             <div style={{ color:ROLE_C[player.role], fontSize:11, fontWeight:700, letterSpacing:3, marginBottom:16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
               <span>{ROLE_L[player.role]} · {player.overseas ? 'OVERSEAS' : 'INDIAN'}</span>
+            </div>
+
+            <div style={{ background:'rgba(255,255,255,.03)', border:`1px solid ${showPlayerRatings ? `${GOLD}33` : BORDER}`, borderRadius:8, padding:'10px 8px', marginBottom:8 }}>
+              <div style={{ color:'#444', fontSize:9, letterSpacing:2, marginBottom:4 }}>PLAYER RATING</div>
+              <div style={{ color:showPlayerRatings ? GOLD : '#6b7280', fontFamily:"'Bebas Neue'", fontSize:20, letterSpacing:1 }}>
+                {showPlayerRatings ? `${livePlayerRating}/100` : 'HIDDEN'}
+              </div>
             </div>
 
             {Object.keys(stats).length > 0 && (
@@ -1573,7 +1656,12 @@ function AuctionContent() {
                       {player.overseas && <span className="ac-os-badge">OS</span>}
                       {player.isWildcard && <span style={{ fontSize: 9, background: `${GOLD}18`, color: GOLD, padding: '1px 5px', borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>WILDCARD</span>}
                     </div>
-                    <div style={{ fontSize:10, color:'#444', letterSpacing:.5, marginTop:2 }}>Base: {fmt(player.base)} · #{gs.currentIdx + 1}/{gs.playerQueue.length}</div>
+                    <div style={{ fontSize:10, color:'#444', letterSpacing:.5, marginTop:2 }}>
+                      Base: {fmt(player.base)} · #{gs.currentIdx + 1}/{gs.playerQueue.length}
+                      <span style={{ color: showPlayerRatings ? GOLD : '#6b7280', marginLeft: 6 }}>
+                        · RTG {showPlayerRatings ? livePlayerRating : 'Hidden'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -2190,10 +2278,24 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
     setSelected((prev) => {
       if (prev.length > 0) return prev;
       const autoXI = selectPlayingXI(mySquad, ratingMode);
-      if (autoXI.length > 0) return autoXI.slice(0, playersNeeded);
-      return [...mySquad]
+      const topRatedSquad = [...mySquad]
         .sort((a, b) => getPlayerRating(b.name, ratingMode) - getPlayerRating(a.name, ratingMode))
         .slice(0, playersNeeded);
+
+      if (autoXI.length >= playersNeeded) {
+        return autoXI.slice(0, playersNeeded);
+      }
+
+      const selectedNames = new Set(autoXI.map((player) => player.name));
+      const filledXI = [...autoXI];
+      for (const player of topRatedSquad) {
+        if (filledXI.length >= playersNeeded) break;
+        if (selectedNames.has(player.name)) continue;
+        filledXI.push(player);
+        selectedNames.add(player.name);
+      }
+
+      return filledXI.slice(0, Math.min(playersNeeded, mySquad.length));
     });
   }, [mySquad, playersNeeded, ratingMode]);
 

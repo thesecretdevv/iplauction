@@ -12,6 +12,7 @@ const CYAN  = '#22D3EE';
 const GREEN = '#4ade80';
 const BG    = '#080808';
 const CARD  = '#0d0d0d';
+const BORDER = '#1d2330';
 
 const TEAMS = [
   { id:'CSK',  name:'Chennai Super Kings',        short:'CSK',  color:'#F9CA24' },
@@ -1098,6 +1099,7 @@ function RoomContent() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [aMode,       setAMode]       = useState('mega');
   const [squadLimit,  setSquadLimit]  = useState(15);
+  const [showPlayerRatings, setShowPlayerRatings] = useState(false);
   const [serverRooms, setServerRooms] = useState([]);
   const [completedRooms, setCompletedRooms] = useState([]);
   const [recentRooms, setRecentRooms] = useState([]);
@@ -1160,6 +1162,10 @@ function RoomContent() {
       setSquadLimit(multiGS.squadLimit);
     }
   }, [multiGS?.squadLimit, roomMeta?.squadLimit]);
+
+  useEffect(() => {
+    setShowPlayerRatings(!!roomMeta?.showPlayerRatings);
+  }, [roomMeta?.showPlayerRatings]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -1380,6 +1386,7 @@ function RoomContent() {
         rivalsMatch: res.rivalsMatch || null,
         roomName,
         squadLimit: res.squadLimit || 15,
+        showPlayerRatings: !!res.showPlayerRatings,
       });
       emit('set-auction-mode', { mode: aMode });
       emit('set-squad-limit', { squadLimit });
@@ -1422,6 +1429,7 @@ function RoomContent() {
         rivalsMatch: res.rivalsMatch || selectedRivalsMatch,
         roomName,
         squadLimit: res.squadLimit || 13,
+        showPlayerRatings: !!res.showPlayerRatings,
       });
       setPhase('lobby');
     });
@@ -1458,6 +1466,7 @@ function RoomContent() {
         rivalsMatch: res.rivalsMatch || selectedRivalsMatch,
         roomName: `${selectedRivalsMatch.homeTeam} vs ${selectedRivalsMatch.awayTeam} Rivals`,
         squadLimit: res.squadLimit || 13,
+        showPlayerRatings: !!res.showPlayerRatings,
       });
       if (res.roomStatus === 'active' && res.gameState) {
         setMultiGS(res.gameState);
@@ -1511,6 +1520,7 @@ function RoomContent() {
         rivalsMatch: res.rivalsMatch || null,
         roomName: res.roomName || null,
         squadLimit: res.squadLimit || null,
+        showPlayerRatings: !!res.showPlayerRatings,
       });
       if (res.roomStatus === 'active') {
         setMultiGS(res.gameState);
@@ -1581,6 +1591,18 @@ function RoomContent() {
   const changeSquadLimit = (limit) => {
     setSquadLimit(limit);
     emit('set-squad-limit', { squadLimit: limit });
+  };
+
+  const changePlayerRatingsVisibility = (shouldShow) => {
+    setShowPlayerRatings(shouldShow);
+    emit('set-player-ratings-visibility', { showPlayerRatings: shouldShow }, (res) => {
+      if (!res?.ok) {
+        setShowPlayerRatings(!!roomMeta?.showPlayerRatings);
+        setError(res?.error || 'Could not update ratings visibility');
+        return;
+      }
+      setRoomMeta(prev => ({ ...(prev || {}), showPlayerRatings: !!res.showPlayerRatings }));
+    });
   };
 
   const runStartAuction = () => {
@@ -1933,89 +1955,118 @@ function RoomContent() {
       {/* ══════════ CREATE FORM ══════════ */}
       {(phase === 'create-form' || phase === 'rivals-create') && (
         <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 24px 40px', position:'relative', zIndex:5 }}>
-          <div style={{ width:'100%', maxWidth:480, animation:'fadeUp .35s ease both' }}>
-            <span className="rp-eyebrow">{phase === 'rivals-create' ? 'Create Rivals Room' : 'Create Room'}</span>
-            <h1 className="rp-h1" style={{ fontSize:'clamp(2rem,7vw,3.8rem)', marginBottom:4 }}>{phase === 'rivals-create' ? <>SET UP THE<br /><span>DUEL</span></> : <>SET UP YOUR<br /><span>ROOM</span></>}</h1>
-            <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#94A3B8', margin:'8px 0 4px', lineHeight:1.6 }}>
-              {phase === 'rivals-create'
-                ? `${selectedRivalsMatch?.homeTeam || ''} vs ${selectedRivalsMatch?.awayTeam || ''} will be locked in automatically. Invite one friend or keep it public and let another rival join.`
-                : 'Configure your auction room and invite up to 10 friends.'}
-            </p>
+          <style>{`
+            @media (max-width: 860px) {
+              .create-room-grid {
+                grid-template-columns: 1fr !important;
+              }
+            }
+          `}</style>
+          <div style={{ width:'100%', maxWidth:1120, animation:'fadeUp .35s ease both' }}>
+            <div className="create-room-grid" style={{ display:'grid', gridTemplateColumns: phase === 'rivals-create' ? 'minmax(260px, 0.9fr) minmax(0, 1.1fr)' : 'minmax(280px, 0.85fr) minmax(0, 1.15fr)', gap:24, alignItems:'start' }}>
+              <div style={{ border:`1px solid ${BORDER}`, borderRadius:22, padding:'24px clamp(18px,3vw,30px)', background:'linear-gradient(180deg, rgba(13,15,20,0.98), rgba(8,10,14,0.98))' }}>
+                <span className="rp-eyebrow">{phase === 'rivals-create' ? 'Create Rivals Room' : 'Create Room'}</span>
+                <h1 className="rp-h1" style={{ fontSize:'clamp(2.3rem,6vw,4.6rem)', marginBottom:8 }}>
+                  {phase === 'rivals-create' ? <>SET UP THE<br /><span>DUEL</span></> : <>SET UP YOUR<br /><span>ROOM</span></>}
+                </h1>
+                <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#94A3B8', margin:'10px 0 0', lineHeight:1.8, maxWidth:420 }}>
+                  {phase === 'rivals-create'
+                    ? `${selectedRivalsMatch?.homeTeam || ''} vs ${selectedRivalsMatch?.awayTeam || ''} will be locked in automatically. Invite one friend or keep it public and let another rival join.`
+                    : 'Configure your auction room, choose the format, set the squad size, and share the room with up to 10 friends.'}
+                </p>
+                {phase !== 'rivals-create' && (
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:10, marginTop:20 }}>
+                    {[
+                      { label: 'Visibility', value: isPrivate ? 'Private' : 'Public' },
+                      { label: 'Mode', value: String(aMode || 'mega').toUpperCase() },
+                      { label: 'Squad', value: `${squadLimit} Players` },
+                    ].map((item) => (
+                      <div key={item.label} style={{ border:'1px solid #1e2632', borderRadius:14, padding:'12px 12px 10px', background:'#0b0f14' }}>
+                        <div style={{ color:'#64748B', fontSize:9, letterSpacing:1.8, textTransform:'uppercase' }}>{item.label}</div>
+                        <div style={{ color:'#F8FAFC', fontFamily:"'Bebas Neue'", fontSize:22, letterSpacing:1.4, marginTop:6 }}>{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <label className="rp-label">Your Name</label>
-            <input
-              ref={nameRef}
-              className="rp-input"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. Rahul"
-              maxLength={20}
-              onKeyDown={e => e.key === 'Enter' && handleCreate()}
-            />
+              <div style={{ border:`1px solid ${BORDER}`, borderRadius:22, padding:'24px clamp(18px,3vw,30px)', background:'#0b0d12' }}>
+                <label className="rp-label" style={{ marginTop:0 }}>Your Name</label>
+                <input
+                  ref={nameRef}
+                  className="rp-input"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="e.g. Rahul"
+                  maxLength={20}
+                  onKeyDown={e => e.key === 'Enter' && handleCreate()}
+                />
 
-            <label className="rp-label">Visibility</label>
-            <div className="rp-toggle-grid">
-              <ToggleCard
-                selected={!isPrivate} onSelect={() => setIsPrivate(false)}
-                accentColor={GOLD} title="PUBLIC" sub="Open to all players" 
-                icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>} 
-              />
-              <ToggleCard
-                selected={isPrivate} onSelect={() => setIsPrivate(true)}
-                accentColor={GOLD} title="PRIVATE" sub="Invite code only" 
-                icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>} 
-              />
-            </div>
-
-            {phase !== 'rivals-create' && (
-              <>
-                <label className="rp-label">Auction Mode</label>
+                <label className="rp-label">Visibility</label>
                 <div className="rp-toggle-grid">
                   <ToggleCard
-                    selected={aMode === 'mega'}
-                    onSelect={() => { setAMode('mega'); setSquadLimit(15); }}
-                    accentColor={GOLD}
-                    title="MEGA"
-                    sub="500+ players · Full season"
+                    selected={!isPrivate} onSelect={() => setIsPrivate(false)}
+                    accentColor={GOLD} title="PUBLIC" sub="Open to all players"
+                    icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>}
                   />
                   <ToggleCard
-                    selected={aMode === 'mini'}
-                    onSelect={() => { setAMode('mini'); setSquadLimit(15); }}
-                    accentColor={CYAN}
-                    title="MINI"
-                    sub="~200 players · Fast format"
+                    selected={isPrivate} onSelect={() => setIsPrivate(true)}
+                    accentColor={GOLD} title="PRIVATE" sub="Invite code only"
+                    icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>}
                   />
                 </div>
-                <label className="rp-label" style={{ marginTop: 16 }}>Squad Limit</label>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:10 }}>
-                  {[15, 20, 25].map((limit) => (
-                    <button
-                      key={limit}
-                      type="button"
-                      onClick={() => setSquadLimit(limit)}
-                      style={{
-                        padding:'13px 0',
-                        borderRadius:12,
-                        border:`1px solid ${squadLimit === limit ? GOLD : '#262626'}`,
-                        background:squadLimit === limit ? `${GOLD}12` : '#111',
-                        color:squadLimit === limit ? GOLD : '#cbd5e1',
-                        fontFamily:"'Bebas Neue',sans-serif",
-                        fontSize:24,
-                        letterSpacing:2,
-                        cursor:'pointer',
-                      }}
-                    >
-                      {limit}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
 
-            {error && <div className="rp-error">{error}</div>}
-            <button className="rp-btn" onClick={phase === 'rivals-create' ? handleCreateRivalsRoom : handleCreate} disabled={loading}>
-              {loading ? (phase === 'rivals-create' ? 'CREATING RIVALS ROOM…' : 'CREATING ROOM…') : (phase === 'rivals-create' ? 'CREATE RIVALS ROOM →' : 'CREATE ROOM →')}
-            </button>
+                {phase !== 'rivals-create' && (
+                  <>
+                    <label className="rp-label">Auction Mode</label>
+                    <div className="rp-toggle-grid">
+                      <ToggleCard
+                        selected={aMode === 'mega'}
+                        onSelect={() => { setAMode('mega'); setSquadLimit(15); }}
+                        accentColor={GOLD}
+                        title="MEGA"
+                        sub="500+ players · Full season"
+                      />
+                      <ToggleCard
+                        selected={aMode === 'mini'}
+                        onSelect={() => { setAMode('mini'); setSquadLimit(15); }}
+                        accentColor={CYAN}
+                        title="MINI"
+                        sub="~200 players · Fast format"
+                      />
+                    </div>
+                    <label className="rp-label" style={{ marginTop: 16 }}>Squad Limit</label>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:10 }}>
+                      {[15, 20, 25].map((limit) => (
+                        <button
+                          key={limit}
+                          type="button"
+                          onClick={() => setSquadLimit(limit)}
+                          style={{
+                            padding:'13px 0',
+                            borderRadius:12,
+                            border:`1px solid ${squadLimit === limit ? GOLD : '#262626'}`,
+                            background:squadLimit === limit ? `${GOLD}12` : '#111',
+                            color:squadLimit === limit ? GOLD : '#cbd5e1',
+                            fontFamily:"'Bebas Neue',sans-serif",
+                            fontSize:24,
+                            letterSpacing:2,
+                            cursor:'pointer',
+                          }}
+                        >
+                          {limit}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {error && <div className="rp-error">{error}</div>}
+                <button className="rp-btn" onClick={phase === 'rivals-create' ? handleCreateRivalsRoom : handleCreate} disabled={loading}>
+                  {loading ? (phase === 'rivals-create' ? 'CREATING RIVALS ROOM…' : 'CREATING ROOM…') : (phase === 'rivals-create' ? 'CREATE RIVALS ROOM →' : 'CREATE ROOM →')}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2137,8 +2188,36 @@ function RoomContent() {
                         footer={mode.footer}
                         modeId={mode.id}
                       />
+                      ))}
+                  </div>
+
+                  <div className="lobby-section-label">PLAYER RATINGS</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:8, marginBottom:18 }}>
+                    {[
+                      { id: 'hidden', label: 'HIDDEN', active: !showPlayerRatings, color: '#94A3B8' },
+                      { id: 'shown', label: 'SHOWN', active: showPlayerRatings, color: GOLD },
+                    ].map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => changePlayerRatingsVisibility(option.id === 'shown')}
+                        style={{
+                          padding:'10px 0',
+                          borderRadius:10,
+                          border:`1px solid ${option.active ? option.color : '#232323'}`,
+                          background:option.active ? `${option.color}14` : '#101010',
+                          color:option.active ? option.color : '#cbd5e1',
+                          fontFamily:"'Bebas Neue',sans-serif",
+                          fontSize:20,
+                          letterSpacing:2,
+                          cursor:'pointer',
+                        }}
+                      >
+                        {option.label}
+                      </button>
                     ))}
                   </div>
+
                   <div className="lobby-section-label">SQUAD LIMIT</div>
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:8, marginBottom:18 }}>
                     {[15, 20, 25].map((limit) => (
@@ -2166,6 +2245,8 @@ function RoomContent() {
               ) : (
                 <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:12, color:'#888', marginBottom:16 }}>
                   Mode: <span style={{ color: (lobbyMode || aMode) === 'mega' ? GOLD : CYAN }}>{(lobbyMode || aMode || 'mega') === 'mega' ? 'IPL MEGA Auction' : 'IPL MINI Auction'}</span>
+                  <br />
+                  Player Ratings: <span style={{ color: showPlayerRatings ? GOLD : '#94A3B8' }}>{showPlayerRatings ? 'Shown during auction' : 'Hidden during auction'}</span>
                   <br />
                   Squad Limit: <span style={{ color: GOLD }}>{squadLimit}</span> players
                 </div>
