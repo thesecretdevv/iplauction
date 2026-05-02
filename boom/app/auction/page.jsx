@@ -548,12 +548,21 @@ function AuctionContent() {
   // Dynamic limits based on mode
   const maxSquadSize= isRivals ? RIVALS_MAX_SQUAD_SIZE : (gs.squadLimit || 15);
   const maxOverseas = isRivals ? RIVALS_MAX_OVERSEAS : getOverseasLimitForSquad(maxSquadSize);
+  const mySquadSize = gs.squads[effectiveMyTeamId]?.length || 0;
+  const squadFull = mySquadSize >= maxSquadSize;
+  const maxOverseasReached = player.overseas && osCount >= maxOverseas;
+  const hasEnoughFunds = (gs.purses[effectiveMyTeamId] || 0) >= (gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid));
+  const bidDisabledLabel = squadFull
+    ? `SQUAD FULL (${maxSquadSize}/${maxSquadSize})`
+    : maxOverseasReached
+      ? `MAX ${maxOverseas} OVERSEAS`
+      : 'INSUFFICIENT FUNDS';
 
   const canBid      = gs.phase === 'bidding'
     && gs.currentBidder !== effectiveMyTeamId
-    && (gs.purses[effectiveMyTeamId] || 0) >= (gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid))
-    && (gs.squads[effectiveMyTeamId]?.length || 0) < maxSquadSize
-    && (!player.overseas || osCount < maxOverseas);
+    && hasEnoughFunds
+    && !squadFull
+    && !maxOverseasReached;
   const iLeading    = gs.currentBidder === effectiveMyTeamId;
   const nextPrice   = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
   const isTimerLow  = !gs.isPaused && gs.timer <= 5;
@@ -1714,7 +1723,7 @@ function AuctionContent() {
                             {canBid ? (
                               <span style={{ fontFamily:"'Bebas Neue'", fontSize:'1.8rem', letterSpacing:3 }}>BID {fmtIncrement(gs.currentBid, nextPrice)}</span>
                             ) : (
-                              <span style={{ fontFamily:"'Bebas Neue'", fontSize:'1.5rem', letterSpacing:2 }}>{player.overseas && osCount >= maxOverseas ? `MAX ${maxOverseas} OVERSEAS` : 'INSUFFICIENT FUNDS'}</span>
+                              <span style={{ fontFamily:"'Bebas Neue'", fontSize:'1.5rem', letterSpacing:2 }}>{bidDisabledLabel}</span>
                             )}
                           </button>
                         )}
@@ -1866,7 +1875,7 @@ function AuctionContent() {
                         </>
                       ) : (
                         <span style={{ fontSize:'0.85rem', fontFamily:"'Bebas Neue'", letterSpacing:1 }}>
-                          {player.overseas && osCount >= maxOverseas ? `MAX ${maxOverseas} OVERSEAS` : 'CANNOT BID'}
+                          {bidDisabledLabel}
                         </span>
                       )}
                     </button>
@@ -2277,7 +2286,10 @@ function AuctionContent() {
 function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mode = 'mega', isHost = false, activeTeams = [], selections = {}, onFinalizeSelection, squadLimit = 15, chatLog = [], emit, roomCode, myName = '', myTeamId, gs, isSpectator = false }) {
   const [selected, setSelected] = useState([]);
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
-  const ratingMode = String(mode || 'mega').toLowerCase() === 'mini' ? 'mini' : 'mega';
+  const normalizedMode = String(mode || 'mega').toLowerCase();
+  const ratingMode = normalizedMode === 'mini' ? 'mini' : 'mega';
+  const isRivalsMode = normalizedMode === 'rivals' || gs?.roomType === 'rivals';
+  const minimumSquadNeeded = isRivalsMode ? playersNeeded : squadLimit;
 
   useEffect(() => {
     if (!Array.isArray(mySquad) || mySquad.length === 0) {
@@ -2334,7 +2346,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
   }, [getRoleCategory, selected]);
 
   const getValidationErrors = () => {
-    if ((mySquad?.length || 0) < squadLimit) return `You need to buy ${squadLimit} players before submitting your XI.`;
+    if ((mySquad?.length || 0) < minimumSquadNeeded) return `You need to buy ${minimumSquadNeeded} players before submitting your XI.`;
     if (selected.length !== playersNeeded) return `Select ${playersNeeded} players.`;
     if (roleSummary.bat < 2) return 'Must have at least 2 Batsmen';
     if (roleSummary.bowl < 2) return 'Must have at least 2 Bowlers';
@@ -2354,7 +2366,9 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
     { key: 'ar', label: 'All-rounders', count: roleSummary.ar, min: 0, color: '#C084FC' },
   ];
   const selectionRules = [
-    `Your squad must contain ${squadLimit} players before the XI can be submitted.`,
+    isRivalsMode
+      ? `Rivals mode lets you submit once you have ${playersNeeded} players and a valid XI.`
+      : `Your squad must contain ${squadLimit} players before the XI can be submitted.`,
     `Select exactly ${playersNeeded} players from your squad.`,
     'Minimum balance required: 2 batters, 2 bowlers, 1 wicketkeeper.',
     'Tap any player card to add or remove them from the XI.',
@@ -2664,8 +2678,8 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
             <div className="xi-panel xi-action-panel" style={{ textAlign:'center', background:'rgba(11,13,18,0.96)', border:`1px solid ${BORDER}`, borderRadius:22, padding:18, backdropFilter:'blur(12px)' }}>
               {validationError && (
                 <div style={{ color:'#F87171', fontSize:13, marginBottom:14, letterSpacing:1.1, fontWeight:800 }}>
-                  {(mySquad?.length || 0) < squadLimit
-                    ? `BUY ${squadLimit - (mySquad?.length || 0)} MORE PLAYER${squadLimit - (mySquad?.length || 0) === 1 ? '' : 'S'} TO REACH THE ${squadLimit}-PLAYER SQUAD LIMIT`
+                  {(mySquad?.length || 0) < minimumSquadNeeded
+                    ? `BUY ${minimumSquadNeeded - (mySquad?.length || 0)} MORE PLAYER${minimumSquadNeeded - (mySquad?.length || 0) === 1 ? '' : 'S'} TO REACH ${minimumSquadNeeded} PLAYERS`
                     : selected.length === playersNeeded ? validationError.toUpperCase() : `PICK ${playersLeft} MORE PLAYER${playersLeft === 1 ? '' : 'S'} TO CONTINUE`}
                 </div>
               )}

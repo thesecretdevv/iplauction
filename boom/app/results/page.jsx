@@ -30,6 +30,8 @@ const TEAM_LOGOS = {
 
 function buildLeaderboardResults(gs, mode, teams) {
   const squadLimit = Number(gs?.squadLimit) || 15;
+  const isRivals = gs?.roomType === 'rivals' || String(mode || '').toLowerCase() === 'rivals';
+  const minimumSquadSize = isRivals ? 11 : squadLimit;
   const teamsPayload = teams.map((team) => {
     const squad = gs.squads?.[team.id] || [];
     const rawXI = gs.playingXI?.[team.id] || [];
@@ -48,6 +50,7 @@ function buildLeaderboardResults(gs, mode, teams) {
       teamName: team.name,
       squad,
       squadLimit,
+      minimumSquadSize,
       playingXI: xi,
     };
   });
@@ -254,6 +257,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
   const rawXI    = gs.playingXI?.[activeId] || [];
   const fullSquad = gs.squads?.[activeId] || [];
   const squadLimit = Number(gs?.squadLimit) || 15;
+  const minimumSquadSize = isRivals ? 11 : squadLimit;
 
   // Edge-case: player may have submitted <11 or exactly 10 players.
   // If rawXI has ≥ 1 and ≤ 11 players, respect it; otherwise fall back to selectPlayingXI.
@@ -322,10 +326,10 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
   const batCount = normalizedXI.filter(p => p.role === 'batsman').length;
   const bowlCount = normalizedXI.filter(p => p.role === 'bowler').length;
   const wkCount = normalizedXI.filter(p => p.role === 'wicket_keeper').length;
-  const squadShortfall = fullSquad.length < squadLimit;
+  const squadShortfall = fullSquad.length < minimumSquadSize;
   const isDisqualified = squadShortfall || playingXI.length < 11 || batCount < 2 || bowlCount < 2 || wkCount < 1;
   const disqualificationReason = squadShortfall
-    ? `Only ${fullSquad.length}/${squadLimit} players bought`
+    ? `Only ${fullSquad.length}/${minimumSquadSize} players bought`
     : playingXI.length < 11
       ? 'Fewer than 11 players in XI'
       : batCount < 2
@@ -650,11 +654,13 @@ function LeaderboardTab({ gs, mode, mti, teams, isRivals, getTeamLabel }) {
         The <strong style={{ color: '#aaa' }}>Total Score</strong> is the sum of all 11 player ratings. The <strong style={{ color: '#aaa' }}>Average Score</strong> is Total ÷ XI size.
         {mode?.toLowerCase() === 'mini' ? (
           <span style={{ color: '#777' }}>Minimum criteria: full configured squad size, 2 Batters, 2 Bowlers, 1 Wicketkeeper. Teams failing this are <span style={{ color: '#ef4444' }}>DISQUALIFIED</span>.</span>
+        ) : isRivals ? (
+          <span style={{ color: '#777' }}>Rivals rules: build a valid 11-player XI with at least 2 Batters, 2 Bowlers, and 1 Wicketkeeper.</span>
         ) : (
           <span style={{ color: '#777' }}>Selection rules: full configured squad size, best-rated 11 players, at least 1 wicket-keeper.</span>
         )}
         <br />
-        Teams that bought fewer than the selected squad limit are disqualified.
+        {isRivals ? 'Teams that fail to field a valid Playing XI are disqualified.' : 'Teams that bought fewer than the selected squad limit are disqualified.'}
         <br />
         <span style={{ color: '#333' }}>Rating scale: 90–100 Elite · 80–89 Excellent · 70–79 Good · 60–69 Average · 50–59 Below Avg · &lt;50 Reserve</span>
       </div>

@@ -320,11 +320,13 @@ function normalizeRole(role) {
 }
 
 export function calculateLeaderboard(teams, mode = 'mini') {
+  const normalizedMode = String(mode || 'mini').toLowerCase();
   const results = teams.map(team => {
     // If team just has player names:
     // This assumes team objects are formatted correctly.
     const squad = team.squad || []; // Array of complete player objects
-    const requiredSquadSize = Number(team.squadLimit) || 0;
+    const configuredSquadSize = Number(team.squadLimit) || 0;
+    const requiredSquadSize = Number(team.minimumSquadSize) || (normalizedMode === 'rivals' ? 11 : configuredSquadSize);
     let playingXI = team.playingXI;
 
     if ((!Array.isArray(playingXI) || playingXI.length === 0) && squad.length > 0) {
@@ -374,7 +376,7 @@ export function calculateLeaderboard(teams, mode = 'mini') {
       averageScore: playingXI.length ? Math.round(totalScore / playingXI.length) : 0,
       playingXI,
       squadSize: squad.length,
-      squadLimit: requiredSquadSize,
+      squadLimit: configuredSquadSize,
       isDisqualified,
       disqualificationReason
     };
