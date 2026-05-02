@@ -389,7 +389,7 @@ const globalStyles = `
   .rb-header {
     position: sticky; top: 0;
     background: #0a0a0a; border-bottom: 1px solid #1a1a1a;
-    z-index: 20; padding: 14px 16px 10px;
+    z-index: 20; padding: 16px 24px 0;
   }
   .rb-header-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .rb-back-btn { background: none; border: none; color: #ccc; font-size: 20px; cursor: pointer; padding: 0 4px; flex-shrink: 0; line-height:1; }
@@ -422,13 +422,13 @@ const globalStyles = `
   .rb-tab.active .rb-tab-count { background: ${GOLD}22; color: ${GOLD}; }
   .rb-tab.active.live-tab .rb-tab-count { background: #ef444422; color: #ef4444; }
 
-  .rb-name-box { padding: 0 16px 12px; }
+  .rb-name-box { padding: 24px 32px; }
   .rb-name-label { font-size: 10px; letter-spacing: 2px; color: #555; text-transform: uppercase; margin-bottom: 6px; display: block; }
   .rb-name-input { width: 100%; padding: 12px 14px; background: #141414; border: 1px solid #1e1e1e; border-radius: 10px; color: #fff; font-family: 'Barlow Condensed', sans-serif; font-size: 16px; letter-spacing: .06em; outline: none; transition: border-color .2s; }
   .rb-name-input:focus { border-color: ${GOLD}; }
   .rb-name-input::placeholder { color: #444; }
 
-  .rb-rooms-list { flex: 1; overflow-y: auto; padding: 0 14px 24px; }
+  .rb-rooms-list { flex: 1; overflow-y: auto; padding: 32px 32px 60px; }
 
   .rb-room-card {
     background: #111; border: 1px solid #1c1c1c; border-radius: 14px;
@@ -705,6 +705,139 @@ const globalStyles = `
     .rp-marquee-logo { width:30px; height:30px; }
   }
 
+  .create-room-summary-grid {
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0, 1fr));
+    gap:10px;
+    margin-top:20px;
+  }
+  .create-room-summary-card {
+    border:1px solid #1e2632;
+    border-radius:14px;
+    padding:12px 12px 10px;
+    background:#0b0f14;
+    min-width:0;
+  }
+  .create-room-summary-label {
+    color:#64748B;
+    font-size:9px;
+    letter-spacing:1.8px;
+    text-transform:uppercase;
+  }
+  .create-room-summary-value {
+    color:#F8FAFC;
+    font-family:'Bebas Neue',sans-serif;
+    font-size:22px;
+    letter-spacing:1.4px;
+    margin-top:6px;
+    line-height:1;
+    overflow-wrap:anywhere;
+  }
+  .rb-header-actions {
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+  .rb-card-topline {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:6px;
+    flex-wrap:wrap;
+  }
+  .rb-room-footer {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-top:auto;
+  }
+  .rb-room-meta {
+    font-size:11px;
+    color:#555;
+    letter-spacing:1px;
+    min-width:0;
+    overflow-wrap:anywhere;
+  }
+  .rb-room-actions {
+    display:flex;
+    gap:8px;
+    flex-shrink:0;
+  }
+
+  @media (max-width: 860px) {
+    .create-room-summary-grid {
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .create-room-summary-grid {
+      grid-template-columns:1fr;
+    }
+    .create-room-summary-value {
+      font-size:20px;
+      line-height:1.05;
+    }
+    .rb-header {
+      padding:14px 14px 0;
+    }
+    .rb-header-row {
+      align-items:flex-start;
+      flex-wrap:wrap;
+    }
+    .rb-title-block {
+      min-width:0;
+      width:100%;
+      order:2;
+    }
+    .rb-header-actions {
+      width:100%;
+      justify-content:space-between;
+      order:3;
+    }
+    .rb-tabs {
+      gap:8px;
+      overflow-x:auto;
+      padding-bottom:4px;
+      scrollbar-width:none;
+    }
+    .rb-tabs::-webkit-scrollbar {
+      display:none;
+    }
+    .rb-tab {
+      flex:0 0 auto;
+      min-width:150px;
+      padding:12px 14px;
+    }
+    .rb-name-box {
+      padding:18px 14px 12px;
+    }
+    .rb-rooms-list {
+      padding:24px 14px 44px;
+    }
+    .rb-room-card {
+      padding:18px;
+    }
+    .rb-room-card-header {
+      gap:14px;
+      flex-direction:column;
+    }
+    .rb-room-footer {
+      flex-direction:column;
+      align-items:stretch;
+    }
+    .rb-room-actions {
+      width:100%;
+      flex-direction:column;
+    }
+    .rb-room-actions .rb-join-btn {
+      width:100% !important;
+    }
+  }
+
   @media(max-width:600px){
     .rp-h1 { font-size:3rem; }
     .lobby-section-label { font-size:9px; }
@@ -900,7 +1033,7 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
   return (
     <div className="rb-shell" style={{ position: 'relative', zIndex: 5, animation: 'fadeIn .4s ease' }}>
       {/* ── Header ── */}
-      <div className="rb-header" style={{ borderBottom: '1px solid #111', background: '#0a0a0aee', backdropFilter: 'blur(12px)', padding: '16px 24px 0' }}>
+      <div className="rb-header" style={{ borderBottom: '1px solid #111', background: '#0a0a0aee', backdropFilter: 'blur(12px)' }}>
         <div className="rb-header-row" style={{ marginBottom: 16 }}>
           <button className="rb-back-btn" onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, letterSpacing: 1 }}>
             <span style={{ fontSize: 18 }}>←</span> BACK
@@ -912,7 +1045,7 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
               PRIVATE ACTIVITY: {privateActivity.rooms}+ ROOMS · {privateActivity.players}+ PLAYERS
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <div className="rb-header-actions">
             <BrandLink compact={true} />
             <button className="rb-icon-btn" onClick={fetchRooms} title="Refresh" disabled={loading} style={{ background: '#111', opacity: loading ? 0.55 : 1 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -947,7 +1080,7 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
       </div>
 
       {/* ── Name input ── */}
-      <div className="rb-name-box" style={{ background: '#0d0d0d', borderBottom: '1px solid #111', padding: '24px 32px' }}>
+      <div className="rb-name-box" style={{ background: '#0d0d0d', borderBottom: '1px solid #111' }}>
         <div style={{ maxWidth: 600, margin: '0 auto' }}>
           <label className="rb-name-label" style={{ color: '#555', fontSize: 9 }}>YOUR IDENTITY</label>
           <input
@@ -963,7 +1096,7 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
       </div>
 
       {/* ── Rooms list ── */}
-      <div className="rb-rooms-list" style={{ padding: '32px 32px 60px', background: '#080808' }}>
+      <div className="rb-rooms-list" style={{ background: '#080808' }}>
         <div style={{ maxWidth: 1440, margin: '0 auto' }}>
           {loading && displayRooms.length === 0 ? (
             <div className="rb-room-grid">
@@ -1016,7 +1149,7 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
                     
                     <div className="rb-room-card-header" style={{ marginBottom: 16 }}>
                       <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <div className="rb-card-topline">
                           <span className={`rb-status-dot ${isActive ? 'live' : 'waiting'}`} />
                           <div className="rb-room-code" style={{ fontSize: 12, color: GOLD, background: `${GOLD}11`, padding: '2px 8px', borderRadius: 4 }}>{room.code}</div>
                         <div style={{ fontSize: 9, color: '#444', letterSpacing: 1, textTransform: 'uppercase' }}>{(room.mode || 'MEGA').toUpperCase()}</div>
@@ -1037,14 +1170,14 @@ function BrowseRooms({ name, setName, nameRef, serverRooms, completedRooms, fetc
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 'auto' }}>
-                       <div style={{ fontSize: 11, color: '#555', letterSpacing: 1 }}>
+                    <div className="rb-room-footer">
+                       <div className="rb-room-meta">
                           {isCompleted
                             ? <>Finished {room.finishedAt ? new Date(room.finishedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'recently'}</>
                             : <>Hosted by <span style={{ color: '#888', fontWeight: 700 }}>{room.host}</span></>
                           }
                        </div>
-                       <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                       <div className="rb-room-actions">
                         {isCompleted ? (
                           <button 
                             className="rb-join-btn" 
@@ -1986,15 +2119,15 @@ function RoomContent() {
                     : 'Configure your auction room, choose the format, set the squad size, and share the room with up to 10 friends.'}
                 </p>
                 {phase !== 'rivals-create' && (
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:10, marginTop:20 }}>
+                  <div className="create-room-summary-grid">
                     {[
                       { label: 'Visibility', value: isPrivate ? 'Private' : 'Public' },
                       { label: 'Mode', value: String(aMode || 'mega').toUpperCase() },
                       { label: 'Squad', value: `${squadLimit} Players` },
                     ].map((item) => (
-                      <div key={item.label} style={{ border:'1px solid #1e2632', borderRadius:14, padding:'12px 12px 10px', background:'#0b0f14' }}>
-                        <div style={{ color:'#64748B', fontSize:9, letterSpacing:1.8, textTransform:'uppercase' }}>{item.label}</div>
-                        <div style={{ color:'#F8FAFC', fontFamily:"'Bebas Neue'", fontSize:22, letterSpacing:1.4, marginTop:6 }}>{item.value}</div>
+                      <div key={item.label} className="create-room-summary-card">
+                        <div className="create-room-summary-label">{item.label}</div>
+                        <div className="create-room-summary-value">{item.value}</div>
                       </div>
                     ))}
                   </div>

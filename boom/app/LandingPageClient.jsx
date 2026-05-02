@@ -385,21 +385,21 @@ export default function LandingPage() {
                         {featuredRival.isHighProfile ? 'HIGHLIGHT CLASH' : featuredRival.venue}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isCompactCard ? 12 : 18, flexWrap: 'nowrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: isCompactCard ? 8 : 12, minWidth: 0, flex: 1 }}>
-                      <Image src={home?.logo || '/assets/CSK.png'} alt={`${home?.name || home?.short} logo`} width={58} height={58} style={{ width: isCompactCard ? 46 : 58, height: isCompactCard ? 46 : 58, objectFit: 'contain', flexShrink: 0 }} />
-                      <div>
-                        <div style={{ color: home?.color, fontWeight: 800, letterSpacing: 1.4, fontSize: isCompactCard ? 11 : 13 }}>{home?.short}</div>
-                        <div style={{ color: '#fff', fontFamily: "'Bebas Neue', sans-serif", fontSize: isCompactCard ? 18 : 26, letterSpacing: 1, lineHeight: 1 }}>{home?.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isCompactCard ? 10 : 18, flexWrap: 'nowrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: isCompactCard ? 6 : 12, minWidth: 0, flex: 1 }}>
+                      <Image src={home?.logo || '/assets/CSK.png'} alt={`${home?.name || home?.short} logo`} width={58} height={58} style={{ width: isCompactCard ? 44 : 58, height: isCompactCard ? 44 : 58, objectFit: 'contain', flexShrink: 0 }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: home?.color, fontWeight: 800, letterSpacing: 1.4, fontSize: isCompactCard ? 10 : 13 }}>{home?.short}</div>
+                        <div style={{ color: '#fff', fontFamily: "'Bebas Neue', sans-serif", fontSize: isCompactCard ? 16 : 26, letterSpacing: 1, lineHeight: isCompactCard ? 0.96 : 1, whiteSpace: isCompactCard ? 'normal' : 'initial', wordBreak: 'break-word', maxWidth: isCompactCard ? 110 : 'none' }}>{home?.name}</div>
                       </div>
                     </div>
-                    <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: isCompactCard ? 24 : 34, color: '#94A3B8', letterSpacing: isCompactCard ? 2 : 4, flexShrink: 0 }}>VS</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: isCompactCard ? 8 : 12, minWidth: 0, flex: 1, justifyContent: 'flex-end' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ color: away?.color, fontWeight: 800, letterSpacing: 1.4, fontSize: isCompactCard ? 11 : 13 }}>{away?.short}</div>
-                        <div style={{ color: '#fff', fontFamily: "'Bebas Neue', sans-serif", fontSize: isCompactCard ? 18 : 26, letterSpacing: 1, lineHeight: 1 }}>{away?.name}</div>
+                    <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: isCompactCard ? 18 : 34, color: '#94A3B8', letterSpacing: isCompactCard ? 1.5 : 4, flexShrink: 0, alignSelf: isCompactCard ? 'flex-start' : 'center', marginTop: isCompactCard ? 18 : 0 }}>VS</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: isCompactCard ? 6 : 12, minWidth: 0, flex: 1, justifyContent: 'flex-end' }}>
+                      <div style={{ textAlign: 'right', minWidth: 0 }}>
+                        <div style={{ color: away?.color, fontWeight: 800, letterSpacing: 1.4, fontSize: isCompactCard ? 10 : 13 }}>{away?.short}</div>
+                        <div style={{ color: '#fff', fontFamily: "'Bebas Neue', sans-serif", fontSize: isCompactCard ? 16 : 26, letterSpacing: 1, lineHeight: isCompactCard ? 0.96 : 1, whiteSpace: isCompactCard ? 'normal' : 'initial', wordBreak: 'break-word', maxWidth: isCompactCard ? 110 : 'none', marginLeft: 'auto' }}>{away?.name}</div>
                       </div>
-                      <Image src={away?.logo || '/assets/MI.png'} alt={`${away?.name || away?.short} logo`} width={58} height={58} style={{ width: isCompactCard ? 46 : 58, height: isCompactCard ? 46 : 58, objectFit: 'contain', flexShrink: 0 }} />
+                      <Image src={away?.logo || '/assets/MI.png'} alt={`${away?.name || away?.short} logo`} width={58} height={58} style={{ width: isCompactCard ? 44 : 58, height: isCompactCard ? 44 : 58, objectFit: 'contain', flexShrink: 0 }} />
                     </div>
                   </div>
                   </div>
