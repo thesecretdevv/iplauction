@@ -56,7 +56,7 @@ export default function TeamsPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'transparent', color: '#fff', fontFamily: "'Courier Prime', monospace" }}>
+    <div className="min-h-screen" style={{ backgroundColor: '#000', color: '#fff', fontFamily: "'Rajdhani', sans-serif" }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px' }}>
 
         {/* HEADER */}
@@ -143,7 +143,7 @@ export default function TeamsPage() {
                   </div>
 
                   <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.6rem', margin: '0 0 10px 0', textAlign: 'center', color: '#fff', letterSpacing: '2px' }}>{team.name}</h2>
-                  <div style={{ fontSize: '12px', color: '#666', textAlign: 'center', marginBottom: '20px', lineHeight: 1.7 }}>
+                  <div style={{ fontSize: '0.95rem', color: '#9ca3af', textAlign: 'center', marginBottom: '20px', lineHeight: 1.7 }}>
                     <p><span style={{ color: '#E8B84B' }}>Captain: </span>{team.captain}</p>
                     <p><span style={{ color: '#E8B84B' }}>Coach: </span>{team.coach}</p>
                   </div>
@@ -164,7 +164,7 @@ export default function TeamsPage() {
           </div>
         )}
         <div style={{ marginTop: '64px', padding: '24px 0', textAlign: 'center', borderTop: '1px solid #1a1a1a' }}>
-          <div style={{ fontSize: '10px', color: '#444', letterSpacing: '1px', lineHeight: '1.6', maxWidth: '700px', margin: '0 auto' }}>
+          <div style={{ fontSize: '11px', color: '#6b7280', letterSpacing: '1px', lineHeight: '1.7', maxWidth: '700px', margin: '0 auto' }}>
             IPL Auction Online is a fan-made simulator for educational purposes. 
             Franchise data and player information are attributed up to <a href="https://www.iplt20.com" target="_blank" rel="noreferrer" style={{ color: '#E8B84B', textDecoration: 'none' }}>iplt20.com</a> & <a href="https://cricapi.com" target="_blank" rel="noreferrer" style={{ color: '#E8B84B', textDecoration: 'none' }}>CricAPI</a>.
           </div>
@@ -189,15 +189,15 @@ function TeamDetails({ team, onBack }) {
         </div>
 
         <div style={{ flex: '1 1 280px' }}>
-          <div style={{ fontFamily: "'Courier Prime',monospace", fontSize: '10px', color: team.primaryColor, letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '8px' }}>IPL 2026 Franchise</div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '12px', color: team.primaryColor, letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '8px' }}>IPL 2026 Franchise</div>
           <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'clamp(2.5rem,6vw,5rem)', margin: '0 0 20px 0', color: team.primaryColor, lineHeight: 0.9 }}>
             {team.name}
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
             {[['Captain', team.captain], ['Head Coach', team.coach], ['Home Ground', team.home]].map(([label, val]) => (
               <div key={label} style={{ backgroundColor: 'rgba(12,16,24,0.9)', padding: '14px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', borderLeft: `3px solid ${team.primaryColor}` }}>
-                <span style={{ color: '#555', textTransform: 'uppercase', fontSize: '9px', letterSpacing: '2px', display: 'block', marginBottom: '6px' }}>{label}</span>
-                <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, color: '#ddd', letterSpacing: '1px', fontSize: '15px' }}>{val}</span>
+                <span style={{ color: '#6b7280', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '2px', display: 'block', marginBottom: '6px' }}>{label}</span>
+                <span style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, color: '#f3f4f6', letterSpacing: '0.4px', fontSize: '1rem' }}>{val}</span>
               </div>
             ))}
           </div>
@@ -223,7 +223,7 @@ function RoleSection({ title, players, color }) {
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '3px', backgroundColor: color }} />
       <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.8rem', margin: '0 0 20px 0', color: '#E8B84B', display: 'flex', alignItems: 'center', gap: '12px' }}>
         {title}
-        <span style={{ fontSize: '0.8rem', fontFamily: "'Courier Prime', monospace", color: '#444', padding: '2px 8px', border: '1px solid #222', borderRadius: '12px' }}>{players.length}</span>
+        <span style={{ fontSize: '0.8rem', fontFamily: "'Barlow Condensed', sans-serif", color: '#6b7280', padding: '2px 8px', border: '1px solid #222', borderRadius: '12px' }}>{players.length}</span>
       </h3>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
         {players.map(p => {
@@ -231,7 +231,7 @@ function RoleSection({ title, players, color }) {
           const name = p.replace('(WK)', '').trim();
           return (
             <li key={p} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #141414', paddingBottom: '10px', marginBottom: '10px' }}>
-              <span style={{ color: '#bbb', fontFamily: "'Barlow Condensed',sans-serif", fontSize: '15px', letterSpacing: '.5px' }}>{name}</span>
+              <span style={{ color: '#d1d5db', fontFamily: "'Rajdhani', sans-serif", fontSize: '1rem', letterSpacing: '.3px' }}>{name}</span>
               {isWk && <span style={{ fontSize: '9px', color: '#000', backgroundColor: '#E8B84B', padding: '2px 6px', borderRadius: '2px', fontWeight: 'bold' }}>WK</span>}
             </li>
           );

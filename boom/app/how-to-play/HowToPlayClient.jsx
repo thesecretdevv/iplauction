@@ -4,7 +4,6 @@ import Link from 'next/link';
 
 const GOLD = '#E8B84B';
 const CYAN = '#22D3EE';
-const BG = '#080808';
 const CARD = '#0d0f14';
 const BORDER = '#1d2330';
 
@@ -153,9 +152,7 @@ export default function HowToPlayClient({ faqSchemaJson }) {
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;600;700&family=Rajdhani:wght@500;600;700&display=swap');
         .htp-page {
           min-height: 100vh;
-          background:
-            radial-gradient(circle at top, rgba(232,184,75,0.10), transparent 30%),
-            ${BG};
+          background: #000;
           color: #f7f7f7;
           font-family: 'Rajdhani', sans-serif;
         }
@@ -224,11 +221,12 @@ export default function HowToPlayClient({ faqSchemaJson }) {
           color: #fff;
         }
         .htp-subtitle {
-          max-width: 900px;
+          max-width: 860px;
           margin-top: 18px;
-          color: #b1b8c4;
-          font-size: 1.1rem;
-          line-height: 1.75;
+          color: #d1d5db;
+          font-size: 1.12rem;
+          line-height: 1.9;
+          letter-spacing: 0.01em;
         }
         .htp-facts {
           display: grid;
@@ -264,11 +262,11 @@ export default function HowToPlayClient({ faqSchemaJson }) {
         }
         .htp-card {
           background:
-            linear-gradient(180deg, rgba(15,17,24,0.98), rgba(10,12,18,0.98)),
+            linear-gradient(180deg, rgba(12,12,12,0.98), rgba(6,6,6,0.98)),
             ${CARD};
           border: 1px solid ${BORDER};
           border-radius: 30px;
-          padding: 26px;
+          padding: 30px;
           min-height: 34rem;
           overflow: hidden;
         }
@@ -287,35 +285,38 @@ export default function HowToPlayClient({ faqSchemaJson }) {
         }
         .htp-card-title {
           margin-top: 10px;
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(2rem, 4vw, 3rem);
-          letter-spacing: .04em;
+          font-family: 'Barlow Condensed', sans-serif;
+          font-size: clamp(2rem, 4vw, 2.8rem);
+          font-weight: 700;
+          letter-spacing: .02em;
           color: ${GOLD};
-          line-height: .95;
+          line-height: 1;
+          text-transform: uppercase;
         }
         .htp-card-copy {
-          color: #b2bbca;
-          line-height: 1.75;
-          font-size: 1.02rem;
+          color: #d1d5db;
+          line-height: 1.85;
+          font-size: 1.05rem;
           margin-top: 14px;
-          max-width: 920px;
+          max-width: 840px;
         }
         .htp-mini-card {
-          background: rgba(255,255,255,0.025);
-          border: 1px solid rgba(255,255,255,0.06);
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.08);
           border-radius: 20px;
-          padding: 18px;
+          padding: 20px;
         }
         .htp-mini-title {
           color: #fff;
-          font-size: 1.24rem;
+          font-size: 1.28rem;
           font-weight: 700;
+          line-height: 1.35;
         }
         .htp-mini-copy {
-          color: #9fa9b8;
-          line-height: 1.7;
-          margin-top: 8px;
-          font-size: 1rem;
+          color: #d1d5db;
+          line-height: 1.8;
+          margin-top: 10px;
+          font-size: 1.02rem;
         }
         .htp-step-number {
           font-family: 'Bebas Neue', sans-serif;
@@ -332,8 +333,9 @@ export default function HowToPlayClient({ faqSchemaJson }) {
           display: flex;
           align-items: flex-start;
           gap: 10px;
-          color: #cbd3df;
-          line-height: 1.7;
+          color: #d1d5db;
+          line-height: 1.85;
+          font-size: 1.02rem;
         }
         .htp-list-icon {
           width: 18px;
@@ -342,20 +344,22 @@ export default function HowToPlayClient({ faqSchemaJson }) {
           transform: translateY(2px);
         }
         .htp-faq {
-          padding: 16px 18px;
+          padding: 20px;
           border-radius: 18px;
           border: 1px solid rgba(255,255,255,0.08);
-          background: rgba(255,255,255,0.02);
+          background: rgba(255,255,255,0.03);
         }
         .htp-faq-q {
           color: #fff;
           font-weight: 700;
-          font-size: 1.08rem;
+          font-size: 1.14rem;
+          line-height: 1.45;
         }
         .htp-faq-a {
-          margin-top: 8px;
-          color: #9fa9b8;
-          line-height: 1.7;
+          margin-top: 10px;
+          color: #d1d5db;
+          line-height: 1.8;
+          font-size: 1rem;
         }
         @media (max-width: 980px) {
           .htp-facts,
@@ -398,6 +402,7 @@ export default function HowToPlayClient({ faqSchemaJson }) {
           </Link>
           <div className="htp-actions">
             <Link href="/" className="htp-btn" style={{ border: `1px solid ${BORDER}`, color: '#d5d8de', background: '#10131a' }}>Home</Link>
+            <Link href="/support" className="htp-btn" style={{ border: `1px solid ${BORDER}`, color: '#d5d8de', background: '#10131a' }}>Support</Link>
             <Link href="/room?action=create" className="htp-btn" style={{ background: GOLD, color: '#000' }}>Create Room</Link>
             <Link href="/room?action=browse" className="htp-btn" style={{ border: `1px solid ${CYAN}55`, color: CYAN, background: `${CYAN}12` }}>Live Auctions</Link>
           </div>

@@ -510,6 +510,12 @@ function AuctionContent() {
         mode={currentMode}
         isHost={isHost}
         emit={emit}
+        chatLog={chatLog}
+        roomCode={roomCode}
+        myName={myName}
+        myTeamId={effectiveMyTeamId}
+        gs={gs}
+        isSpectator={isSpectatorMode}
         activeTeams={(lobbyPlayers || []).filter(player => !player.isSpectator && player.teamId)}
         selections={gs.selections || {}}
         onFinalizeSelection={handleFinalizeSelection}
@@ -2266,7 +2272,7 @@ function AuctionContent() {
 }
 
 // ── Playing XI Selection ──────────────────────────────────────────────────────
-function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mode = 'mega', isHost = false, activeTeams = [], selections = {}, onFinalizeSelection, squadLimit = 15 }) {
+function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mode = 'mega', isHost = false, activeTeams = [], selections = {}, onFinalizeSelection, squadLimit = 15, chatLog = [], emit, roomCode, myName = '', myTeamId, gs, isSpectator = false }) {
   const [selected, setSelected] = useState([]);
   const ratingMode = String(mode || 'mega').toLowerCase() === 'mini' ? 'mini' : 'mega';
 
@@ -2379,28 +2385,49 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
   }, [getRoleCategory, ratingMode, selected]);
 
   if (submitted) return (
-    <div style={{ minHeight:'100vh', background:BG, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ textAlign:'center', maxWidth: 560, padding: '0 20px' }}>
-        <div style={{ fontFamily:"'Bebas Neue'", fontSize:48, color:GOLD, letterSpacing:6 }}>XI SUBMITTED!</div>
-        <div style={{ color:'#94A3B8', fontSize:14, marginTop:12, letterSpacing:2 }}>WAITING FOR OTHER TEAMS…</div>
-        <div style={{ color:'#555', fontSize:12, marginTop:10, letterSpacing:1.5 }}>{submittedCount}/{totalTeams || 0} teams submitted</div>
-        {isHost && (
-          <button
-            onClick={onFinalizeSelection}
-            style={{ marginTop: 22, background:`linear-gradient(135deg,${GOLD},#9a7610)`, border:`1px solid ${GOLD}`, borderRadius:8, padding:'14px 28px', color:'#000', fontWeight:900, fontSize:15, letterSpacing:3, cursor:'pointer', fontFamily:"'Barlow Condensed'" }}
-          >
-            FINALIZE RESULTS NOW
-          </button>
-        )}
+    <div style={{ minHeight:'100vh', background:'#050608', padding:'20px 14px 28px' }}>
+      <style>{`
+        .xi-submitted-shell { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr); gap: 18px; align-items: start; }
+        @media (max-width: 900px) {
+          .xi-submitted-shell { grid-template-columns: 1fr; }
+        }
+      `}</style>
+      <div className="xi-submitted-shell">
+        <div style={{ background:'#0b0d12', border:`1px solid ${BORDER}`, borderRadius:22, padding:'28px 22px', textAlign:'center' }}>
+          <div style={{ fontFamily:"'Bebas Neue'", fontSize:'clamp(36px, 8vw, 56px)', color:GOLD, letterSpacing:4 }}>XI SUBMITTED!</div>
+          <div style={{ color:'#CBD5E1', fontSize:14, marginTop:12, letterSpacing:1.4, lineHeight:1.7 }}>
+            Your Playing XI is locked in. Stay here, chat with the room, and wait for the remaining teams to finish.
+          </div>
+          <div style={{ color:'#64748B', fontSize:12, marginTop:12, letterSpacing:1.5 }}>{submittedCount}/{totalTeams || 0} teams submitted</div>
+          {isHost && (
+            <button
+              onClick={onFinalizeSelection}
+              style={{ marginTop: 22, background:GOLD, border:`1px solid ${GOLD}`, borderRadius:10, padding:'14px 28px', color:'#000', fontWeight:900, fontSize:15, letterSpacing:3, cursor:'pointer', fontFamily:"'Barlow Condensed'" }}
+            >
+              FINALIZE RESULTS NOW
+            </button>
+          )}
+        </div>
+        <XIChatPanel
+          chatLog={chatLog}
+          emit={emit}
+          currentRoom={roomCode}
+          isSpectator={isSpectator}
+          myName={myName}
+          myTeamId={myTeamId}
+          gs={gs}
+          title="Room Chat"
+          compact={false}
+        />
       </div>
     </div>
   );
   return (
-    <div className="xi-screen" style={{ minHeight:'100vh', background:'radial-gradient(circle at top, rgba(232,184,75,0.08), transparent 28%), linear-gradient(180deg, #050608 0%, #080808 55%, #090b12 100%)', padding:'24px 16px 32px' }}>
+    <div className="xi-screen" style={{ minHeight:'100vh', background:'#050608', padding:'24px 16px 32px' }}>
       <style>{`
         .xi-screen { overflow-x: hidden; }
         .xi-shell { max-width: 1320px; margin: 0 auto; }
-        .xi-hero { margin-bottom: 22px; background: linear-gradient(135deg, rgba(13,15,20,0.98), rgba(10,11,17,0.95)); border: 1px solid ${GOLD}22; border-radius: 24px; padding: 22px clamp(18px,3vw,30px); box-shadow: 0 24px 80px rgba(0,0,0,0.35); }
+        .xi-hero { margin-bottom: 22px; background: #0b0d12; border: 1px solid ${BORDER}; border-radius: 24px; padding: 22px clamp(18px,3vw,30px); }
         .xi-hero-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
         .xi-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; flex: 1 1 360px; width: 100%; }
         .xi-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.95fr); gap: 20px; align-items: start; }
@@ -2409,6 +2436,11 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
         .xi-role-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
         .xi-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
         .xi-player-card { min-width: 0; touch-action: manipulation; }
+        .xi-action-panel { position: sticky; bottom: 10px; }
+        .xi-card-shell { background: #0d1016; border: 1px solid ${BORDER}; border-radius: 20px; overflow: hidden; transition: border-color .18s ease, transform .18s ease, background .18s ease; }
+        .xi-card-shell.selected { background: #101722; }
+        .xi-card-media { position: relative; padding: 14px 14px 10px; min-height: 126px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .xi-card-content { padding: 12px 14px 14px; }
         @media (max-width: 900px) {
           .xi-screen { padding: 14px 10px calc(22px + env(safe-area-inset-bottom)) !important; }
           .xi-hero { border-radius: 18px !important; padding: 16px 14px !important; margin-bottom: 14px !important; }
@@ -2416,12 +2448,13 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
           .xi-hero-copy { flex-basis: 100% !important; }
           .xi-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; flex-basis: 100% !important; gap: 8px !important; }
           .xi-layout { grid-template-columns: 1fr !important; gap: 14px !important; }
-          .xi-side { order: -1; gap: 12px !important; }
+          .xi-side { gap: 12px !important; }
           .xi-squad-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
           .xi-card-media { min-height: 104px !important; padding: 10px 10px 8px !important; }
           .xi-card-avatar { width: 58px !important; height: 58px !important; border-radius: 16px !important; }
           .xi-card-name { font-size: 14px !important; }
           .xi-chip { font-size: 9px !important; letter-spacing: 1px !important; padding: 3px 6px !important; }
+          .xi-action-panel { position: sticky; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 5; }
         }
         @media (max-width: 560px) {
           .xi-title { font-size: 34px !important; letter-spacing: 2.5px !important; }
@@ -2437,6 +2470,10 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
           .xi-selected-price { display: none; }
           .xi-actions { display: grid !important; grid-template-columns: 1fr; }
           .xi-actions button { width: 100%; min-width: 0 !important; }
+          .xi-player-card { text-align: left !important; }
+          .xi-card-shell { border-radius: 16px !important; }
+          .xi-card-media { min-height: unset !important; padding: 12px !important; border-bottom: none !important; }
+          .xi-card-content { padding: 0 12px 12px !important; }
         }
       `}</style>
       <div className="xi-shell">
@@ -2480,10 +2517,10 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
                     key={`${p.name}-${i}`}
                     type="button"
                     onClick={() => toggle(p)}
-                    style={{ background:sel?`linear-gradient(180deg, ${rc}22, rgba(13,15,20,0.98) 38%)`:'linear-gradient(180deg, rgba(13,15,20,0.98), rgba(8,10,14,0.98))', border:`1px solid ${sel ? rc : BORDER}`, borderRadius:20, padding:0, cursor:'pointer', transition:'all .18s ease', transform:sel?'translateY(-3px)':'translateY(0)', boxShadow:sel?`0 16px 36px ${rc}20`:'0 10px 30px rgba(0,0,0,0.18)', overflow:'hidden', textAlign:'left' }}
+                    style={{ background:'transparent', border:'none', padding:0, cursor:'pointer', transition:'transform .18s ease', transform:sel?'translateY(-2px)':'translateY(0)', overflow:'hidden', textAlign:'left' }}
                   >
-                    <div className="xi-card-media" style={{ position:'relative', padding:'14px 14px 10px', minHeight:126, background:sel?`radial-gradient(circle at top right, ${rc}30, transparent 42%)`:'radial-gradient(circle at top right, rgba(34,211,238,0.08), transparent 42%)' }}>
-                      <div style={{ position:'absolute', inset:0, background:'linear-gradient(180deg, transparent 25%, rgba(0,0,0,0.32) 100%)' }} />
+                    <div className={`xi-card-shell${sel ? ' selected' : ''}`} style={{ borderColor: sel ? rc : BORDER }}>
+                    <div className="xi-card-media">
                       <div style={{ position:'relative', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
                         <div className="xi-card-avatar" style={{ width:72, height:72, borderRadius:20, overflow:'hidden', border:`1px solid ${sel ? rc : `${rc}50`}`, background:`linear-gradient(180deg, ${rc}16, rgba(255,255,255,0.03))`, flexShrink:0 }}>
                           {p.photoUrl ? (
@@ -2502,7 +2539,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
                         </div>
                       </div>
                     </div>
-                    <div style={{ padding:'0 14px 14px' }}>
+                    <div className="xi-card-content">
                       <div className="xi-card-name" style={{ color:'#F8FAFC', fontWeight:800, fontSize:16, lineHeight:1.2 }}>{p.name}</div>
                       <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginTop:8 }}>
                         <span style={{ fontSize:11, color:rc, fontWeight:800, letterSpacing:1.4 }}>{ROLE_L[p.role]}</span>
@@ -2517,6 +2554,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
                           </span>
                         )}
                       </div>
+                    </div>
                     </div>
                   </button>
                 );
@@ -2596,7 +2634,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
               </div>
             </div>
 
-            <div className="xi-panel" style={{ textAlign:'center', background:'linear-gradient(180deg, rgba(13,15,20,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18 }}>
+            <div className="xi-panel xi-action-panel" style={{ textAlign:'center', background:'rgba(11,13,18,0.96)', border:`1px solid ${BORDER}`, borderRadius:22, padding:18, backdropFilter:'blur(12px)' }}>
               {validationError && (
                 <div style={{ color:'#F87171', fontSize:13, marginBottom:14, letterSpacing:1.1, fontWeight:800 }}>
                   {(mySquad?.length || 0) < squadLimit
@@ -2629,12 +2667,145 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
                 </div>
               )}
             </div>
+
+            <XIChatPanel
+              chatLog={chatLog}
+              emit={emit}
+              currentRoom={roomCode}
+              isSpectator={isSpectator}
+              myName={myName}
+              myTeamId={myTeamId}
+              gs={gs}
+              title="Room Chat"
+              compact={true}
+            />
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+const XIChatPanel = memo(function XIChatPanel({ chatLog, emit, currentRoom, isSpectator, myName, myTeamId, gs, title = 'Room Chat', compact = false }) {
+  const [msg, setMsg] = useState('');
+  const listRef = useRef(null);
+  const shouldStickRef = useRef(true);
+  const TEAM_CLR = {
+    CSK:'#F9CA24', MI:'#4FC3F7', RCB:'#FF5252', KKR:'#CE93D8', SRH:'#FF8A65',
+    DC:'#64B5F6', PBKS:'#EF9A9A', RR:'#F48FB1', GT:'#4DD0E1', LSG:'#81D4FA',
+  };
+  const myColor = TEAM_CLR[myTeamId] || '#22D3EE';
+
+  const playerTeamMap = useMemo(() => {
+    const map = {};
+    Object.values(gs?.players || {}).forEach((player) => {
+      if (player?.id && player?.teamId) map[player.id] = player.teamId;
+    });
+    return map;
+  }, [gs?.players]);
+
+  const visibleMessages = useMemo(
+    () => (chatLog || []).filter((message) => message?.type === 'text' || message?.type === 'gif').slice(-80),
+    [chatLog]
+  );
+
+  const handleScroll = useCallback(() => {
+    const node = listRef.current;
+    if (!node) return;
+    const remaining = node.scrollHeight - node.scrollTop - node.clientHeight;
+    shouldStickRef.current = remaining < 56;
+  }, []);
+
+  useEffect(() => {
+    const node = listRef.current;
+    if (!node || !shouldStickRef.current) return;
+    node.scrollTop = node.scrollHeight;
+  }, [visibleMessages.length]);
+
+  const send = useCallback((e) => {
+    e.preventDefault();
+    if (!msg.trim() || !currentRoom || !emit) return;
+    emit('send-chat', { text: msg.trim(), isGif: false });
+    setMsg('');
+  }, [msg, currentRoom, emit]);
+
+  return (
+    <div className="xi-panel" style={{ background:'rgba(10,13,18,0.98)', border:`1px solid ${BORDER}`, borderRadius:22, padding: compact ? 16 : 18, display:'flex', flexDirection:'column', minHeight: compact ? 300 : 420 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:12 }}>
+        <div>
+          <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:26, letterSpacing:2 }}>{title}</div>
+          <div style={{ color:'#64748B', fontSize:11, letterSpacing:1.3, marginTop:3 }}>Keep talking while teams finish their XI.</div>
+        </div>
+        <div style={{ color:CYAN, fontSize:10, letterSpacing:2, fontWeight:800 }}>LIVE</div>
+      </div>
+      <div
+        ref={listRef}
+        onScroll={handleScroll}
+        style={{ flex:1, minHeight:0, overflowY:'auto', display:'flex', flexDirection:'column', gap:8, paddingRight:4, overscrollBehavior:'contain' }}
+      >
+        {visibleMessages.length === 0 ? (
+          <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#475569', gap:10, textAlign:'center', padding:'18px 12px' }}>
+            <div style={{ fontSize:26 }}>💬</div>
+            <div style={{ fontSize:12, letterSpacing:1 }}>No room chat yet</div>
+          </div>
+        ) : (
+          visibleMessages.map((message) => {
+            const isOwn = message.senderName === myName;
+            const senderTeamId = message.senderTeamId || playerTeamMap[message.senderId];
+            const senderColor = TEAM_CLR[senderTeamId] || CYAN;
+            return (
+              <div key={message.id} style={{ display:'flex', flexDirection:'column', alignItems:isOwn ? 'flex-end' : 'flex-start' }}>
+                <div style={{ fontSize:10, color:senderColor, fontWeight:700, letterSpacing:0.5, marginBottom:3 }}>
+                  {message.senderName}
+                </div>
+                {message.type === 'gif' ? (
+                  <img src={message.text} alt="GIF" style={{ maxWidth:'78%', borderRadius:10, border:'1px solid #1f2937' }} />
+                ) : (
+                  <div style={{
+                    maxWidth:'86%',
+                    padding:'8px 10px',
+                    borderRadius:isOwn ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+                    background:isOwn ? `${myColor}1a` : '#141922',
+                    border:`1px solid ${isOwn ? `${myColor}44` : '#232b39'}`,
+                    color:'#e5e7eb',
+                    fontSize:13,
+                    lineHeight:1.45,
+                    wordBreak:'break-word',
+                  }}>
+                    {message.text}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+      {!isSpectator ? (
+        <form onSubmit={send} style={{ display:'flex', gap:8, marginTop:12, borderTop:'1px solid #151b25', paddingTop:12 }}>
+          <input
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+            placeholder="Message the room..."
+            style={{ flex:1, background:'#0f141c', border:'1px solid #22283a', color:'#e5e7eb', padding:'10px 12px', borderRadius:10, fontSize:13, outline:'none', minWidth:0 }}
+            autoComplete="off"
+            autoCorrect="off"
+          />
+          <button
+            type="submit"
+            disabled={!msg.trim()}
+            style={{ background: msg.trim() ? myColor : '#111', color: msg.trim() ? '#000' : '#444', border:'none', minWidth:48, borderRadius:10, fontWeight:900, cursor:msg.trim() ? 'pointer' : 'not-allowed', fontSize:18, flexShrink:0 }}
+          >
+            ↑
+          </button>
+        </form>
+      ) : (
+        <div style={{ marginTop:12, borderTop:'1px solid #151b25', paddingTop:12, color:'#4b5563', fontSize:11, letterSpacing:1, textAlign:'center' }}>
+          Spectator mode
+        </div>
+      )}
+    </div>
+  );
+});
 
 export default function AuctionPage() {
   return (

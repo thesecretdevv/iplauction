@@ -5,6 +5,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next"
 import './globals.css';
 import { GameProvider } from './GameContext';
 import ClickSpark from './components/ClickSpark';
+import ChaiSupport from './components/ChaiSupport';
 import { createMetadata, SITE_URL } from './lib/seo';
 
 export const metadata = {
@@ -89,6 +90,7 @@ export default function RootLayout({ children }) {
         >
           <GameProvider>{children}</GameProvider>
         </ClickSpark>
+        <ChaiSupport />
         <Analytics />
         <SpeedInsights />
       </body>

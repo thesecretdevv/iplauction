@@ -785,14 +785,25 @@ const TEAM_CLRS = {
 const LobbyChatBox = memo(function LobbyChatBox({ chatLog, emit, roomCode, myName, isSpectator }) {
   const [msg, setMsg] = useState('');
   const endRef = useRef(null);
+  const listRef = useRef(null);
+  const shouldStickRef = useRef(true);
 
   const visible = useMemo(
     () => (chatLog || []).filter(m => m?.type === 'text' || m?.type === 'gif').slice(-80),
     [chatLog]
   );
 
+  const handleScroll = useCallback(() => {
+    const node = listRef.current;
+    if (!node) return;
+    const remaining = node.scrollHeight - node.scrollTop - node.clientHeight;
+    shouldStickRef.current = remaining < 48;
+  }, []);
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const node = listRef.current;
+    if (!node || !shouldStickRef.current) return;
+    node.scrollTop = node.scrollHeight;
   }, [visible.length]);
 
   const send = useCallback((e) => {
@@ -808,7 +819,7 @@ const LobbyChatBox = memo(function LobbyChatBox({ chatLog, emit, roomCode, myNam
         <span className="lc-dot" />
         <span className="lc-title">Lobby Chat</span>
       </div>
-      <div className="lc-messages">
+      <div className="lc-messages" ref={listRef} onScroll={handleScroll}>
         {visible.length === 0 ? (
           <div className="lc-empty">
             <span style={{ fontSize: 22 }}>💬</span>

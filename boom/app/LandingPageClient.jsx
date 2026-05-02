@@ -122,33 +122,6 @@ const HOW_STEPS = [
   { num: '03', title: 'WIN THE AUCTION', body: 'The franchise with the best squad balance wins. Star-studded lineups only work if you have the budget to back them. Dominate the table.' },
 ];
 
-const SEO_LINKS = [
-  { label: 'IPL Auction Simulator', href: '/ipl-auction-simulator' },
-  { label: 'Play IPL Auction Online', href: '/play-ipl-auction-online' },
-  { label: 'IPL Auction With Friends', href: '/ipl-auction-with-friends' },
-  { label: 'Mock IPL Auction', href: '/mock-ipl-auction' },
-  { label: 'IPL Mega Auction', href: '/ipl-mega-auction' },
-  { label: 'IPL Auction Rules', href: '/ipl-auction-rules' },
-  { label: 'IPL Purse Calculator', href: '/ipl-auction-purse-calculator' },
-  { label: 'IPL Team Builder', href: '/ipl-team-builder' },
-  { label: 'IPL Player List', href: '/ipl-player-list' },
-];
-
-const FAQS = [
-  {
-    question: 'How to play IPL auction with friends?',
-    answer: 'Create a private room, share the room code, pick franchises, and start a live mock auction. Every friend bids from their own browser while the room tracks purse, squads, and sold players.',
-  },
-  {
-    question: 'Best IPL auction simulator?',
-    answer: 'This IPL auction simulator is built for multiplayer mock auctions, IPL-style bidding, private rooms, public rooms, player lists, franchise squads, and post-auction results.',
-  },
-  {
-    question: 'How does IPL auction purse work?',
-    answer: 'Each team starts with a fixed purse. Winning bids reduce the remaining budget, so managers must balance marquee buys with role coverage, backups, and late-round value picks.',
-  },
-];
-
 const HERO_STACK_PLAYERS = [
   { name: 'KL Rahul', accent: '#81D4FA', tag: 'BATTING ANCHOR' },
   { name: 'MS Dhoni', accent: '#F9CA24', tag: 'FINISHER ICON' },
@@ -284,6 +257,7 @@ export default function LandingPage() {
             { label: 'Players', href: '/players' },
             { label: 'How to Play', href: '/how-to-play' },
             { label: 'Schedule', href: '/schedule' },
+            { label: 'Support', href: '/support' },
           ].map((link) => (
             <a key={link.label} href={link.href} className="l-nav-link">{link.label}</a>
           ))}
@@ -540,32 +514,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="l-seo-section l-seo-split">
-        <div>
-          <div className="l-seo-heading align-left">
-            <span>Features</span>
-            <h2>Everything needed for a fantasy IPL auction online</h2>
-            <p>
-              Run a mega auction, organize a smaller mock IPL auction, or use the player and team pages as a
-              prep kit for your own auction room.
-            </p>
-          </div>
-          <div className="l-internal-links">
-            {SEO_LINKS.map((link) => (
-              <Link key={link.href} href={link.href}>{link.label}</Link>
-            ))}
-          </div>
-        </div>
-        <div className="l-faq-list">
-          {FAQS.map((faq) => (
-            <details key={faq.question} className="l-faq-item">
-              <summary>{faq.question}</summary>
-              <p>{faq.answer}</p>
-            </details>
-          ))}
-        </div>
-      </section>
-
       {/* TEAMS */}
       <section className="l-teams">
         <p className="l-teams-label">This Season&apos;s Franchises</p>
@@ -603,6 +551,7 @@ export default function LandingPage() {
                 { label: 'How to Play', href: '/how-to-play' },
                 { label: 'Players', href: '/players' },
                 { label: 'Teams', href: '/teams' },
+                { label: 'Support', href: '/support' },
                 { label: 'IPL Auction Simulator', href: '/ipl-auction-simulator' },
                 { label: 'Mock IPL Auction', href: '/mock-ipl-auction' },
                 { label: 'Live Rooms', href: '/room?action=browse' },
@@ -621,6 +570,9 @@ export default function LandingPage() {
 
             <span style={{ fontSize: '9px', color: '#666', letterSpacing: '2px', textTransform: 'lowercase', marginTop: '8px' }}>
               <a target="_blank" rel="noreferrer" href="https://icons8.com/icon/OLf3WK9ioebI/auction" style={{ color: 'inherit', textDecoration: 'none' }}>Auction Hammer</a> icon by <a target="_blank" rel="noreferrer" href="https://icons8.com" style={{ color: 'inherit', textDecoration: 'none' }}>Icons8</a>
+            </span>
+            <span style={{ fontSize: '9px', color: '#666', letterSpacing: '1px', textTransform: 'none' }}>
+              <a target="_blank" rel="noreferrer" href="https://www.flaticon.com/free-icons/chai-tea" title="chai-tea icons" style={{ color: 'inherit', textDecoration: 'none' }}>Chai-tea icons created by Fatima Qureshi - Flaticon</a>
             </span>
           </div>
         </div>

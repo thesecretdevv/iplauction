@@ -36,6 +36,106 @@ a {
   text-decoration: inherit;
 }
 
+.chai-support {
+  position: fixed;
+  left: max(10px, env(safe-area-inset-left));
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  z-index: 2147483000;
+  display: inline-flex;
+  align-items: center;
+  height: 52px;
+  max-width: 52px;
+  overflow: hidden;
+  border: 1px solid rgba(232, 184, 75, 0.5);
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgba(255, 248, 220, 0.98), rgba(246, 225, 162, 0.98));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), 0 0 18px rgba(232, 184, 75, 0.2);
+  color: #3b2408;
+  text-decoration: none;
+  transform: translateZ(0);
+  transition: max-width 0.24s ease, border-radius 0.24s ease, box-shadow 0.24s ease, transform 0.24s ease;
+  isolation: isolate;
+  touch-action: manipulation;
+}
+
+.chai-support:hover,
+.chai-support:focus-visible {
+  max-width: 190px;
+  border-radius: 999px 14px 14px 999px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42), 0 0 24px rgba(232, 184, 75, 0.28);
+  transform: translateY(-2px);
+}
+
+.chai-support:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.85);
+  outline-offset: 3px;
+}
+
+.chai-support-icon {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  display: grid;
+  place-items: center;
+  background-color: #fff4c7;
+  background-image:
+    url('/assets/tea.png'),
+    radial-gradient(circle at 50% 35%, #ffffff 0%, #fff4c7 48%, #f1c85b 100%);
+  background-position: center, center;
+  background-repeat: no-repeat;
+  background-size: 36px 36px, cover;
+}
+
+.chai-support-note {
+  position: relative;
+  min-width: 122px;
+  padding: 0 18px 0 8px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chai-support-note::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 9px;
+  bottom: 9px;
+  width: 1px;
+  background: rgba(93, 58, 9, 0.2);
+}
+
+@media (max-width: 860px) {
+  .chai-support {
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    height: 46px;
+    max-width: 46px;
+  }
+
+  .chai-support:hover,
+  .chai-support:focus-visible {
+    max-width: 164px;
+  }
+
+  .chai-support-icon {
+    width: 46px;
+    height: 46px;
+    flex-basis: 46px;
+    background-size: 31px 31px, cover;
+  }
+
+  .chai-support-note {
+    min-width: 106px;
+    padding-right: 14px;
+    font-size: 13px;
+  }
+}
+
 .site-brand {
   display: inline-flex;
   flex-direction: column;

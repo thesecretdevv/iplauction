@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import BrandLink from '../components/BrandLink';
 import playersData from '../data/Players.json';
 import PlayerFlipCard from '../components/PlayerFlipCard';
@@ -10,7 +9,6 @@ const ROLES = ['ALL', 'BAT', 'BOWL', 'WK', 'AR'];
 const NATIONS = ['ALL', 'INDIAN', 'OVERSEAS'];
 
 export default function PlayersPage() {
-  const router = useRouter();
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('ALL');
   const [filterNation, setFilterNation] = useState('ALL');
@@ -40,7 +38,7 @@ export default function PlayersPage() {
   const displayedPlayers = filteredPlayers.slice(0, visibleCount);
 
   return (
-    <div className="min-h-screen" style={{ background: 'transparent', color: '#fff', fontFamily: "'Courier Prime', monospace", minHeight: '100vh', padding: '24px 5vw' }}>
+    <div className="min-h-screen" style={{ backgroundColor: '#000', color: '#fff', fontFamily: "'Rajdhani', sans-serif", minHeight: '100vh', padding: '24px 5vw' }}>
       <div style={{ width: '100%', margin: '0 auto' }}>
         
         <header style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '24px', gap: '24px' }}>
@@ -48,7 +46,7 @@ export default function PlayersPage() {
           <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '3.5rem', margin: 0, letterSpacing: '4px', color: '#E8B84B' }}>
             PLAYER <span style={{ color: '#fff' }}>DIRECTORY</span>
           </h1>
-          <div style={{ color: '#9aa4b2', fontSize: '0.875rem' }}>{filteredPlayers.length} matches / {playersData.length} total</div>
+          <div style={{ color: '#9aa4b2', fontSize: '1rem' }}>{filteredPlayers.length} matches / {playersData.length} total</div>
         </header>
 
         {/* Filters Panel */}
@@ -60,7 +58,7 @@ export default function PlayersPage() {
             placeholder="Search players by name..." 
             value={search}
             onChange={e => { setSearch(e.target.value); setVisibleCount(24); }}
-            style={{ width: '100%', backgroundColor: 'rgba(4,7,12,0.94)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', padding: '16px 20px', fontSize: '1.2rem', borderRadius: '12px', outline: 'none', fontFamily: 'inherit' }}
+            style={{ width: '100%', backgroundColor: 'rgba(4,7,12,0.94)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', padding: '16px 20px', fontSize: '1.15rem', borderRadius: '12px', outline: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
             onFocus={e => e.target.style.borderColor = '#E8B84B'}
             onBlur={e => e.target.style.borderColor = '#333'}
           />
@@ -68,7 +66,7 @@ export default function PlayersPage() {
           <div className="filters-container" style={{ display: 'flex', flexWrap: 'wrap', gap: '32px', alignItems: 'center' }}>
             {/* Roles Chips */}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ color: '#777', marginRight: '8px', fontSize: '0.9rem' }}>ROLE:</span>
+              <span style={{ color: '#94a3b8', marginRight: '8px', fontSize: '0.95rem', letterSpacing: '0.08em' }}>ROLE:</span>
               {ROLES.map(role => (
                 <button
                   key={role}
@@ -81,9 +79,10 @@ export default function PlayersPage() {
                     backgroundColor: filterRole === role ? '#E8B84B' : 'rgba(4,7,12,0.94)',
                     color: filterRole === role ? '#000' : '#fff',
                     cursor: 'pointer',
-                    fontWeight: filterRole === role ? 'bold' : 'normal',
+                    fontWeight: filterRole === role ? '700' : '600',
                     transition: 'all 0.2s',
-                    fontFamily: 'inherit'
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    letterSpacing: '0.08em'
                   }}
                 >{role}</button>
               ))}
@@ -91,7 +90,7 @@ export default function PlayersPage() {
 
             {/* Nationality Chips */}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ color: '#777', marginRight: '8px', fontSize: '0.9rem' }}>NATION:</span>
+              <span style={{ color: '#94a3b8', marginRight: '8px', fontSize: '0.95rem', letterSpacing: '0.08em' }}>NATION:</span>
               {NATIONS.map(nation => (
                 <button
                   key={nation}
@@ -104,9 +103,10 @@ export default function PlayersPage() {
                     backgroundColor: filterNation === nation ? '#00BCD4' : 'rgba(4,7,12,0.94)',
                     color: filterNation === nation ? '#000' : '#fff',
                     cursor: 'pointer',
-                    fontWeight: filterNation === nation ? 'bold' : 'normal',
+                    fontWeight: filterNation === nation ? '700' : '600',
                     transition: 'all 0.2s',
-                    fontFamily: 'inherit'
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    letterSpacing: '0.08em'
                   }}
                 >{nation}</button>
               ))}
@@ -133,10 +133,10 @@ export default function PlayersPage() {
                 <line x1="11" y1="8" x2="11" y2="14"></line>
                 <line x1="8" y1="11" x2="14" y2="11"></line>
               </svg>
-              <div style={{ color: '#888', fontSize: '1.2rem' }}>No players found matching your criteria.</div>
+              <div style={{ color: '#cbd5e1', fontSize: '1.2rem' }}>No players found matching your criteria.</div>
               <button 
                 onClick={() => { setSearch(''); setFilterRole('ALL'); setFilterNation('ALL'); }}
-                style={{ marginTop: '16px', padding: '8px 24px', background: 'transparent', border: '1px solid #555', color: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+                style={{ marginTop: '16px', padding: '10px 24px', background: 'transparent', border: '1px solid #555', color: '#fff', borderRadius: '4px', cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.08em' }}
                 onMouseOver={e => e.target.style.borderColor = '#E8B84B'}
                 onMouseOut={e => e.target.style.borderColor = '#555'}
               >
@@ -166,7 +166,7 @@ export default function PlayersPage() {
                       border: '2px solid #E8B84B',
                       color: '#E8B84B',
                       fontSize: '1.1rem',
-                      fontFamily: "'Courier Prime', monospace",
+                      fontFamily: "'Barlow Condensed', sans-serif",
                       letterSpacing: '2px',
                       textTransform: 'uppercase',
                       cursor: 'pointer',
