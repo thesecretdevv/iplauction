@@ -990,10 +990,12 @@ function AuctionContent() {
         .ac-sheet-tab {
           flex:1; padding:9px 4px; text-align:center; font-size:11px; font-weight:700;
           font-family:'Barlow Condensed',sans-serif; letter-spacing:.5px; cursor:pointer;
-          border-bottom:2px solid transparent; color:#555; transition:all .2s;
+          border-bottom:2px solid transparent; color:#555; transition:background-color .12s ease, color .12s ease, border-color .12s ease;
           display:flex; align-items:center; justify-content:center;
+          user-select:none;
         }
-        .ac-sheet-tab.active { color:#fff; border-bottom-color:${GOLD}; }
+        .ac-sheet-tab.active { color:#fff; border-bottom-color:${GOLD}; background:rgba(255,255,255,0.02); }
+        .ac-sheet-tab:active { background:rgba(255,255,255,0.03); }
         .ac-sheet-tab-close {
           width:44px;
           border:0;
@@ -2274,6 +2276,7 @@ function AuctionContent() {
 // ── Playing XI Selection ──────────────────────────────────────────────────────
 function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mode = 'mega', isHost = false, activeTeams = [], selections = {}, onFinalizeSelection, squadLimit = 15, chatLog = [], emit, roomCode, myName = '', myTeamId, gs, isSpectator = false }) {
   const [selected, setSelected] = useState([]);
+  const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const ratingMode = String(mode || 'mega').toLowerCase() === 'mini' ? 'mini' : 'mega';
 
   useEffect(() => {
@@ -2384,6 +2387,19 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
     });
   }, [getRoleCategory, ratingMode, selected]);
 
+  const requestFinalizeSelection = useCallback(() => {
+    setShowFinalizeConfirm(true);
+  }, []);
+
+  const closeFinalizeConfirm = useCallback(() => {
+    setShowFinalizeConfirm(false);
+  }, []);
+
+  const confirmFinalizeSelection = useCallback(() => {
+    setShowFinalizeConfirm(false);
+    onFinalizeSelection?.();
+  }, [onFinalizeSelection]);
+
   if (submitted) return (
     <div style={{ minHeight:'100vh', background:'#050608', padding:'20px 14px 28px' }}>
       <style>{`
@@ -2401,7 +2417,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
           <div style={{ color:'#64748B', fontSize:12, marginTop:12, letterSpacing:1.5 }}>{submittedCount}/{totalTeams || 0} teams submitted</div>
           {isHost && (
             <button
-              onClick={onFinalizeSelection}
+              onClick={requestFinalizeSelection}
               style={{ marginTop: 22, background:GOLD, border:`1px solid ${GOLD}`, borderRadius:10, padding:'14px 28px', color:'#000', fontWeight:900, fontSize:15, letterSpacing:3, cursor:'pointer', fontFamily:"'Barlow Condensed'" }}
             >
               FINALIZE RESULTS NOW
@@ -2420,6 +2436,17 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
           compact={false}
         />
       </div>
+      <AppDialog
+        isOpen={showFinalizeConfirm}
+        title="Finalize Results Now?"
+        message="This will end the Playing XI phase for everyone. Teams that have not submitted yet may be auto-completed from their available squad."
+        tone="danger"
+        onClose={closeFinalizeConfirm}
+        actions={[
+          { label: 'Cancel', variant: 'secondary', onClick: closeFinalizeConfirm },
+          { label: 'Finalize Results', variant: 'danger', onClick: confirmFinalizeSelection },
+        ]}
+      />
     </div>
   );
   return (
@@ -2654,7 +2681,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
                 </button>
                 {isHost && (
                   <button
-                    onClick={onFinalizeSelection}
+                    onClick={requestFinalizeSelection}
                     style={{ background:'transparent', border:`1px solid ${CYAN}66`, borderRadius:12, padding:'15px 24px', color:CYAN, fontWeight:900, fontSize:15, letterSpacing:2.5, cursor:'pointer', fontFamily:"'Barlow Condensed'" }}
                   >
                     HOST FINALIZE
@@ -2682,6 +2709,17 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
           </div>
         </div>
       </div>
+      <AppDialog
+        isOpen={showFinalizeConfirm}
+        title="Finalize Results Now?"
+        message="This will end the Playing XI phase for everyone. Teams that have not submitted yet may be auto-completed from their available squad."
+        tone="danger"
+        onClose={closeFinalizeConfirm}
+        actions={[
+          { label: 'Cancel', variant: 'secondary', onClick: closeFinalizeConfirm },
+          { label: 'Finalize Results', variant: 'danger', onClick: confirmFinalizeSelection },
+        ]}
+      />
     </div>
   );
 }
