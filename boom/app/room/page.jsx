@@ -287,10 +287,10 @@ const globalStyles = `
   .rp-toggle-card-sub   { font-family:'Courier Prime',monospace; font-size:9px; letter-spacing:1px; color:#888; }
   .rp-toggle-check { position:absolute; top:8px; right:10px; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; transition:all .18s; }
   .rp-toggle-card.mode-card {
-    min-height: 138px;
-    padding: 16px 16px 14px;
-    gap: 8px;
-    border-radius: 12px;
+    min-height: 104px;
+    padding: 12px 14px;
+    gap: 6px;
+    border-radius: 10px;
     border: 1px solid #242424;
     border-left-width: 1px;
   }
@@ -323,8 +323,8 @@ const globalStyles = `
     box-shadow: 0 14px 36px rgba(74,222,128,0.14);
   }
   .rp-toggle-card.mode-card .rp-toggle-check {
-    top: 12px;
-    right: 12px;
+    top: 10px;
+    right: 10px;
   }
   .rp-toggle-mode-header {
     display:block;
@@ -342,22 +342,30 @@ const globalStyles = `
     margin-bottom:4px;
   }
   .rp-toggle-card.mode-card .rp-toggle-card-title {
-    font-size: 2rem;
-    line-height: .95;
+    font-size: 1.45rem;
+    line-height: .9;
     letter-spacing: .06em;
-    max-width: 220px;
+    max-width: 160px;
   }
   .rp-toggle-card.mode-card .rp-toggle-card-sub {
-    font-size: 13px;
-    letter-spacing: 1px;
-    line-height: 1.35;
+    font-size: 11px;
+    letter-spacing: .8px;
+    line-height: 1.25;
     color: #a8b1bf;
     position: relative;
     z-index: 1;
   }
   @media(max-width:600px) {
     .rp-toggle-card.mode-card {
-      min-height: 130px;
+      min-height: 96px;
+      padding: 11px 12px;
+    }
+    .rp-toggle-card.mode-card .rp-toggle-card-title {
+      font-size: 1.3rem;
+      max-width: 140px;
+    }
+    .rp-toggle-card.mode-card .rp-toggle-card-sub {
+      font-size: 10px;
     }
   }
 
