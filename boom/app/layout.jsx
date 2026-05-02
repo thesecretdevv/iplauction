@@ -5,45 +5,29 @@ import { SpeedInsights } from "@vercel/speed-insights/next"
 import './globals.css';
 import { GameProvider } from './GameContext';
 import ClickSpark from './components/ClickSpark';
+import { createMetadata, SITE_URL } from './lib/seo';
 
 export const metadata = {
-  title: 'IPL Auction Online Game | Live Cricket Auction Simulator',
-  description: 'Play IPL Auction Online, the live cricket auction game with private rooms, real-time bidding, franchise purse strategy, and dream squad building.',
-  keywords: ['ipl auction game', 'ipl auction online', 'cricket auction online', 'ipl online game', 'auction online', 'live auction rooms', 'ipl room code'],
-  metadataBase: new URL('https://iplauction.fun'),
-  alternates: {
-    canonical: 'https://iplauction.fun',
+  ...createMetadata({
+    title: 'IPL Auction Simulator - Play IPL Mega Auction Online with Friends',
+    description: 'Play a free IPL Auction Simulator online with friends. Create mock IPL auction rooms, bid in real time, manage your purse, and build a fantasy IPL squad.',
+    path: '/',
+  }),
+  metadataBase: new URL(SITE_URL),
+  applicationName: 'IPL Auction Simulator',
+  appleWebApp: {
+    capable: true,
+    title: 'IPL Auction Simulator',
+    statusBarStyle: 'black-translucent',
   },
-  robots: {
-    index: true,
-    follow: true,
-  },
-  openGraph: {
-    title: 'IPL Auction Online Game | Play Live Cricket Auction Online',
-    description: 'Create a room, join friends, bid on players in real time, and build your IPL franchise in this live cricket auction game.',
-    url: 'https://iplauction.fun',
-    siteName: 'IPL Auction Online',
-    images: [
-      {
-        url: '/assets/Hero_players.png',
-        width: 1200,
-        height: 669,
-        alt: 'IPL Auction Online hero artwork',
-      },
-    ],
-    locale: 'en_IN',
-    type: 'website',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'IPL Auction Online Game | Live Cricket Auction Simulator',
-    description: 'Join live cricket auction rooms, bid in real time, and build your IPL squad online.',
-    images: ['/assets/Hero_players.png'],
-  },
+  manifest: '/manifest.webmanifest',
   icons: {
-    icon: '/icon.png',
+    icon: [
+      { url: '/favicon.ico', sizes: '32x32' },
+      { url: '/assets/favicon.png', type: 'image/png' },
+    ],
     shortcut: '/favicon.ico',
-    apple: '/apple-icon.png',
+    apple: '/assets/favicon.png',
   },
 };
 
@@ -59,6 +43,9 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <head>
         <meta name="google-adsense-account" content="ca-pub-2556312199314107" />
+        <link rel="dns-prefetch" href="https://images.icc-cricket.com" />
+        <link rel="dns-prefetch" href="https://documents.iplt20.com" />
+        <link rel="preload" as="image" href="/assets/Hero_players.png" fetchPriority="high" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

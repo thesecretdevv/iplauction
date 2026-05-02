@@ -1,8 +1,10 @@
 import HowToPlayClient from './HowToPlayClient';
+import { createMetadata } from '../lib/seo';
 
-export const metadata = {
-  title: 'How to Play IPL Auction Online | Rules, Scoring, Results & Strategy',
-  description: 'Learn how to play IPL Auction Online with full auction rules, bidding strategy, scoring system, leaderboard logic, room setup, Mega Auction and Mini Auction tips.',
+export const metadata = createMetadata({
+  title: 'How to Play IPL Auction Simulator - Rules, Purse and Strategy',
+  description: 'Learn how to play IPL Auction Simulator with friends, including room setup, bidding rules, purse strategy, scoring, results, and mock auction tips.',
+  path: '/how-to-play',
   keywords: [
     'How to play IPL Auction Online',
     'IPL auction online game guide',
@@ -18,31 +20,8 @@ export const metadata = {
     'cricket auction simulator rules',
     'fantasy cricket auction strategy',
   ],
-  alternates: {
-    canonical: '/how-to-play',
-  },
-  openGraph: {
-    title: 'How to Play IPL Auction Online',
-    description: 'Complete IPL auction simulator guide covering auction rules, room setup, bidding strategy, scoring system, results breakdown, leaderboard logic, and winning tips.',
-    url: 'https://iplauction.fun/how-to-play',
-    siteName: 'IPL Auction Online',
-    images: [
-      {
-        url: '/assets/favicon.png',
-        width: 1200,
-        height: 630,
-      },
-    ],
-    locale: 'en_IN',
-    type: 'article',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'How to Play IPL Auction Online',
-    description: 'IPL auction rules, bidding strategy, scoring system, results breakdown, leaderboard logic, and room setup tips.',
-    images: ['/assets/og-image.png'],
-  },
-};
+  type: 'article',
+});
 
 const faqs = [
   {

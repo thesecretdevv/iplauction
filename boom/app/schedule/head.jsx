@@ -6,7 +6,7 @@ export default function Head() {
         name="description"
         content="Check the IPL 2026 schedule, match dates, auction windows, and live room activity on IPL Auction Online."
       />
-      <link rel="canonical" href="https://iplauction.fun/schedule" />
+      <link rel="canonical" href="https://www.iplauction.fun/schedule" />
     </>
   );
 }

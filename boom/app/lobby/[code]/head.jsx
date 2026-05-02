@@ -3,7 +3,7 @@ export default function Head() {
     <>
       <title>Auction Lobby</title>
       <meta name="robots" content="noindex,nofollow" />
-      <link rel="canonical" href="https://iplauction.fun/room" />
+      <link rel="canonical" href="https://www.iplauction.fun/room" />
     </>
   );
 }

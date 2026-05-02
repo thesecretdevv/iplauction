@@ -1,5 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [
+          {
+            type: 'host',
+            value: 'iplauction.fun',
+          },
+        ],
+        destination: 'https://www.iplauction.fun/:path*',
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {

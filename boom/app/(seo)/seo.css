@@ -1,0 +1,144 @@
+.seo-page {
+  min-height: 100vh;
+  background: #080808;
+  color: #fff;
+  font-family: 'Rajdhani', sans-serif;
+}
+
+.seo-hero {
+  padding: 120px 24px 72px;
+  max-width: 980px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.seo-kicker {
+  color: #e8b84b;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.seo-hero h1,
+.seo-content h2,
+.seo-faq h2,
+.seo-band h2 {
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 0;
+}
+
+.seo-hero h1 {
+  margin: 10px 0 18px;
+  font-size: clamp(3.4rem, 8vw, 6.8rem);
+  line-height: 0.9;
+}
+
+.seo-hero p,
+.seo-content p,
+.seo-band p,
+.seo-faq p {
+  color: #c7d0db;
+  font-size: 1.1rem;
+  line-height: 1.65;
+}
+
+.seo-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 30px;
+}
+
+.seo-actions a,
+.seo-content aside a {
+  color: #050505;
+  background: #e8b84b;
+  padding: 12px 18px;
+  text-decoration: none;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.seo-actions a:last-child {
+  background: transparent;
+  color: #e8b84b;
+  border: 1px solid rgba(232,184,75,0.45);
+}
+
+.seo-band,
+.seo-content,
+.seo-faq {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 56px 24px;
+}
+
+.seo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.seo-grid article,
+.seo-content aside,
+.seo-faq details {
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  background: rgba(12, 16, 24, 0.86);
+  padding: 22px;
+}
+
+.seo-grid h2 {
+  color: #fff;
+  font-size: 2rem;
+}
+
+.seo-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 28px;
+}
+
+.seo-content h2,
+.seo-faq h2 {
+  color: #fff;
+  font-size: clamp(2.2rem, 4vw, 3.6rem);
+}
+
+.seo-content aside nav {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.seo-content aside a {
+  display: block;
+  text-align: center;
+}
+
+.seo-faq details {
+  margin-top: 12px;
+}
+
+.seo-faq summary {
+  cursor: pointer;
+  color: #fff;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.24rem;
+  font-weight: 700;
+}
+
+.seo-faq p {
+  margin-top: 12px;
+}
+
+@media (max-width: 860px) {
+  .seo-grid,
+  .seo-content {
+    grid-template-columns: 1fr;
+  }
+}

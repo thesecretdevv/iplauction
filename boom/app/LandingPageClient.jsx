@@ -122,6 +122,33 @@ const HOW_STEPS = [
   { num: '03', title: 'WIN THE AUCTION', body: 'The franchise with the best squad balance wins. Star-studded lineups only work if you have the budget to back them. Dominate the table.' },
 ];
 
+const SEO_LINKS = [
+  { label: 'IPL Auction Simulator', href: '/ipl-auction-simulator' },
+  { label: 'Play IPL Auction Online', href: '/play-ipl-auction-online' },
+  { label: 'IPL Auction With Friends', href: '/ipl-auction-with-friends' },
+  { label: 'Mock IPL Auction', href: '/mock-ipl-auction' },
+  { label: 'IPL Mega Auction', href: '/ipl-mega-auction' },
+  { label: 'IPL Auction Rules', href: '/ipl-auction-rules' },
+  { label: 'IPL Purse Calculator', href: '/ipl-auction-purse-calculator' },
+  { label: 'IPL Team Builder', href: '/ipl-team-builder' },
+  { label: 'IPL Player List', href: '/ipl-player-list' },
+];
+
+const FAQS = [
+  {
+    question: 'How to play IPL auction with friends?',
+    answer: 'Create a private room, share the room code, pick franchises, and start a live mock auction. Every friend bids from their own browser while the room tracks purse, squads, and sold players.',
+  },
+  {
+    question: 'Best IPL auction simulator?',
+    answer: 'This IPL auction simulator is built for multiplayer mock auctions, IPL-style bidding, private rooms, public rooms, player lists, franchise squads, and post-auction results.',
+  },
+  {
+    question: 'How does IPL auction purse work?',
+    answer: 'Each team starts with a fixed purse. Winning bids reduce the remaining budget, so managers must balance marquee buys with role coverage, backups, and late-round value picks.',
+  },
+];
+
 const HERO_STACK_PLAYERS = [
   { name: 'KL Rahul', accent: '#81D4FA', tag: 'BATTING ANCHOR' },
   { name: 'MS Dhoni', accent: '#F9CA24', tag: 'FINISHER ICON' },
@@ -470,6 +497,11 @@ export default function LandingPage() {
 
       {/* HOW IT WORKS */}
       <section className="l-how">
+        <div className="l-seo-heading">
+          <span>How It Works</span>
+          <h2>Run a complete IPL auction simulator in minutes</h2>
+          <p>Use the simulator for fantasy IPL auction practice, friendly draft nights, or a full mock IPL auction before the real mega auction.</p>
+        </div>
         <div className="l-how-grid">
           {HOW_STEPS.map(({ num, title, body }) => (
             <div key={num} className="l-step">
@@ -478,6 +510,58 @@ export default function LandingPage() {
               <h3 className="l-step-title">{title}</h3>
               <p className="l-step-body">{body}</p>
             </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="l-seo-section">
+        <div className="l-seo-heading">
+          <span>Why Use This Simulator</span>
+          <h2>Designed for IPL auction practice, strategy, and multiplayer fun</h2>
+          <p>
+            IPL Auction Simulator helps you test bidding plans before a fantasy league, learn purse management,
+            and play an IPL auction online with friends without spreadsheets or manual timers.
+          </p>
+        </div>
+        <div className="l-feature-grid">
+          {[
+            ['Live rooms', 'Create private or public IPL auction rooms with real-time bidding and room codes.'],
+            ['Mock auction strategy', 'Practice when to bid, when to save, and how to build a balanced squad.'],
+            ['Purse management', 'Track remaining budget while competing for marquee players and value picks.'],
+            ['Player pool', 'Browse IPL players, roles, base prices, teams, and auction-ready player cards.'],
+            ['Team building', 'Compare franchises, squad roles, and final auction results after bidding ends.'],
+            ['Free online play', 'Start an IPL auction game directly in the browser on desktop or mobile.'],
+          ].map(([title, body]) => (
+            <article key={title} className="l-feature-card">
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="l-seo-section l-seo-split">
+        <div>
+          <div className="l-seo-heading align-left">
+            <span>Features</span>
+            <h2>Everything needed for a fantasy IPL auction online</h2>
+            <p>
+              Run a mega auction, organize a smaller mock IPL auction, or use the player and team pages as a
+              prep kit for your own auction room.
+            </p>
+          </div>
+          <div className="l-internal-links">
+            {SEO_LINKS.map((link) => (
+              <Link key={link.href} href={link.href}>{link.label}</Link>
+            ))}
+          </div>
+        </div>
+        <div className="l-faq-list">
+          {FAQS.map((faq) => (
+            <details key={faq.question} className="l-faq-item">
+              <summary>{faq.question}</summary>
+              <p>{faq.answer}</p>
+            </details>
           ))}
         </div>
       </section>
@@ -519,6 +603,8 @@ export default function LandingPage() {
                 { label: 'How to Play', href: '/how-to-play' },
                 { label: 'Players', href: '/players' },
                 { label: 'Teams', href: '/teams' },
+                { label: 'IPL Auction Simulator', href: '/ipl-auction-simulator' },
+                { label: 'Mock IPL Auction', href: '/mock-ipl-auction' },
                 { label: 'Live Rooms', href: '/room?action=browse' },
               ].map((link) => (
                 <Link key={link.label} href={link.href} className="l-footer-link">{link.label}</Link>

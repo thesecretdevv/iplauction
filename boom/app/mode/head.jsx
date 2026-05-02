@@ -3,7 +3,7 @@ export default function Head() {
     <>
       <title>Select Auction Mode</title>
       <meta name="robots" content="noindex,follow" />
-      <link rel="canonical" href="https://iplauction.fun/mode" />
+      <link rel="canonical" href="https://www.iplauction.fun/mode" />
     </>
   );
 }

@@ -7,7 +7,7 @@ export default function Head() {
         content="Create a private IPL auction room, join with a code, or browse live multiplayer auctions."
       />
       <meta name="robots" content="noindex,follow" />
-      <link rel="canonical" href="https://iplauction.fun/room" />
+      <link rel="canonical" href="https://www.iplauction.fun/room" />
     </>
   );
 }

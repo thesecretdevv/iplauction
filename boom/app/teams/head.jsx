@@ -6,7 +6,7 @@ export default function Head() {
         name="description"
         content="Browse all IPL 2026 franchises, squads, captains, coaches, and team details in IPL Auction Online."
       />
-      <link rel="canonical" href="https://iplauction.fun/teams" />
+      <link rel="canonical" href="https://www.iplauction.fun/teams" />
     </>
   );
 }
