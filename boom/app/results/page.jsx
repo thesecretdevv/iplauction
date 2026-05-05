@@ -35,6 +35,11 @@ const SUPPORT_PAYEE_NAME = 'IPL Auction Simulator';
 const SUPPORT_UPI_PARAMS = `pa=${encodeURIComponent(SUPPORT_UPI_ID)}&pn=${encodeURIComponent(SUPPORT_PAYEE_NAME)}&cu=INR`;
 const GPAY_SUPPORT_URL = `tez://upi/pay?${SUPPORT_UPI_PARAMS}`;
 const PHONEPE_SUPPORT_URL = `phonepe://pay?${SUPPORT_UPI_PARAMS}`;
+const PAYTM_SUPPORT_URL = `paytmmp://pay?${SUPPORT_UPI_PARAMS}`;
+const FAMPAY_SUPPORT_URL = `fampay://upi/pay?${SUPPORT_UPI_PARAMS}`;
+const GPAY_LOGO_URL = 'https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/google-pay-icon.png';
+const PHONEPE_LOGO_URL = 'https://i.pinimg.com/236x/88/0e/f6/880ef68e7e5551e4241b306fe0543ffa.jpg';
+const FAMPAY_LOGO_URL = 'https://www.famapp.in/assets/localImages/fampayLogo.png';
 
 function useIsMobileDevice() {
   const [isMobile, setIsMobile] = useState(false);
@@ -437,6 +442,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
         .res-check-value{font-size:12px;font-weight:700;letter-spacing:1px}
         .res-actions-grid{display:grid;gap:10px;margin-top:14px}
         .res-actions-grid .res-action-btn{width:100%;justify-content:center}
+        .res-desktop-support-btn{display:inline-flex;align-items:center;justify-content:center;background:rgba(232,184,75,.1);border:1px solid rgba(232,184,75,.36);border-radius:10px;padding:10px 18px;color:${GOLD};font-weight:900;font-size:13px;letter-spacing:1.5px;font-family:'Barlow Condensed';text-decoration:none}
         .support-modal-backdrop{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,6,12,.76);backdrop-filter:blur(10px);animation:modalFade .22s ease-out both}
         .support-modal{width:min(540px,100%);border:1px solid rgba(232,184,75,.35);border-radius:26px;background:radial-gradient(circle at 20% 0%,rgba(232,184,75,.22),transparent 34%),linear-gradient(145deg,#111723 0%,#070a10 58%,#0c1018 100%);box-shadow:0 26px 80px rgba(0,0,0,.56),0 0 50px rgba(232,184,75,.12);padding:clamp(22px,4vw,34px);text-align:center;animation:modalRise .28s ease-out both}
         .support-modal-kicker{color:${GOLD};font-size:12px;font-weight:900;letter-spacing:3px;text-transform:uppercase}
@@ -448,9 +454,9 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
         .support-modal-support-btn:hover,.support-modal-pay-btn:hover,.support-modal-close-btn:hover{transform:translateY(-1px)}
         .support-modal-mobile-payments{display:grid;grid-template-columns:1fr 1fr;gap:10px}
         .support-modal-pay-btn{border:1px solid #263344;background:#0b1018;color:#eef4fb}
-        .support-modal-gpay-mark{font-weight:900;letter-spacing:-.03em;text-transform:none}
-        .support-modal-gpay-mark span:nth-child(1){color:#4285f4}.support-modal-gpay-mark span:nth-child(2){color:#ea4335}.support-modal-gpay-mark span:nth-child(3){color:#fbbc04}.support-modal-gpay-mark span:nth-child(4){color:#34a853}
-        .support-modal-phonepe-mark{width:28px;height:28px;border-radius:999px;background:#5f259f;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;font-weight:900;font-size:18px;line-height:1}
+        .support-modal-pay-logo{width:28px;height:28px;object-fit:contain;display:block;flex-shrink:0}
+        .support-modal-paytm-mark{color:#00baf2;font-weight:900;letter-spacing:-.02em;text-transform:none}
+        .support-modal-paytm-mark span{color:#002970}
         .support-modal-countdown{margin-top:16px;color:#8b95a7;font-size:13px;letter-spacing:1.1px}
         .support-modal-close-btn{margin-top:16px;width:100%;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#f8fafc}
         @keyframes modalFade{from{opacity:0}to{opacity:1}}
@@ -460,6 +466,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
           .res-layout{grid-template-columns:1fr}
         }
         @media (max-width: 780px){
+          .res-desktop-support-btn{display:none}
           .res-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
           .res-player-row{grid-template-columns:minmax(0,1fr);text-align:left}
           .res-player-main{align-items:flex-start}
@@ -508,6 +515,9 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
             style={{ background:'#0f141b', border:'1px solid #233041', borderRadius: 10, padding: '10px 18px', color:'#d7dee8', fontWeight: 900, fontSize: 13, letterSpacing: 1.5, fontFamily: "'Barlow Condensed'", textDecoration: 'none' }}
           >
             JOIN WHATSAPP
+          </a>
+          <a className="res-desktop-support-btn" href={SUPPORT_URL} target="_blank" rel="noreferrer">
+            SUPPORT
           </a>
           <button
             onClick={onRestart}
@@ -569,14 +579,20 @@ function SupportResultsModal({ canClose, countdown, isMobile, onClose }) {
           {isMobile ? (
             <div className="support-modal-mobile-payments" aria-label="UPI payment options">
               <a className="support-modal-pay-btn" href={GPAY_SUPPORT_URL}>
-                <span className="support-modal-gpay-mark" aria-label="GPay logo">
-                  <span>G</span><span>P</span><span>a</span><span>y</span>
-                </span>
+                <img className="support-modal-pay-logo" src={GPAY_LOGO_URL} alt="GPay logo" />
                 GPay
               </a>
               <a className="support-modal-pay-btn" href={PHONEPE_SUPPORT_URL}>
-                <span className="support-modal-phonepe-mark" aria-label="PhonePe logo">पे</span>
+                <img className="support-modal-pay-logo" src={PHONEPE_LOGO_URL} alt="PhonePe logo" />
                 PhonePe
+              </a>
+              <a className="support-modal-pay-btn" href={PAYTM_SUPPORT_URL}>
+                <span className="support-modal-paytm-mark" aria-label="Paytm logo">Pay<span>tm</span></span>
+                Paytm
+              </a>
+              <a className="support-modal-pay-btn" href={FAMPAY_SUPPORT_URL}>
+                <img className="support-modal-pay-logo" src={FAMPAY_LOGO_URL} alt="FamPay logo" />
+                FamPay
               </a>
             </div>
           ) : (

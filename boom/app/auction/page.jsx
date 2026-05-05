@@ -8,6 +8,7 @@ import { StatsModal } from '../../src/StatsModal';
 import { SquadModal } from '../../src/SquadModal';
 import { getPlayerRating, getPlayerRecord, selectPlayingXI } from '../data/playerRatings';
 import AppDialog from '../components/AppDialog';
+import { SUPPORT_URL } from '../components/ChaiSupport';
 import { isAudioMuted, setAudioMuted } from '../../src/useSocket';
 
 const kohliImg = '/assets/Kohli.avif';
@@ -651,6 +652,7 @@ function AuctionContent() {
         .ac-top-btn:hover { background: rgba(34,211,238,.22); }
         .ac-top-btn-gold { background:rgba(232,184,75,0.1); border:1px solid ${GOLD}44; color:${GOLD}; }
         .ac-top-btn-gold:hover { background: rgba(232,184,75,0.18); }
+        .ac-top-link { text-decoration:none; }
         .ac-top-actions { display:flex; gap:5px; flex-shrink:0; }
 
         /* ── BODY ── */
@@ -1279,6 +1281,16 @@ function AuctionContent() {
               <span>{audioMuted ? 'UNMUTE' : 'MUTE'}</span>
               <span style={{ fontSize: 12, lineHeight: 1 }}>{audioMuted ? '🔇' : '🔊'}</span>
             </button>
+
+            <a
+              className="ac-top-btn ac-top-btn-gold ac-top-link ac-desktop-only"
+              href={SUPPORT_URL}
+              target="_blank"
+              rel="noreferrer"
+              style={{ marginLeft: 6, display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              SUPPORT
+            </a>
             
             <button className="ac-top-btn ac-desktop-only" onClick={() => setShowUpcoming(true)} style={{ marginLeft: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>UPCOMING PLAYERS</span>
