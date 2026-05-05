@@ -36,7 +36,8 @@ const SUPPORT_UPI_PARAMS = `pa=${encodeURIComponent(SUPPORT_UPI_ID)}&pn=${encode
 const GPAY_SUPPORT_URL = `tez://upi/pay?${SUPPORT_UPI_PARAMS}`;
 const PHONEPE_SUPPORT_URL = `phonepe://pay?${SUPPORT_UPI_PARAMS}`;
 const PAYTM_SUPPORT_URL = `paytmmp://pay?${SUPPORT_UPI_PARAMS}`;
-const FAMPAY_SUPPORT_URL = `fampay://upi/pay?${SUPPORT_UPI_PARAMS}`;
+const FAMPAY_PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.fampay.in';
+const FAMPAY_SUPPORT_URL = `intent://pay?${SUPPORT_UPI_PARAMS}#Intent;scheme=upi;package=com.fampay.in;S.browser_fallback_url=${encodeURIComponent(FAMPAY_PLAY_STORE_URL)};end`;
 const GPAY_LOGO_URL = 'https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/google-pay-icon.png';
 const PHONEPE_LOGO_URL = 'https://i.pinimg.com/236x/88/0e/f6/880ef68e7e5551e4241b306fe0543ffa.jpg';
 const FAMPAY_LOGO_URL = 'https://www.famapp.in/assets/localImages/fampayLogo.png';
