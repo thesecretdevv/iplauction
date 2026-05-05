@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGame, fmt } from '../GameContext';
 import BrandLink from '../components/BrandLink';
+import { SUPPORT_URL } from '../components/ChaiSupport';
 import { TEAMS, ROLE_C, ROLE_L, ROLE_EMOJI, GOLD, BG, CARD, BORDER } from '../../src/MultiScreens';
 import { calculateLeaderboard, selectPlayingXI, getPlayerRating } from '../data/playerRatings';
 import ALL_PLAYERS from '../data/Players.json';
@@ -27,6 +28,32 @@ const TEAM_LOGOS = {
   GT:   '/assets/GT.png',
   LSG:  '/assets/LSG.png',
 };
+
+const SUPPORT_MODAL_SESSION_KEY = 'ipl_results_support_modal_dismissed';
+const SUPPORT_UPI_ID = 'naga.tum@ptyes';
+const SUPPORT_PAYEE_NAME = 'IPL Auction Simulator';
+const SUPPORT_UPI_PARAMS = `pa=${encodeURIComponent(SUPPORT_UPI_ID)}&pn=${encodeURIComponent(SUPPORT_PAYEE_NAME)}&cu=INR`;
+const GPAY_SUPPORT_URL = `tez://upi/pay?${SUPPORT_UPI_PARAMS}`;
+const PHONEPE_SUPPORT_URL = `phonepe://pay?${SUPPORT_UPI_PARAMS}`;
+
+function useIsMobileDevice() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const media = window.matchMedia('(max-width: 760px), (pointer: coarse)');
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener?.('change', update);
+
+    return () => {
+      media.removeEventListener?.('change', update);
+    };
+  }, []);
+
+  return isMobile;
+}
 
 function buildLeaderboardResults(gs, mode, teams) {
   const squadLimit = Number(gs?.squadLimit) || 15;
@@ -221,6 +248,9 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
   const displayTeams = TEAMS.filter((team) => activeTeamIds.includes(team.id));
   const isRivals = gs?.roomType === 'rivals' || String(mode || '').toLowerCase() === 'rivals';
   const rankings = buildLeaderboardResults(gs, mode, displayTeams);
+  const isMobileDevice = useIsMobileDevice();
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [supportCloseCountdown, setSupportCloseCountdown] = useState(15);
   const teamOwnerMap = useMemo(() => {
     const source = Array.isArray(gs?.participants) && gs.participants.length > 0 ? gs.participants : lobbyPlayers;
     return new Map(
@@ -247,6 +277,32 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
     if (activeTeamIds.includes(activeId)) return;
     setActiveId((mti && activeTeamIds.includes(mti) ? mti : displayTeams[0]?.id) || TEAMS[0].id);
   }, [activeId, activeTeamIds, displayTeams, mti]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (sessionStorage.getItem(SUPPORT_MODAL_SESSION_KEY) === 'true') return;
+
+    setShowSupportModal(true);
+    setSupportCloseCountdown(15);
+  }, []);
+
+  useEffect(() => {
+    if (!showSupportModal || supportCloseCountdown <= 0) return;
+
+    const timer = setTimeout(() => {
+      setSupportCloseCountdown((value) => Math.max(0, value - 1));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [showSupportModal, supportCloseCountdown]);
+
+  const dismissSupportModal = useCallback(() => {
+    if (supportCloseCountdown > 0) return;
+    setShowSupportModal(false);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(SUPPORT_MODAL_SESSION_KEY, 'true');
+    }
+  }, [supportCloseCountdown]);
 
   const soldCount   = (gs.auctionLog || []).filter(l =>  l.sold).length;
   const unsoldCount = (gs.auctionLog || []).filter(l => !l.sold).length;
@@ -381,6 +437,24 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
         .res-check-value{font-size:12px;font-weight:700;letter-spacing:1px}
         .res-actions-grid{display:grid;gap:10px;margin-top:14px}
         .res-actions-grid .res-action-btn{width:100%;justify-content:center}
+        .support-modal-backdrop{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,6,12,.76);backdrop-filter:blur(10px);animation:modalFade .22s ease-out both}
+        .support-modal{width:min(540px,100%);border:1px solid rgba(232,184,75,.35);border-radius:26px;background:radial-gradient(circle at 20% 0%,rgba(232,184,75,.22),transparent 34%),linear-gradient(145deg,#111723 0%,#070a10 58%,#0c1018 100%);box-shadow:0 26px 80px rgba(0,0,0,.56),0 0 50px rgba(232,184,75,.12);padding:clamp(22px,4vw,34px);text-align:center;animation:modalRise .28s ease-out both}
+        .support-modal-kicker{color:${GOLD};font-size:12px;font-weight:900;letter-spacing:3px;text-transform:uppercase}
+        .support-modal-title{margin-top:8px;color:#fff;font-family:'Bebas Neue';font-size:clamp(36px,8vw,56px);line-height:.9;letter-spacing:2px}
+        .support-modal-copy{margin:18px auto 0;max-width:440px;color:#d5dde8;font-size:16px;line-height:1.75}
+        .support-modal-actions{display:grid;gap:12px;margin-top:24px}
+        .support-modal-support-btn,.support-modal-pay-btn,.support-modal-close-btn{min-height:52px;border-radius:16px;font-family:'Barlow Condensed';font-size:16px;font-weight:900;letter-spacing:1.6px;text-transform:uppercase;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+        .support-modal-support-btn{border:0;background:linear-gradient(135deg,${GOLD},#f6d36e);color:#05070b;box-shadow:0 12px 28px rgba(232,184,75,.2)}
+        .support-modal-support-btn:hover,.support-modal-pay-btn:hover,.support-modal-close-btn:hover{transform:translateY(-1px)}
+        .support-modal-mobile-payments{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .support-modal-pay-btn{border:1px solid #263344;background:#0b1018;color:#eef4fb}
+        .support-modal-gpay-mark{font-weight:900;letter-spacing:-.03em;text-transform:none}
+        .support-modal-gpay-mark span:nth-child(1){color:#4285f4}.support-modal-gpay-mark span:nth-child(2){color:#ea4335}.support-modal-gpay-mark span:nth-child(3){color:#fbbc04}.support-modal-gpay-mark span:nth-child(4){color:#34a853}
+        .support-modal-phonepe-mark{width:28px;height:28px;border-radius:999px;background:#5f259f;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;font-weight:900;font-size:18px;line-height:1}
+        .support-modal-countdown{margin-top:16px;color:#8b95a7;font-size:13px;letter-spacing:1.1px}
+        .support-modal-close-btn{margin-top:16px;width:100%;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#f8fafc}
+        @keyframes modalFade{from{opacity:0}to{opacity:1}}
+        @keyframes modalRise{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
         @media (max-width: 1100px){
           .res-summary-grid{grid-template-columns:1fr}
           .res-layout{grid-template-columns:1fr}
@@ -396,8 +470,18 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
           .res-player-name{font-size:15px}
           .res-section-title{font-size:28px}
           .res-metric-value{font-size:24px}
+          .support-modal-mobile-payments{grid-template-columns:1fr}
         }
       `}</style>
+
+      {showSupportModal && (
+        <SupportResultsModal
+          canClose={supportCloseCountdown <= 0}
+          countdown={supportCloseCountdown}
+          isMobile={isMobileDevice}
+          onClose={dismissSupportModal}
+        />
+      )}
 
       {/* ── Header ── */}
       <div style={{ background: '#08090f', borderBottom: `1px solid ${BORDER}`, padding: 'clamp(14px,2vh,22px) clamp(16px,4vw,48px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -466,6 +550,52 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
           Data and ratings are attributed to <a href="https://www.iplt20.com" target="_blank" rel="noreferrer" style={{ color: GOLD, textDecoration: 'none' }}>iplt20.com</a> & <a href="https://cricapi.com" target="_blank" rel="noreferrer" style={{ color: GOLD, textDecoration: 'none' }}>CricAPI</a>.
         </div>
       </div>
+    </div>
+  );
+}
+
+function SupportResultsModal({ canClose, countdown, isMobile, onClose }) {
+  return (
+    <div className="support-modal-backdrop" role="presentation">
+      <section className="support-modal" role="dialog" aria-modal="true" aria-labelledby="support-modal-title">
+        <div className="support-modal-kicker">One tiny timeout</div>
+        <div id="support-modal-title" className="support-modal-title">Support The Servers</div>
+        <p className="support-modal-copy">
+          Maintaining servers is hard, this platform is completely ad-free and requires no login.
+          If you enjoyed it, please consider supporting us, even a small amount helps a lot! Thank you!!
+        </p>
+
+        <div className="support-modal-actions">
+          {isMobile ? (
+            <div className="support-modal-mobile-payments" aria-label="UPI payment options">
+              <a className="support-modal-pay-btn" href={GPAY_SUPPORT_URL}>
+                <span className="support-modal-gpay-mark" aria-label="GPay logo">
+                  <span>G</span><span>P</span><span>a</span><span>y</span>
+                </span>
+                GPay
+              </a>
+              <a className="support-modal-pay-btn" href={PHONEPE_SUPPORT_URL}>
+                <span className="support-modal-phonepe-mark" aria-label="PhonePe logo">पे</span>
+                PhonePe
+              </a>
+            </div>
+          ) : (
+            <a className="support-modal-support-btn" href={SUPPORT_URL} target="_blank" rel="noreferrer">
+              Support
+            </a>
+          )}
+        </div>
+
+        {canClose ? (
+          <button type="button" className="support-modal-close-btn" onClick={onClose}>
+            Close and View Results
+          </button>
+        ) : (
+          <div className="support-modal-countdown" aria-live="polite">
+            You can close in {countdown} seconds...
+          </div>
+        )}
+      </section>
     </div>
   );
 }
