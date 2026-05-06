@@ -19,6 +19,8 @@ export const seoPages = {
   },
   '/play-ipl-auction-online': {
     path: '/play-ipl-auction-online',
+    canonicalPath: '/ipl-auction-simulator',
+    index: false,
     title: 'Play IPL Auction Online - Free Multiplayer Auction Room',
     description: 'Play IPL auction online with friends. Create a room, share a code, bid live, and build a fantasy IPL team from your browser.',
     kicker: 'Play IPL Auction Online',
@@ -37,6 +39,8 @@ export const seoPages = {
   },
   '/ipl-auction-with-friends': {
     path: '/ipl-auction-with-friends',
+    canonicalPath: '/ipl-auction-simulator',
+    index: false,
     title: 'IPL Auction With Friends - Create Private Mock Auction Rooms',
     description: 'Host an IPL auction with friends using private rooms, real-time bidding, room codes, purse tracking, and fantasy squad results.',
     kicker: 'IPL Auction With Friends',
@@ -55,6 +59,8 @@ export const seoPages = {
   },
   '/mock-ipl-auction': {
     path: '/mock-ipl-auction',
+    canonicalPath: '/ipl-auction-simulator',
+    index: false,
     title: 'Mock IPL Auction - Practice IPL Bidding and Team Building',
     description: 'Run a mock IPL auction online to practice bidding strategy, purse management, role balance, and fantasy IPL team building.',
     kicker: 'Mock IPL Auction',
@@ -73,6 +79,8 @@ export const seoPages = {
   },
   '/ipl-mega-auction': {
     path: '/ipl-mega-auction',
+    canonicalPath: '/ipl-auction-simulator',
+    index: false,
     title: 'IPL Mega Auction Simulator - Build a Full Fantasy Squad',
     description: 'Practice an IPL mega auction online with a large player pool, franchise purse strategy, live bidding, and squad building.',
     kicker: 'IPL Mega Auction',
@@ -91,6 +99,8 @@ export const seoPages = {
   },
   '/ipl-auction-rules': {
     path: '/ipl-auction-rules',
+    canonicalPath: '/how-to-play',
+    index: false,
     title: 'IPL Auction Rules - How Bidding, Purse and Squads Work',
     description: 'Learn IPL auction rules for mock auctions, including bidding flow, player base price, purse management, squad balance, and room setup.',
     kicker: 'IPL Auction Rules',
@@ -109,6 +119,8 @@ export const seoPages = {
   },
   '/ipl-auction-purse-calculator': {
     path: '/ipl-auction-purse-calculator',
+    canonicalPath: '/how-to-play',
+    index: false,
     title: 'IPL Auction Purse Calculator - Practice Budget Strategy',
     description: 'Use IPL auction purse strategy tips to plan budgets, avoid overspending, and build better mock IPL auction squads.',
     kicker: 'IPL Auction Purse Calculator',
@@ -127,6 +139,8 @@ export const seoPages = {
   },
   '/ipl-team-builder': {
     path: '/ipl-team-builder',
+    canonicalPath: '/ipl-auction-simulator',
+    index: false,
     title: 'IPL Team Builder - Build a Fantasy IPL Squad Online',
     description: 'Build a fantasy IPL team through a live auction simulator with player roles, purse strategy, squads, and final results.',
     kicker: 'IPL Team Builder',
@@ -145,6 +159,8 @@ export const seoPages = {
   },
   '/ipl-player-list': {
     path: '/ipl-player-list',
+    canonicalPath: '/players',
+    index: false,
     title: 'IPL Player List - Auction Player Pool, Roles and Base Prices',
     description: 'Browse the IPL player list for mock auctions, including batters, bowlers, wicketkeepers, all-rounders, teams, and base prices.',
     kicker: 'IPL Player List',

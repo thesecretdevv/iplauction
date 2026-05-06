@@ -9,6 +9,8 @@ export const metadata = createMetadata({
   title: page.title,
   description: page.description,
   path: page.path,
+  canonicalPath: page.canonicalPath,
+  index: page.index ?? true,
   keywords: ['ipl mega auction', 'ipl mega auction simulator', 'mega auction game'],
 });
 

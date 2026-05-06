@@ -36,8 +36,7 @@ const SUPPORT_UPI_PARAMS = `pa=${encodeURIComponent(SUPPORT_UPI_ID)}&pn=${encode
 const GPAY_SUPPORT_URL = `tez://upi/pay?${SUPPORT_UPI_PARAMS}`;
 const PHONEPE_SUPPORT_URL = `phonepe://pay?${SUPPORT_UPI_PARAMS}`;
 const PAYTM_SUPPORT_URL = `paytmmp://pay?${SUPPORT_UPI_PARAMS}`;
-const FAMPAY_PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.fampay.in';
-const FAMPAY_SUPPORT_URL = `intent://pay?${SUPPORT_UPI_PARAMS}#Intent;scheme=upi;package=com.fampay.in;S.browser_fallback_url=${encodeURIComponent(FAMPAY_PLAY_STORE_URL)};end`;
+const FAMPAY_SUPPORT_URL = `intent://pay?${SUPPORT_UPI_PARAMS}#Intent;scheme=upi;package=com.fampay.in;end`;
 const GPAY_LOGO_URL = 'https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/google-pay-icon.png';
 const PHONEPE_LOGO_URL = 'https://i.pinimg.com/236x/88/0e/f6/880ef68e7e5551e4241b306fe0543ffa.jpg';
 const FAMPAY_LOGO_URL = 'https://www.famapp.in/assets/localImages/fampayLogo.png';
@@ -458,6 +457,10 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
         .support-modal-pay-logo{width:28px;height:28px;object-fit:contain;display:block;flex-shrink:0}
         .support-modal-paytm-mark{color:#00baf2;font-weight:900;letter-spacing:-.02em;text-transform:none}
         .support-modal-paytm-mark span{color:#002970}
+        .support-modal-upi-copy{margin-top:14px;border:1px solid rgba(255,255,255,.12);border-radius:14px;background:rgba(255,255,255,.04);padding:12px 14px;width:100%;color:#eef4fb;font-family:'Rajdhani';cursor:pointer}
+        .support-modal-upi-label{display:block;color:#8b95a7;font-size:11px;letter-spacing:1.8px;text-transform:uppercase}
+        .support-modal-upi-value{display:block;margin-top:6px;font-size:18px;font-weight:700;letter-spacing:.5px}
+        .support-modal-upi-hint{display:block;margin-top:6px;color:${GOLD};font-size:12px;letter-spacing:1.1px}
         .support-modal-countdown{margin-top:16px;color:#8b95a7;font-size:13px;letter-spacing:1.1px}
         .support-modal-close-btn{margin-top:16px;width:100%;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#f8fafc}
         @keyframes modalFade{from{opacity:0}to{opacity:1}}
@@ -566,6 +569,18 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
 }
 
 function SupportResultsModal({ canClose, countdown, isMobile, onClose }) {
+  const [copiedUpi, setCopiedUpi] = useState(false);
+
+  const handleCopyUpi = useCallback(() => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return;
+    navigator.clipboard.writeText(SUPPORT_UPI_ID)
+      .then(() => {
+        setCopiedUpi(true);
+        window.setTimeout(() => setCopiedUpi(false), 1600);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="support-modal-backdrop" role="presentation">
       <section className="support-modal" role="dialog" aria-modal="true" aria-labelledby="support-modal-title">
@@ -601,6 +616,14 @@ function SupportResultsModal({ canClose, countdown, isMobile, onClose }) {
               Support
             </a>
           )}
+
+          {isMobile ? (
+            <button type="button" className="support-modal-upi-copy" onClick={handleCopyUpi}>
+              <span className="support-modal-upi-label">UPI ID</span>
+              <span className="support-modal-upi-value">{SUPPORT_UPI_ID}</span>
+              <span className="support-modal-upi-hint">{copiedUpi ? 'Copied' : 'Tap to copy'}</span>
+            </button>
+          ) : null}
         </div>
 
         {canClose ? (

@@ -29,18 +29,20 @@ export function createMetadata({
   title,
   description,
   path = '/',
+  canonicalPath,
   keywords = [],
   index = true,
   type = 'website',
 }) {
   const url = absoluteUrl(path);
+  const canonicalUrl = absoluteUrl(canonicalPath || path);
 
   return {
     title,
     description,
     keywords: [...primaryKeywords, ...keywords],
     alternates: {
-      canonical: url,
+      canonical: canonicalUrl,
     },
     robots: {
       index,
@@ -56,7 +58,7 @@ export function createMetadata({
     openGraph: {
       title,
       description,
-      url,
+      url: canonicalUrl,
       siteName: SITE_NAME,
       images: [
         {
