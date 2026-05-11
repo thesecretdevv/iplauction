@@ -487,6 +487,7 @@ function AuctionContent() {
     ]);
     return ids.size > 0 ? Array.from(ids) : (gs?.activeTeamIds?.length ? gs.activeTeamIds : []);
   }, [claimedTeamIds, effectiveMyTeamId, gs?.activeTeamIds, isMulti, teamsWithAuctionState]);
+  const displayTeams = TEAMS.filter((team) => displayTeamIds.includes(team.id));
 
   if (!gs) {
     return (
@@ -547,7 +548,6 @@ function AuctionContent() {
   const photoUrl    = pRecord?.photo_url || null;
   const stats       = pRecord?.stats || {};
 
-  const displayTeams = TEAMS.filter((team) => displayTeamIds.includes(team.id));
   const rivalsMatch = gs?.rivalsMatch || null;
   const rivalsCountdown = rivalsMatch?.startAt ? formatCountdown(new Date(rivalsMatch.startAt).getTime() - Date.now()) : null;
   const myTeam      = TEAMS.find(t => t.id === effectiveMyTeamId);
