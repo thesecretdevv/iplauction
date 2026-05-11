@@ -79,7 +79,7 @@ function createGameState(queue) {
     playerQueue: queue, currentIdx: 0,
     currentBid: queue[0].base, currentBidder: null,
     timer: 10, phase: "bidding", currentSetName: queue[0].setName,
-    timerDuration: 10, squadLimit: 15,
+    timerDuration: 10, squadLimit: 15, initialPurse: 120,
     purses: Object.fromEntries(TEAMS.map(t => [t.id, 120])),
     squads: Object.fromEntries(TEAMS.map(t => [t.id, []])),
     playingXI: Object.fromEntries(TEAMS.map(t => [t.id, []])),
@@ -130,6 +130,7 @@ function mergeGameState(prev, next) {
     totalPlayers: next.totalPlayers ?? prev.totalPlayers,
     timerDuration: next.timerDuration ?? prev.timerDuration,
     squadLimit: next.squadLimit ?? prev.squadLimit,
+    initialPurse: next.initialPurse ?? prev.initialPurse,
   };
 }
 
@@ -261,6 +262,8 @@ export function GameProvider({ children }) {
             activeTeamIds: res.activeTeamIds || null,
             rivalsMatch: res.rivalsMatch || null,
             roomName: res.roomName || null,
+            squadLimit: res.squadLimit || null,
+            purse: res.purse || null,
             showPlayerRatings: !!res.showPlayerRatings,
           });
           if (res.roomStatus === "active") {
@@ -337,7 +340,7 @@ export function GameProvider({ children }) {
   // Socket listeners for multiplayer
   useEffect(() => {
     if (playMode !== "multi") return;
-    const off1 = on("lobby-update", ({ players, auctionMode: m, hostId, roomType, activeTeamIds, rivalsMatch, roomName, squadLimit, showPlayerRatings }) => {
+    const off1 = on("lobby-update", ({ players, auctionMode: m, hostId, roomType, activeTeamIds, rivalsMatch, roomName, squadLimit, purse, showPlayerRatings }) => {
       setLobbyPlayers(players);
       if (m) setLobbyMode(m);
       if (hostId) setIsHost(hostId === playerId);
@@ -347,6 +350,7 @@ export function GameProvider({ children }) {
         rivalsMatch: rivalsMatch || prev?.rivalsMatch || null,
         roomName: roomName || prev?.roomName || null,
         squadLimit: squadLimit || prev?.squadLimit || null,
+        purse: purse || prev?.purse || null,
         showPlayerRatings: showPlayerRatings ?? prev?.showPlayerRatings ?? false,
       }));
     });
@@ -361,6 +365,7 @@ export function GameProvider({ children }) {
           rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
           roomName: gs?.roomName || prev?.roomName || null,
           squadLimit: gs?.squadLimit || prev?.squadLimit || null,
+          purse: gs?.initialPurse || prev?.purse || null,
           showPlayerRatings: gs?.showPlayerRatings ?? prev?.showPlayerRatings ?? false,
         }));
       });
@@ -379,6 +384,7 @@ export function GameProvider({ children }) {
           rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
           roomName: gs?.roomName || prev?.roomName || null,
           squadLimit: gs?.squadLimit || prev?.squadLimit || null,
+          purse: gs?.initialPurse || prev?.purse || null,
           showPlayerRatings: gs?.showPlayerRatings ?? prev?.showPlayerRatings ?? false,
         }));
       });
@@ -393,6 +399,7 @@ export function GameProvider({ children }) {
           rivalsMatch: gs?.rivalsMatch || prev?.rivalsMatch || null,
           roomName: gs?.roomName || prev?.roomName || null,
           squadLimit: gs?.squadLimit || prev?.squadLimit || null,
+          purse: gs?.initialPurse || prev?.purse || null,
           showPlayerRatings: gs?.showPlayerRatings ?? prev?.showPlayerRatings ?? false,
         }));
       });
@@ -628,6 +635,7 @@ export function GameProvider({ children }) {
         rivalsMatch: res.rivalsMatch || null,
         roomName: null,
         squadLimit: res.squadLimit || null,
+        purse: res.purse || null,
         showPlayerRatings: !!res.showPlayerRatings,
       });
       router.push(buildUrl('/room', { action: 'lobby', room: res.code, public: !isPrivate }));
@@ -654,6 +662,7 @@ export function GameProvider({ children }) {
           rivalsMatch: res.rivalsMatch || null,
           roomName: res.roomName || null,
           squadLimit: res.squadLimit || null,
+          purse: res.purse || null,
           showPlayerRatings: !!res.showPlayerRatings,
         });
 

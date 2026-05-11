@@ -340,7 +340,8 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
       : [];
 
   const displayList     = playingXI;
-  const spent           = +(120 - (gs.purses?.[activeId] || 0)).toFixed(2);
+  const initialPurse    = gs.initialPurse || 120;
+  const spent           = +(initialPurse - (gs.purses?.[activeId] || 0)).toFixed(2);
   const teamTotalRating = playingXI.reduce((s, p) => s + getPlayerRating(p.name || p, mode), 0);
   const teamAvgRating   = playingXI.length ? Math.round(teamTotalRating / playingXI.length) : 0;
 
@@ -726,7 +727,7 @@ function SquadTab({ gs, mti, mode, teams, activeId, setActiveId, team, displayLi
             <div style={{ minHeight: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: '#7c8799', fontSize: 14, lineHeight: 1.8 }}>
               No players were acquired by {team ? getTeamLabel(team) : 'this team'}.
               <br />
-              Remaining purse: {fmt(gs.purses?.[activeId] || 120)}
+              Remaining purse: {fmt(gs.purses?.[activeId] || initialPurse)}
             </div>
           ) : (
             <div className="res-player-list">

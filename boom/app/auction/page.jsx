@@ -464,12 +464,13 @@ function AuctionContent() {
       .filter((entry) => !entry.isSpectator && entry.teamId)
       .map((entry) => entry.teamId)
   ), [lobbyPlayers]);
+  const initialPurse = gs?.initialPurse || DEFAULT_PURSE;
   const teamsWithAuctionState = useMemo(() => new Set(
     TEAMS
       .filter((team) => {
         const squadCount = gs?.squads?.[team.id]?.length || 0;
         const purseLeft = gs?.purses?.[team.id];
-        const hasSpent = typeof purseLeft === 'number' ? purseLeft < DEFAULT_PURSE : false;
+        const hasSpent = typeof purseLeft === 'number' ? purseLeft < initialPurse : false;
         const hasSelection = !!gs?.selections?.[team.id];
         const hasBidHistory = (gs?.bidLog || []).some((bid) => bid.teamId === team.id);
         const hasSaleHistory = (gs?.auctionLog || []).some((item) => item.bidder === team.id);
@@ -477,7 +478,7 @@ function AuctionContent() {
         return squadCount > 0 || hasSpent || hasSelection || hasBidHistory || hasSaleHistory || isCurrentBidder;
       })
       .map((team) => team.id)
-  ), [gs?.auctionLog, gs?.bidLog, gs?.currentBidder, gs?.purses, gs?.selections, gs?.squads]);
+  ), [gs?.auctionLog, gs?.bidLog, gs?.currentBidder, gs?.purses, gs?.selections, gs?.squads, initialPurse]);
   const displayTeamIds = useMemo(() => {
     if (!isMulti) return TEAMS.map((team) => team.id);
     const ids = new Set([
@@ -554,7 +555,7 @@ function AuctionContent() {
   const bidderTeam  = gs.currentBidder ? TEAMS.find(t => t.id === gs.currentBidder) : null;
   const mySquad     = gs.squads[effectiveMyTeamId] || [];
   const osCount     = mySquad.filter(p => p.overseas).length;
-  const mySpent     = DEFAULT_PURSE - (gs.purses[effectiveMyTeamId] || 0);
+  const mySpent     = initialPurse - (gs.purses[effectiveMyTeamId] || 0);
   const squadRoleOrder = ['BAT', 'WK', 'AR', 'BOWL'];
   const mySquadByRole = squadRoleOrder
     .map((role) => [role, mySquad.filter((squadPlayer) => squadPlayer.role === role)])
@@ -1922,7 +1923,7 @@ function AuctionContent() {
                   const isLead = team.id === gs.currentBidder;
                   const isMe   = team.id === effectiveMyTeamId;
                   const squad  = gs.squads[team.id] || [];
-                  const spent  = DEFAULT_PURSE - (gs.purses[team.id] || 0);
+                  const spent  = initialPurse - (gs.purses[team.id] || 0);
                   const isOpen = expandedTeam === team.id;
                   const byRole = squad.reduce((a,p) => { (a[p.role]=a[p.role]||[]).push(p); return a; }, {});
                   return (
@@ -2028,7 +2029,7 @@ function AuctionContent() {
                     <div style={{ background:'#0f0f12', border:'1px solid #1c1c1c', borderRadius:10, padding:'14px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                         <div style={{ color:'#ddd', fontSize:14, fontWeight:700 }}>₹ Starting Purse</div>
-                        <span style={{ color:'#22c55e', fontFamily:"'Bebas Neue'", fontSize:20, letterSpacing:1 }}>₹120 Cr</span>
+                        <span style={{ color:'#22c55e', fontFamily:"'Bebas Neue'", fontSize:20, letterSpacing:1 }}>₹{initialPurse} Cr</span>
                       </div>
                     </div>
                     {isHost && (
@@ -2089,7 +2090,7 @@ function AuctionContent() {
           <div className="ac-right-row">
             {sortedTeams.map(team => {
               const isLead = team.id === gs.currentBidder, isMe = team.id === effectiveMyTeamId;
-              const pct = ((gs.purses[team.id]||0) / 120) * 100;
+              const pct = ((gs.purses[team.id]||0) / initialPurse) * 100;
               return (
                 <div key={team.id} className="ac-team-row"
                   onClick={() => { setViewingTeam(team.id); setShowSquad(true); }}
@@ -2161,7 +2162,7 @@ function AuctionContent() {
             </div>
             {sortedTeams.map(team => {
               const isLead = team.id === gs.currentBidder, isMe = team.id === effectiveMyTeamId;
-              const pct = ((gs.purses[team.id]||0) / 120) * 100;
+              const pct = ((gs.purses[team.id]||0) / initialPurse) * 100;
               return (
                 <div key={team.id} style={{ padding:'12px 16px', borderBottom:`1px solid ${BORDER}`, background:isLead?`${team.color}18`:isMe?`${team.color}0d`:'transparent', borderLeft:`4px solid ${isLead||isMe?team.color:'transparent'}`, cursor:'pointer' }}
                   onClick={() => { setViewingTeam(team.id); setShowSquad(true); setShowTeams(false); }}>
@@ -2281,7 +2282,7 @@ function AuctionContent() {
               {/* LEADERBOARD */}
               {hamburgerTab === 'leaderboard' && (() => {
                 const board = [...displayTeams]
-                  .map(t => ({ team:t, topBid: Math.max(...((gs.auctionLog||[]).filter(x=>x.sold&&x.bidder===t.id).map(x=>x.price)), 0), spent: DEFAULT_PURSE-(gs.purses[t.id]||0) }))
+                  .map(t => ({ team:t, topBid: Math.max(...((gs.auctionLog||[]).filter(x=>x.sold&&x.bidder===t.id).map(x=>x.price)), 0), spent: initialPurse-(gs.purses[t.id]||0) }))
                   .sort((a,b) => b.topBid - a.topBid);
                 return (
                   <div>

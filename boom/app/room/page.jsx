@@ -13,6 +13,8 @@ const GREEN = '#4ade80';
 const BG    = '#080808';
 const CARD  = '#0d0d0d';
 const BORDER = '#1d2330';
+const DEFAULT_PURSE = 120;
+const EXTENDED_PURSE = 150;
 
 const TEAMS = [
   { id:'CSK',  name:'Chennai Super Kings',        short:'CSK',  color:'#F9CA24' },
@@ -1251,6 +1253,7 @@ function RoomContent() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [aMode,       setAMode]       = useState('mega');
   const [squadLimit,  setSquadLimit]  = useState(15);
+  const [purse,       setPurse]       = useState(DEFAULT_PURSE);
   const [showPlayerRatings, setShowPlayerRatings] = useState(false);
   const [serverRooms, setServerRooms] = useState([]);
   const [completedRooms, setCompletedRooms] = useState([]);
@@ -1308,12 +1311,15 @@ function RoomContent() {
   useEffect(() => {
     if (roomMeta?.squadLimit) {
       setSquadLimit(roomMeta.squadLimit);
-      return;
-    }
-    if (multiGS?.squadLimit) {
+    } else if (multiGS?.squadLimit) {
       setSquadLimit(multiGS.squadLimit);
     }
-  }, [multiGS?.squadLimit, roomMeta?.squadLimit]);
+    if (roomMeta?.purse) {
+      setPurse(roomMeta.purse);
+    } else if (multiGS?.initialPurse) {
+      setPurse(multiGS.initialPurse);
+    }
+  }, [multiGS?.initialPurse, multiGS?.squadLimit, roomMeta?.purse, roomMeta?.squadLimit]);
 
   useEffect(() => {
     setShowPlayerRatings(!!roomMeta?.showPlayerRatings);
@@ -1516,7 +1522,8 @@ function RoomContent() {
     if (!name.trim()) { setError('Enter your name first'); return; }
     setLoading(true); setError('');
     const roomName = `${name.trim()}'s Room`;
-    emit('create-room', { playerName: name.trim(), isPrivate, roomName, playerId }, (res) => {
+    const selectedPurse = squadLimit === 25 && purse === EXTENDED_PURSE ? EXTENDED_PURSE : DEFAULT_PURSE;
+    emit('create-room', { playerName: name.trim(), isPrivate, roomName, playerId, auctionMode: aMode, squadLimit, purse: selectedPurse }, (res) => {
       setLoading(false);
       if (!res?.ok) { setError(res?.error || 'Failed to create room'); return; }
       if (typeof window !== 'undefined') {
@@ -1538,10 +1545,9 @@ function RoomContent() {
         rivalsMatch: res.rivalsMatch || null,
         roomName,
         squadLimit: res.squadLimit || 15,
+        purse: res.purse || selectedPurse,
         showPlayerRatings: !!res.showPlayerRatings,
       });
-      emit('set-auction-mode', { mode: aMode });
-      emit('set-squad-limit', { squadLimit });
       setPhase('lobby');
     });
   };
@@ -1581,6 +1587,7 @@ function RoomContent() {
         rivalsMatch: res.rivalsMatch || selectedRivalsMatch,
         roomName,
         squadLimit: res.squadLimit || 13,
+        purse: res.purse || DEFAULT_PURSE,
         showPlayerRatings: !!res.showPlayerRatings,
       });
       setPhase('lobby');
@@ -1618,6 +1625,7 @@ function RoomContent() {
         rivalsMatch: res.rivalsMatch || selectedRivalsMatch,
         roomName: `${selectedRivalsMatch.homeTeam} vs ${selectedRivalsMatch.awayTeam} Rivals`,
         squadLimit: res.squadLimit || 13,
+        purse: res.purse || DEFAULT_PURSE,
         showPlayerRatings: !!res.showPlayerRatings,
       });
       if (res.roomStatus === 'active' && res.gameState) {
@@ -1672,6 +1680,7 @@ function RoomContent() {
         rivalsMatch: res.rivalsMatch || null,
         roomName: res.roomName || null,
         squadLimit: res.squadLimit || null,
+        purse: res.purse || null,
         showPlayerRatings: !!res.showPlayerRatings,
       });
       if (res.roomStatus === 'active') {
@@ -1736,13 +1745,21 @@ function RoomContent() {
     setAMode(m);
     setLobbyMode(m);
     setSquadLimit(recommendedLimit);
+    setPurse(DEFAULT_PURSE);
     emit('set-auction-mode', { mode: m });
     emit('set-squad-limit', { squadLimit: recommendedLimit });
   };
 
   const changeSquadLimit = (limit) => {
     setSquadLimit(limit);
+    if (limit !== 25) setPurse(DEFAULT_PURSE);
     emit('set-squad-limit', { squadLimit: limit });
+  };
+
+  const changePurse = (nextPurse) => {
+    const normalizedPurse = squadLimit === 25 && nextPurse === EXTENDED_PURSE ? EXTENDED_PURSE : DEFAULT_PURSE;
+    setPurse(normalizedPurse);
+    emit('set-purse', { purse: normalizedPurse });
   };
 
   const changePlayerRatingsVisibility = (shouldShow) => {
@@ -2132,6 +2149,7 @@ function RoomContent() {
                       { label: 'Visibility', value: isPrivate ? 'Private' : 'Public' },
                       { label: 'Mode', value: String(aMode || 'mega').toUpperCase() },
                       { label: 'Squad', value: `${squadLimit} Players` },
+                      { label: 'Purse', value: `₹${squadLimit === 25 ? purse : DEFAULT_PURSE} Cr` },
                     ].map((item) => (
                       <div key={item.label} className="create-room-summary-card">
                         <div className="create-room-summary-label">{item.label}</div>
@@ -2174,14 +2192,14 @@ function RoomContent() {
                     <div className="rp-toggle-grid">
                       <ToggleCard
                         selected={aMode === 'mega'}
-                        onSelect={() => { setAMode('mega'); setSquadLimit(15); }}
+                        onSelect={() => { setAMode('mega'); setSquadLimit(15); setPurse(DEFAULT_PURSE); }}
                         accentColor={GOLD}
                         title="MEGA"
                         sub="500+ players · Full season"
                       />
                       <ToggleCard
                         selected={aMode === 'mini'}
-                        onSelect={() => { setAMode('mini'); setSquadLimit(15); }}
+                        onSelect={() => { setAMode('mini'); setSquadLimit(15); setPurse(DEFAULT_PURSE); }}
                         accentColor={CYAN}
                         title="MINI"
                         sub="~200 players · Fast format"
@@ -2193,7 +2211,10 @@ function RoomContent() {
                         <button
                           key={limit}
                           type="button"
-                          onClick={() => setSquadLimit(limit)}
+                          onClick={() => {
+                            setSquadLimit(limit);
+                            if (limit !== 25) setPurse(DEFAULT_PURSE);
+                          }}
                           style={{
                             padding:'13px 0',
                             borderRadius:12,
@@ -2210,6 +2231,33 @@ function RoomContent() {
                         </button>
                       ))}
                     </div>
+                    {squadLimit === 25 && (
+                      <>
+                        <label className="rp-label" style={{ marginTop: 16 }}>Purse</label>
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:10 }}>
+                          {[DEFAULT_PURSE, EXTENDED_PURSE].map((amount) => (
+                            <button
+                              key={amount}
+                              type="button"
+                              onClick={() => setPurse(amount)}
+                              style={{
+                                padding:'13px 0',
+                                borderRadius:12,
+                                border:`1px solid ${purse === amount ? GOLD : '#262626'}`,
+                                background:purse === amount ? `${GOLD}12` : '#111',
+                                color:purse === amount ? GOLD : '#cbd5e1',
+                                fontFamily:"'Bebas Neue',sans-serif",
+                                fontSize:24,
+                                letterSpacing:2,
+                                cursor:'pointer',
+                              }}
+                            >
+                              ₹{amount}CR
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
 
@@ -2393,6 +2441,33 @@ function RoomContent() {
                       </button>
                     ))}
                   </div>
+                  {squadLimit === 25 && (
+                    <>
+                      <div className="lobby-section-label">PURSE</div>
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:8, marginBottom:18 }}>
+                        {[DEFAULT_PURSE, EXTENDED_PURSE].map((amount) => (
+                          <button
+                            key={amount}
+                            type="button"
+                            onClick={() => changePurse(amount)}
+                            style={{
+                              padding:'10px 0',
+                              borderRadius:10,
+                              border:`1px solid ${purse === amount ? GOLD : '#232323'}`,
+                              background:purse === amount ? `${GOLD}14` : '#101010',
+                              color:purse === amount ? GOLD : '#cbd5e1',
+                              fontFamily:"'Bebas Neue',sans-serif",
+                              fontSize:20,
+                              letterSpacing:2,
+                              cursor:'pointer',
+                            }}
+                          >
+                            ₹{amount}CR
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </>
               ) : (
                 <div style={{ fontFamily:"'Courier Prime',monospace", fontSize:12, color:'#888', marginBottom:16 }}>
@@ -2401,6 +2476,8 @@ function RoomContent() {
                   Player Ratings: <span style={{ color: showPlayerRatings ? GOLD : '#94A3B8' }}>{showPlayerRatings ? 'Shown during auction' : 'Hidden during auction'}</span>
                   <br />
                   Squad Limit: <span style={{ color: GOLD }}>{squadLimit}</span> players
+                  <br />
+                  Purse: <span style={{ color: GOLD }}>₹{squadLimit === 25 ? purse : DEFAULT_PURSE} Cr</span>
                 </div>
               )}
 

@@ -63,6 +63,12 @@ const fmt = c => c >= 1 ? `₹${c.toFixed(2)} Cr` : `₹${Math.round(c * 100)} L
 const getIncrement = p => p < 2 ? 0.10 : p < 5 ? 0.20 : p < 10 ? 0.25 : 0.50;
 const nextBid = c => +(c + getIncrement(c)).toFixed(2);
 const TRADE_LIMIT = 3;
+const DEFAULT_PURSE = 120;
+const EXTENDED_PURSE = 150;
+function normalizePurse(purse, squadLimit) {
+    const numericPurse = Number(purse);
+    return Number(squadLimit) === 25 && numericPurse === EXTENDED_PURSE ? EXTENDED_PURSE : DEFAULT_PURSE;
+}
 function getOverseasLimitForSquad(squadLimit) {
     const limit = Number(squadLimit) || 15;
     if (limit >= 25) return 8;
@@ -140,6 +146,7 @@ function getLobbyStatePayload(room) {
         auctionMode: room.auctionMode,
         showPlayerRatings: !!room.showPlayerRatings,
         squadLimit: room.squadLimit,
+        purse: normalizePurse(room.purse, room.squadLimit),
         hostId: room.hostId,
         roomType: room.roomType || 'standard',
         activeTeamIds: getActiveTeamIds(room),
@@ -284,6 +291,7 @@ function summarizeRoom(room, { source = 'active' } = {}) {
         finishedAt: room.finishedAt || null,
         updatedAt: room.updatedAt || null,
         squadLimit: room.squadLimit || getDefaultSquadLimit(room.auctionMode),
+        purse: normalizePurse(room.purse, room.squadLimit),
         currentPhase: room.gameState?.phase || null,
         currentPlayer: room.gameState?.playerQueue?.[room.gameState?.currentIdx]?.name || null,
         participants: getRoomParticipantSummary(room),
@@ -631,6 +639,7 @@ async function persistRoom(room) {
             isPrivate: room.isPrivate || false,
             auctionMode: room.auctionMode || 'mega',
             squadLimit: room.squadLimit || getDefaultSquadLimit(room.auctionMode),
+            purse: normalizePurse(room.purse, room.squadLimit),
             roomType: room.roomType || 'standard',
             activeTeamIds: getActiveTeamIds(room),
             rivalsMatch: room.rivalsMatch || null,
@@ -672,6 +681,7 @@ async function getRoom(code) {
                 room.updatedAt = room.updatedAt || Date.now();
                 room.roomType = room.roomType || 'standard';
                 room.squadLimit = room.squadLimit || getDefaultSquadLimit(room.auctionMode);
+                room.purse = normalizePurse(room.purse, room.squadLimit);
                 room.activeTeamIds = Array.isArray(room.activeTeamIds) && room.activeTeamIds.length ? room.activeTeamIds : TEAM_IDS;
                 room.rivalsMatch = room.rivalsMatch || null;
                 if (isRoomOver(room)) {
@@ -694,7 +704,7 @@ async function getRoom(code) {
 
 // ─── Game State helpers ──────────────────────────────────────────────────────
 function createGameState(playerQueue, options = {}) {
-    const purse = options.purse || 120;
+    const purse = options.purse || DEFAULT_PURSE;
     const timerDuration = options.timerDuration || 10;
     const squadLimit = options.squadLimit || 15;
     return {
@@ -707,6 +717,7 @@ function createGameState(playerQueue, options = {}) {
         phase: "bidding",
         currentSetName: playerQueue[0]?.setName || "",
         squadLimit,
+        initialPurse: purse,
         purses: Object.fromEntries(TEAMS.map(t => [t.id, purse])),
         squads: Object.fromEntries(TEAMS.map(t => [t.id, []])),
         playingXI: Object.fromEntries(TEAMS.map(t => [t.id, []])),
@@ -736,6 +747,7 @@ function getClientState(room, options = {}) {
         phase: gs.phase,
         currentSetName: gs.currentSetName,
         squadLimit: gs.squadLimit || room.squadLimit || getDefaultSquadLimit(room.auctionMode),
+        initialPurse: gs.initialPurse || normalizePurse(room.purse, gs.squadLimit || room.squadLimit),
         purses: gs.purses,
         squads: gs.squads,
         tradeProposals: gs.tradeProposals || [],
@@ -1078,7 +1090,7 @@ io.on('connection', (socket) => {
     let currentPlayerId = null;
 
     // ── Create Room ──
-    socket.on('create-room', async ({ playerName, isPrivate, roomName, playerId, roomType, matchKey }, cb) => {
+    socket.on('create-room', async ({ playerName, isPrivate, roomName, playerId, roomType, matchKey, auctionMode, squadLimit, purse }, cb) => {
         if (!playerId) return cb?.({ ok: false, error: 'Missing Player ID' });
 
         // Cancel any pending disconnect timer for this player
@@ -1106,6 +1118,10 @@ io.on('connection', (socket) => {
         }
 
         const teamOrder = isRivalsRoom ? shuffle([match.homeTeam, match.awayTeam]) : TEAM_IDS;
+        const initialSquadLimit = isRivalsRoom
+            ? RIVALS_MAX_SQUAD_SIZE
+            : ([15, 20, 25].includes(Number(squadLimit)) ? Number(squadLimit) : getDefaultSquadLimit(auctionMode || 'mega'));
+        const initialPurse = isRivalsRoom ? RIVALS_PURSE : normalizePurse(purse, initialSquadLimit);
         const room = {
             code,
             name: roomName || (isRivalsRoom ? `${match.homeTeam} vs ${match.awayTeam} Rivals` : `${playerName}'s Room`),
@@ -1126,9 +1142,10 @@ io.on('connection', (socket) => {
                     offline: false
                 }
             },
-            auctionMode: isRivalsRoom ? 'rivals' : null,
+            auctionMode: isRivalsRoom ? 'rivals' : (['mega', 'mini'].includes(auctionMode) ? auctionMode : 'mega'),
             showPlayerRatings: false,
-            squadLimit: isRivalsRoom ? RIVALS_MAX_SQUAD_SIZE : getDefaultSquadLimit('mega'),
+            squadLimit: initialSquadLimit,
+            purse: initialPurse,
             gameState: null,
             timerInterval: null,
             started: false,
@@ -1149,6 +1166,7 @@ io.on('connection', (socket) => {
             players: state.players,
             showPlayerRatings: room.showPlayerRatings,
             squadLimit: room.squadLimit,
+            purse: room.purse,
             roomType: room.roomType,
             activeTeamIds: room.activeTeamIds,
             rivalsMatch: room.rivalsMatch,
@@ -1242,6 +1260,7 @@ io.on('connection', (socket) => {
                 auctionMode: room.auctionMode,
                 showPlayerRatings: room.showPlayerRatings,
                 squadLimit: room.squadLimit,
+                purse: normalizePurse(room.purse, room.squadLimit),
                 roomType: room.roomType,
                 activeTeamIds: getActiveTeamIds(room),
                 rivalsMatch: room.rivalsMatch,
@@ -1297,6 +1316,7 @@ io.on('connection', (socket) => {
             auctionMode: room.auctionMode,
             showPlayerRatings: room.showPlayerRatings,
             squadLimit: room.squadLimit,
+            purse: normalizePurse(room.purse, room.squadLimit),
             roomType: room.roomType,
             activeTeamIds: getActiveTeamIds(room),
             rivalsMatch: room.rivalsMatch,
@@ -1348,6 +1368,7 @@ io.on('connection', (socket) => {
                 auctionMode: room.auctionMode,
                 showPlayerRatings: room.showPlayerRatings,
                 squadLimit: room.squadLimit,
+                purse: normalizePurse(room.purse, room.squadLimit),
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
                 availableTeamIds: getAvailableTeamIds(room),
@@ -1372,6 +1393,7 @@ io.on('connection', (socket) => {
                 auctionMode: room.auctionMode,
                 showPlayerRatings: room.showPlayerRatings,
                 squadLimit: room.squadLimit,
+                purse: normalizePurse(room.purse, room.squadLimit),
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
                 availableTeamIds: [],
@@ -1411,6 +1433,7 @@ io.on('connection', (socket) => {
                     auctionMode: room.auctionMode,
                     showPlayerRatings: room.showPlayerRatings,
                     squadLimit: room.squadLimit,
+                    purse: normalizePurse(room.purse, room.squadLimit),
                     roomType: room.roomType || 'standard',
                     activeTeamIds: getActiveTeamIds(room),
                     availableTeamIds: [],
@@ -1454,6 +1477,7 @@ io.on('connection', (socket) => {
                     auctionMode: room.auctionMode,
                     showPlayerRatings: room.showPlayerRatings,
                     squadLimit: room.squadLimit,
+                    purse: normalizePurse(room.purse, room.squadLimit),
                     roomType: room.roomType || 'standard',
                     activeTeamIds: getActiveTeamIds(room),
                     availableTeamIds,
@@ -1546,6 +1570,7 @@ io.on('connection', (socket) => {
                 auctionMode: room.auctionMode,
                 showPlayerRatings: room.showPlayerRatings,
                 squadLimit: room.squadLimit,
+                purse: normalizePurse(room.purse, room.squadLimit),
                 roomType: room.roomType || 'standard',
                 activeTeamIds: getActiveTeamIds(room),
                 availableTeamIds: getAvailableTeamIds(room),
@@ -1584,6 +1609,7 @@ io.on('connection', (socket) => {
             auctionMode: room.auctionMode,
             showPlayerRatings: room.showPlayerRatings,
             squadLimit: room.squadLimit,
+            purse: normalizePurse(room.purse, room.squadLimit),
             roomType: room.roomType || 'standard',
             activeTeamIds: getActiveTeamIds(room),
             availableTeamIds: getAvailableTeamIds(room),
@@ -1681,6 +1707,7 @@ io.on('connection', (socket) => {
         if (room.roomType === 'rivals') return;
         room.auctionMode = mode;
         room.squadLimit = getDefaultSquadLimit(mode);
+        room.purse = DEFAULT_PURSE;
         markRoomDirty(room);
         const state = getLobbyState(room);
         io.to(currentRoom).emit('lobby-update', state);
@@ -1697,6 +1724,8 @@ io.on('connection', (socket) => {
         room.squadLimit = nextLimit;
         if (room.gameState) {
             room.gameState.squadLimit = nextLimit;
+        } else {
+            room.purse = normalizePurse(room.purse, nextLimit);
         }
         markRoomDirty(room);
 
@@ -1706,7 +1735,23 @@ io.on('connection', (socket) => {
             io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: room.gameState.phase === 'selection' }));
         }
         await persistRoom(room);
-        cb?.({ ok: true, squadLimit: nextLimit });
+        cb?.({ ok: true, squadLimit: nextLimit, purse: room.gameState?.initialPurse || room.purse });
+    });
+
+    socket.on('set-purse', async ({ purse }, cb) => {
+        if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
+        const room = await getRoom(currentRoom);
+        if (!room || currentPlayerId !== room.hostId || room.roomType === 'rivals') return cb?.({ ok: false, error: 'Only the host can change the purse' });
+        if (room.status !== 'lobby') return cb?.({ ok: false, error: 'Purse can only be changed before the auction starts' });
+
+        const nextPurse = normalizePurse(purse, room.squadLimit);
+        room.purse = nextPurse;
+        markRoomDirty(room);
+
+        const state = getLobbyState(room);
+        io.to(currentRoom).emit('lobby-update', state);
+        await persistRoom(room);
+        cb?.({ ok: true, purse: nextPurse });
     });
 
     socket.on('set-player-ratings-visibility', async ({ showPlayerRatings }, cb) => {
@@ -1752,9 +1797,11 @@ io.on('connection', (socket) => {
         room.started = true;
         room.status = 'active';
         room.squadLimit = room.squadLimit || getDefaultSquadLimit(room.auctionMode);
+        room.purse = normalizePurse(room.purse, room.squadLimit);
         room.gameState = createGameState(playerQueue, {
             timerDuration: 10,
             squadLimit: room.squadLimit,
+            purse: room.purse,
         });
         markRoomDirty(room);
 
