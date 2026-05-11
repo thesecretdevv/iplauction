@@ -313,10 +313,20 @@ export function selectPlayingXI(squad, mode = 'mini') {
 
 function normalizeRole(role) {
   const value = String(role || '').toUpperCase();
-  if (value.includes('WK')) return 'wicket_keeper';
+  if (value.includes('WK') || value.includes('KEEP')) return 'wicket_keeper';
   if (value.includes('BOWL')) return 'bowler';
   if (value.includes('AR')) return 'all_rounder';
   return 'batsman';
+}
+
+function getRoleFlags(role) {
+  const value = String(role || '').toUpperCase();
+  const isWicketkeeper = value.includes('WK') || value.includes('KEEP');
+  return {
+    wicketkeeper: isWicketkeeper,
+    batter: isWicketkeeper || value.includes('BAT'),
+    bowler: value.includes('BOWL'),
+  };
 }
 
 export function calculateLeaderboard(teams, mode = 'mini') {
@@ -348,9 +358,9 @@ export function calculateLeaderboard(teams, mode = 'mini') {
       };
     });
 
-    const batCount = playerScores.filter(p => p.role === 'batsman').length;
-    const bowlCount = playerScores.filter(p => p.role === 'bowler').length;
-    const wkCount = playerScores.filter(p => p.role === 'wicket_keeper').length;
+    const batCount = playerScores.filter(p => getRoleFlags(p.role).batter).length;
+    const bowlCount = playerScores.filter(p => getRoleFlags(p.role).bowler).length;
+    const wkCount = playerScores.filter(p => getRoleFlags(p.role).wicketkeeper).length;
 
     const squadShortfall = requiredSquadSize > 0 && squad.length < requiredSquadSize;
     // Disqualified if the bought squad is incomplete, < 11 players, OR fails role counts

@@ -1,6 +1,8 @@
 'use client';
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
+
+const MOBILE_SPARK_QUERY = '(max-width: 860px), (pointer: coarse)';
 
 const ClickSpark = ({
   sparkColor = '#fff',
@@ -14,6 +16,24 @@ const ClickSpark = ({
 }) => {
   const canvasRef = useRef(null);
   const sparksRef = useRef([]);
+  const [disableSparks, setDisableSparks] = useState(true);
+
+  useEffect(() => {
+    const media = window.matchMedia(MOBILE_SPARK_QUERY);
+    const syncDisabled = () => {
+      setDisableSparks(media.matches);
+      if (media.matches) {
+        sparksRef.current = [];
+      }
+    };
+
+    syncDisabled();
+    media.addEventListener('change', syncDisabled);
+
+    return () => {
+      media.removeEventListener('change', syncDisabled);
+    };
+  }, []);
 
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -36,6 +56,8 @@ const ClickSpark = ({
   }, []);
 
   useEffect(() => {
+    if (disableSparks) return undefined;
+
     resizeCanvas();
 
     let resizeTimeout;
@@ -49,7 +71,7 @@ const ClickSpark = ({
       window.removeEventListener('resize', handleResize);
       window.clearTimeout(resizeTimeout);
     };
-  }, [resizeCanvas]);
+  }, [disableSparks, resizeCanvas]);
 
   const easeFunc = useCallback(
     (t) => {
@@ -68,6 +90,8 @@ const ClickSpark = ({
   );
 
   useEffect(() => {
+    if (disableSparks) return undefined;
+
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
 
@@ -109,10 +133,13 @@ const ClickSpark = ({
     animationId = window.requestAnimationFrame(draw);
     return () => {
       window.cancelAnimationFrame(animationId);
+      sparksRef.current = [];
     };
-  }, [duration, easeFunc, extraScale, sparkColor, sparkRadius, sparkSize]);
+  }, [disableSparks, duration, easeFunc, extraScale, sparkColor, sparkRadius, sparkSize]);
 
   useEffect(() => {
+    if (disableSparks) return undefined;
+
     const handleClick = (event) => {
       const now = performance.now();
       const newSparks = Array.from({ length: sparkCount }, (_, index) => ({
@@ -129,7 +156,11 @@ const ClickSpark = ({
     return () => {
       window.removeEventListener('click', handleClick);
     };
-  }, [sparkCount]);
+  }, [disableSparks, sparkCount]);
+
+  if (disableSparks) {
+    return children;
+  }
 
   return (
     <>

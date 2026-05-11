@@ -195,7 +195,7 @@ function AuctionContent() {
 
   const [showTeams, setShowTeams]       = useState(false);
   const [showUpcoming, setShowUpcoming] = useState(false);
-  const [mobileTab, setMobileTab]       = useState('chat');    // 'chat' | 'teams' | 'settings'
+  const [mobileTab, setMobileTab]       = useState('teams');   // 'chat' | 'teams' | 'settings'
   const [copied, setCopied]             = useState(false);
   const [showHamburger, setShowHamburger] = useState(false);
   const [hamburgerTab, setHamburgerTab] = useState('upcoming'); // 'upcoming'|'sold'|'unsold'|'leaderboard'
@@ -521,6 +521,20 @@ function AuctionContent() {
         selections={gs.selections || {}}
         onFinalizeSelection={handleFinalizeSelection}
         squadLimit={gs.squadLimit || 15}
+      />
+    );
+  }
+
+  if (gs.phase === 'trade') {
+    return (
+      <TradeScreen
+        gs={gs}
+        teams={displayTeams}
+        myTeamId={effectiveMyTeamId}
+        isHost={isHost}
+        isSpectator={isSpectatorMode}
+        emit={emit}
+        activeTeams={(lobbyPlayers || []).filter(player => !player.isSpectator && player.teamId)}
       />
     );
   }
@@ -2294,6 +2308,402 @@ function AuctionContent() {
   );
 }
 
+// ── Player Swap Phase ─────────────────────────────────────────────────────────
+function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTeams = [] }) {
+  const [offeredName, setOfferedName] = useState('');
+  const [requestedName, setRequestedName] = useState('');
+  const [targetTeamId, setTargetTeamId] = useState('');
+  const [mobileTab, setMobileTab] = useState('offer');
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [dialog, setDialog] = useState(null);
+
+  const tradeLimit = gs?.tradeLimit || 3;
+  const tradeCounts = gs?.tradeCounts || {};
+  const tradeReady = gs?.tradeReady || {};
+  const proposals = gs?.tradeProposals || [];
+  const mySquad = gs?.squads?.[myTeamId] || [];
+  const myTradeCount = tradeCounts?.[myTeamId] || 0;
+  const myTeam = teams.find((team) => team.id === myTeamId) || TEAMS.find((team) => team.id === myTeamId);
+  const activeTeamIds = new Set((activeTeams || []).map((player) => player.teamId).filter(Boolean));
+  const tradeTeams = teams.filter((team) => team.id !== myTeamId && (gs?.squads?.[team.id] || []).length > 0 && (!activeTeamIds.size || activeTeamIds.has(team.id)));
+  const targetTeam = tradeTeams.find((team) => team.id === targetTeamId) || tradeTeams[0] || null;
+  const targetSquad = targetTeam ? (gs?.squads?.[targetTeam.id] || []) : [];
+  const offeredPlayer = mySquad.find((player) => player.name === offeredName) || null;
+  const requestedPlayer = targetSquad.find((player) => player.name === requestedName) || null;
+  const pendingReceived = proposals.filter((proposal) => proposal.status === 'pending' && proposal.toTeamId === myTeamId);
+  const pendingSent = proposals.filter((proposal) => proposal.status === 'pending' && proposal.fromTeamId === myTeamId);
+  const recentProposals = proposals.filter((proposal) => proposal.fromTeamId === myTeamId || proposal.toTeamId === myTeamId).slice(0, 12);
+  const isReady = !!tradeReady?.[myTeamId];
+  const canTrade = !isSpectator && myTradeCount < tradeLimit;
+  const canSend = canTrade && offeredPlayer && requestedPlayer && targetTeam;
+
+  useEffect(() => {
+    if (!targetTeamId && tradeTeams[0]?.id) {
+      setTargetTeamId(tradeTeams[0].id);
+    } else if (targetTeamId && !tradeTeams.some((team) => team.id === targetTeamId)) {
+      setTargetTeamId(tradeTeams[0]?.id || '');
+      setRequestedName('');
+    }
+  }, [targetTeamId, tradeTeams]);
+
+  useEffect(() => {
+    if (offeredName && !mySquad.some((player) => player.name === offeredName)) setOfferedName('');
+    if (requestedName && !targetSquad.some((player) => player.name === requestedName)) setRequestedName('');
+  }, [mySquad, offeredName, requestedName, targetSquad]);
+
+  const ackNotice = useCallback((res, fallback) => {
+    setBusy(false);
+    if (!res?.ok) {
+      setNotice(res?.error || fallback || 'Something went wrong');
+      return false;
+    }
+    setNotice('');
+    return true;
+  }, []);
+
+  const sendProposal = useCallback(() => {
+    if (!canSend || busy) return;
+    setBusy(true);
+    emit('create-trade-proposal', {
+      toTeamId: targetTeam.id,
+      offeredPlayerName: offeredPlayer.name,
+      requestedPlayerName: requestedPlayer.name,
+    }, (res) => {
+      if (ackNotice(res, 'Could not send proposal')) {
+        setRequestedName('');
+        setMobileTab('inbox');
+      }
+    });
+  }, [ackNotice, busy, canSend, emit, offeredPlayer, requestedPlayer, targetTeam]);
+
+  const acceptProposal = useCallback((proposal) => {
+    setDialog({
+      title: 'Accept Player Swap?',
+      message: `Swap ${proposal.requestedPlayer?.name} for ${proposal.offeredPlayer?.name}? This will count as 1 of ${tradeLimit} swaps for both teams.`,
+      tone: 'info',
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onClick: () => setDialog(null) },
+        {
+          label: 'Accept Swap',
+          variant: 'primary',
+          onClick: () => {
+            setDialog(null);
+            setBusy(true);
+            emit('accept-trade-proposal', { proposalId: proposal.id }, (res) => ackNotice(res, 'Could not accept proposal'));
+          },
+        },
+      ],
+    });
+  }, [ackNotice, emit, tradeLimit]);
+
+  const declineProposal = useCallback((proposal) => {
+    setBusy(true);
+    emit('decline-trade-proposal', { proposalId: proposal.id }, (res) => ackNotice(res, 'Could not decline proposal'));
+  }, [ackNotice, emit]);
+
+  const cancelProposal = useCallback((proposal) => {
+    setBusy(true);
+    emit('cancel-trade-proposal', { proposalId: proposal.id }, (res) => ackNotice(res, 'Could not cancel proposal'));
+  }, [ackNotice, emit]);
+
+  const markReady = useCallback(() => {
+    setBusy(true);
+    emit('mark-trade-ready', {}, (res) => ackNotice(res, 'Could not mark ready'));
+  }, [ackNotice, emit]);
+
+  const openStartSelectionDialog = useCallback(() => {
+    setDialog({
+      title: 'Continue To Playing XI?',
+      message: 'Pending swap proposals will be cancelled and all teams will move to Playing XI selection.',
+      tone: 'info',
+      actions: [
+        { label: 'Stay Here', variant: 'secondary', onClick: () => setDialog(null) },
+        {
+          label: 'Continue',
+          variant: 'primary',
+          onClick: () => {
+            setDialog(null);
+            setBusy(true);
+            emit('start-selection-phase', {}, (res) => ackNotice(res, 'Could not continue'));
+          },
+        },
+      ],
+    });
+  }, [ackNotice, emit]);
+
+  const PlayerPick = ({ player, selected, onClick, accent }) => {
+    const photoUrl = getPlayerPhoto(player.name);
+    const roleColor = ROLE_C[player.role] || accent || CYAN;
+    return (
+      <button
+        type="button"
+        className={`trade-player${selected ? ' selected' : ''}`}
+        onClick={onClick}
+        style={{ borderColor: selected ? roleColor : undefined }}
+      >
+        <div className="trade-avatar" style={{ borderColor: `${roleColor}66`, background: `${roleColor}14` }}>
+          {photoUrl ? <img src={photoUrl} alt={player.name} /> : <span>{ROLE_EMOJI[player.role] || '•'}</span>}
+        </div>
+        <div className="trade-player-main">
+          <div className="trade-player-name">{player.name}</div>
+          <div className="trade-player-meta">
+            <span style={{ color: roleColor }}>{ROLE_L[player.role] || player.role}</span>
+            <span>{fmt(player.soldFor || player.base || 0)}</span>
+          </div>
+        </div>
+      </button>
+    );
+  };
+
+  const ProposalCard = ({ proposal }) => {
+    const fromTeam = teams.find((team) => team.id === proposal.fromTeamId) || TEAMS.find((team) => team.id === proposal.fromTeamId);
+    const toTeam = teams.find((team) => team.id === proposal.toTeamId) || TEAMS.find((team) => team.id === proposal.toTeamId);
+    const isIncoming = proposal.toTeamId === myTeamId && proposal.status === 'pending';
+    const isOutgoing = proposal.fromTeamId === myTeamId && proposal.status === 'pending';
+    return (
+      <div className="trade-proposal">
+        <div className="trade-proposal-top">
+          <span>{fromTeam?.short || proposal.fromTeamId} → {toTeam?.short || proposal.toTeamId}</span>
+          <span className={`trade-status ${proposal.status}`}>{proposal.status}</span>
+        </div>
+        <div className="trade-swap-line">
+          <div><span>You give</span><strong>{proposal.toTeamId === myTeamId ? proposal.requestedPlayer?.name : proposal.offeredPlayer?.name}</strong></div>
+          <div><span>You get</span><strong>{proposal.toTeamId === myTeamId ? proposal.offeredPlayer?.name : proposal.requestedPlayer?.name}</strong></div>
+        </div>
+        {proposal.reason && <div className="trade-reason">{proposal.reason}</div>}
+        {(isIncoming || isOutgoing) && (
+          <div className="trade-proposal-actions">
+            {isIncoming && (
+              <>
+                <button type="button" onClick={() => acceptProposal(proposal)} disabled={busy || !canTrade}>Accept</button>
+                <button type="button" className="ghost" onClick={() => declineProposal(proposal)} disabled={busy}>Decline</button>
+              </>
+            )}
+            {isOutgoing && <button type="button" className="ghost" onClick={() => cancelProposal(proposal)} disabled={busy}>Cancel</button>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const OfferPanel = (
+    <section className="trade-panel">
+      <div className="trade-panel-head">
+        <div>
+          <p>Step 1</p>
+          <h2>Offer A Player</h2>
+        </div>
+        <span>{mySquad.length} players</span>
+      </div>
+      <div className="trade-player-list">
+        {mySquad.length > 0 ? mySquad.map((player) => (
+          <PlayerPick key={player.name} player={player} selected={offeredName === player.name} onClick={() => setOfferedName(player.name)} accent={myTeam?.color} />
+        )) : <div className="trade-empty">No players available to offer.</div>}
+      </div>
+    </section>
+  );
+
+  const RequestPanel = (
+    <section className="trade-panel">
+      <div className="trade-panel-head">
+        <div>
+          <p>Step 2</p>
+          <h2>Request A Player</h2>
+        </div>
+        <span>{targetTeam?.short || 'Team'}</span>
+      </div>
+      <div className="trade-team-strip">
+        {tradeTeams.map((team) => (
+          <button
+            type="button"
+            key={team.id}
+            className={targetTeam?.id === team.id ? 'active' : ''}
+            onClick={() => { setTargetTeamId(team.id); setRequestedName(''); }}
+            style={{ borderColor: targetTeam?.id === team.id ? team.color : undefined, color: targetTeam?.id === team.id ? team.color : undefined }}
+          >
+            {team.short || team.id}
+          </button>
+        ))}
+      </div>
+      <div className="trade-player-list">
+        {targetSquad.length > 0 ? targetSquad.map((player) => (
+          <PlayerPick key={player.name} player={player} selected={requestedName === player.name} onClick={() => setRequestedName(player.name)} accent={targetTeam?.color} />
+        )) : <div className="trade-empty">No trade options available.</div>}
+      </div>
+    </section>
+  );
+
+  const InboxPanel = (
+    <section className="trade-panel trade-side-panel">
+      <div className="trade-panel-head">
+        <div>
+          <p>Swap Desk</p>
+          <h2>Proposals</h2>
+        </div>
+        <span>{myTradeCount}/{tradeLimit}</span>
+      </div>
+      <div className="trade-summary">
+        <div>
+          <span>You give</span>
+          <strong>{offeredPlayer?.name || 'Choose player'}</strong>
+        </div>
+        <div>
+          <span>You get</span>
+          <strong>{requestedPlayer?.name || 'Choose target'}</strong>
+        </div>
+      </div>
+      {notice && <div className="trade-notice">{notice}</div>}
+      {myTradeCount >= tradeLimit && <div className="trade-notice">Swap limit reached.</div>}
+      <button type="button" className="trade-send desktop-send" onClick={sendProposal} disabled={!canSend || busy}>
+        Send Proposal
+      </button>
+      <div className="trade-ready-row">
+        <button type="button" className={isReady ? 'ready' : ''} onClick={markReady} disabled={busy || isSpectator}>
+          {isReady ? 'Ready For XI' : 'Mark Ready'}
+        </button>
+        {isHost && (
+          <button type="button" className="host" onClick={openStartSelectionDialog} disabled={busy}>
+            Continue To XI
+          </button>
+        )}
+      </div>
+      <div className="trade-proposal-list">
+        {pendingReceived.length > 0 && <div className="trade-list-label">Received</div>}
+        {pendingReceived.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} />)}
+        {pendingSent.length > 0 && <div className="trade-list-label">Sent</div>}
+        {pendingSent.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} />)}
+        {recentProposals.filter((proposal) => proposal.status !== 'pending').length > 0 && <div className="trade-list-label">Recent</div>}
+        {recentProposals.filter((proposal) => proposal.status !== 'pending').map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} />)}
+        {recentProposals.length === 0 && <div className="trade-empty">No proposals yet.</div>}
+      </div>
+    </section>
+  );
+
+  return (
+    <div className="trade-screen">
+      <style>{`
+        .trade-screen{min-height:100vh;background:#050608;color:#fff;font-family:'Rajdhani',sans-serif;padding:22px 16px 34px;overflow-x:hidden}
+        .trade-shell{max-width:1360px;margin:0 auto}
+        .trade-hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;border:1px solid ${BORDER};background:#0b0d12;border-radius:22px;padding:20px 22px;margin-bottom:16px}
+        .trade-kicker{margin:0 0 6px;color:${GOLD};font-size:12px;letter-spacing:2.4px;text-transform:uppercase;font-weight:800}
+        .trade-hero h1{margin:0;font-family:'Bebas Neue';font-size:clamp(38px,7vw,64px);letter-spacing:3px;color:#fff;line-height:.92}
+        .trade-hero-copy{margin:10px 0 0;color:#9aa8bc;font-size:13px;line-height:1.55;max-width:720px}
+        .trade-count-card{min-width:150px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.03);padding:14px 16px;text-align:right}
+        .trade-count-card span{display:block;color:#64748b;font-size:10px;letter-spacing:1.8px;text-transform:uppercase}
+        .trade-count-card strong{font-family:'Bebas Neue';font-size:36px;color:${GOLD};letter-spacing:2px}
+        .trade-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 380px;gap:14px;align-items:start}
+        .trade-panel{border:1px solid ${BORDER};border-radius:20px;background:linear-gradient(180deg,rgba(13,16,22,.98),rgba(8,10,14,.98));padding:16px;min-width:0}
+        .trade-side-panel{position:sticky;top:14px}
+        .trade-panel-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px}
+        .trade-panel-head p{margin:0 0 3px;color:#64748b;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;font-weight:800}
+        .trade-panel-head h2{margin:0;font-family:'Bebas Neue';font-size:28px;letter-spacing:2px;color:#fff}
+        .trade-panel-head span{color:${GOLD};font-weight:900;letter-spacing:1.3px;font-size:12px}
+        .trade-player-list{display:grid;gap:9px;max-height:62vh;overflow:auto;overscroll-behavior:contain;padding-right:2px}
+        .trade-player{width:100%;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:9px 10px;color:#fff;text-align:left;cursor:pointer;touch-action:manipulation}
+        .trade-player.selected{background:rgba(232,184,75,.1);box-shadow:0 0 0 1px rgba(232,184,75,.12)}
+        .trade-avatar{width:44px;height:44px;border-radius:13px;border:1px solid;overflow:hidden;display:grid;place-items:center;flex-shrink:0}
+        .trade-avatar img{width:100%;height:100%;object-fit:cover;object-position:top}
+        .trade-player-main{min-width:0;flex:1}
+        .trade-player-name{font-weight:900;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e8eef8}
+        .trade-player-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;color:#7c8799;font-size:10px;letter-spacing:1.1px;font-weight:800;text-transform:uppercase}
+        .trade-team-strip{display:flex;gap:8px;overflow:auto;padding-bottom:8px;margin-bottom:8px}
+        .trade-team-strip button{border:1px solid #253044;background:#090c12;color:#8b95a7;border-radius:999px;padding:8px 12px;font-weight:900;cursor:pointer}
+        .trade-team-strip button.active{background:rgba(255,255,255,.05)}
+        .trade-summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+        .trade-summary div{border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.03);padding:10px;min-width:0}
+        .trade-summary span,.trade-swap-line span{display:block;color:#64748b;font-size:10px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800}
+        .trade-summary strong,.trade-swap-line strong{display:block;margin-top:4px;color:#f8fafc;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .trade-send,.trade-ready-row button,.trade-proposal-actions button{border:none;border-radius:12px;background:linear-gradient(135deg,${GOLD},#9a7610);color:#050608;font-family:'Barlow Condensed';font-weight:900;letter-spacing:1.8px;text-transform:uppercase;min-height:44px;padding:0 14px;cursor:pointer}
+        .trade-send:disabled,.trade-ready-row button:disabled,.trade-proposal-actions button:disabled{opacity:.45;cursor:not-allowed}
+        .trade-ready-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 14px}
+        .trade-ready-row button{background:#111827;color:#cbd5e1;border:1px solid #263244}
+        .trade-ready-row button.ready{border-color:#34d399;color:#34d399;background:rgba(52,211,153,.1)}
+        .trade-ready-row button.host{border-color:${CYAN}66;color:${CYAN};background:rgba(34,211,238,.08)}
+        .trade-proposal-list{display:grid;gap:9px}
+        .trade-list-label{color:#64748b;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;font-weight:900;margin-top:4px}
+        .trade-proposal{border:1px solid rgba(255,255,255,.09);border-radius:15px;background:rgba(255,255,255,.03);padding:11px}
+        .trade-proposal-top{display:flex;justify-content:space-between;gap:8px;color:#9aa8bc;font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase}
+        .trade-status{border-radius:999px;padding:2px 7px;background:#263244;color:#cbd5e1}
+        .trade-status.accepted{background:rgba(52,211,153,.16);color:#34d399}.trade-status.declined,.trade-status.cancelled{background:rgba(248,113,113,.13);color:#f87171}
+        .trade-swap-line{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+        .trade-swap-line div{min-width:0}
+        .trade-proposal-actions{display:flex;gap:8px;margin-top:10px}
+        .trade-proposal-actions button{min-height:36px;flex:1}.trade-proposal-actions button.ghost{background:#121722;color:#cbd5e1;border:1px solid #283244}
+        .trade-notice,.trade-reason{border:1px solid #4a3920;background:#15110a;color:#f3c547;border-radius:12px;padding:9px 10px;margin-bottom:10px;font-size:12px;line-height:1.45}
+        .trade-empty{border:1px dashed rgba(255,255,255,.12);border-radius:14px;padding:18px 14px;text-align:center;color:#64748b;font-size:13px;line-height:1.6}
+        .trade-mobile-tabs,.trade-mobile-action{display:none}
+        @media(max-width:900px){
+          .trade-screen{padding:12px 10px calc(112px + env(safe-area-inset-bottom))}
+          .trade-hero{align-items:flex-start;flex-direction:column;border-radius:18px;padding:16px 14px}
+          .trade-count-card{width:100%;text-align:left}
+          .trade-layout{display:block}
+          .trade-layout>.trade-panel{display:none}
+          .trade-layout>.trade-panel.mobile-active{display:block}
+          .trade-side-panel{position:static}
+          .trade-player-list{max-height:none}
+          .trade-mobile-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:10px}
+          .trade-mobile-tabs button{border:1px solid #253044;background:#0b0f17;color:#8b95a7;border-radius:12px;min-height:40px;font-weight:900;letter-spacing:1px}
+          .trade-mobile-tabs button.active{border-color:${GOLD};color:${GOLD};background:rgba(232,184,75,.08)}
+          .desktop-send{display:none}
+          .trade-mobile-action{display:block;position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:80;border:1px solid rgba(255,255,255,.1);background:rgba(8,10,14,.97);backdrop-filter:blur(12px);box-shadow:0 -14px 34px rgba(0,0,0,.55);border-radius:18px;padding:10px}
+          .trade-mobile-action .trade-send{width:100%}
+          .trade-mobile-meta{display:flex;justify-content:space-between;gap:10px;color:#7c8799;font-size:11px;font-weight:800;letter-spacing:1px;margin-bottom:8px;text-transform:uppercase}
+        }
+      `}</style>
+      <div className="trade-shell">
+        <header className="trade-hero">
+          <div>
+            <p className="trade-kicker">Player Swap Window</p>
+            <h1>Trade Before Your XI</h1>
+            <p className="trade-hero-copy">Swap up to 3 players before selecting your XI. Send a 1-for-1 proposal, then the other team can accept or decline it.</p>
+          </div>
+          <div className="trade-count-card">
+            <span>{myTeam?.short || myTeamId} swaps used</span>
+            <strong>{myTradeCount}/{tradeLimit}</strong>
+          </div>
+        </header>
+
+        <div className="trade-mobile-tabs">
+          {[
+            ['offer', 'Offer'],
+            ['request', 'Request'],
+            ['inbox', `Inbox${pendingReceived.length ? ` ${pendingReceived.length}` : ''}`],
+          ].map(([id, label]) => (
+            <button key={id} type="button" className={mobileTab === id ? 'active' : ''} onClick={() => setMobileTab(id)}>{label}</button>
+          ))}
+        </div>
+
+        <main className="trade-layout">
+          <div className={`trade-panel${mobileTab === 'offer' ? ' mobile-active' : ''}`}>{OfferPanel.props.children}</div>
+          <div className={`trade-panel${mobileTab === 'request' ? ' mobile-active' : ''}`}>{RequestPanel.props.children}</div>
+          <div className={`trade-panel trade-side-panel${mobileTab === 'inbox' ? ' mobile-active' : ''}`}>{InboxPanel.props.children}</div>
+        </main>
+      </div>
+
+      <div className="trade-mobile-action">
+        <div className="trade-mobile-meta">
+          <span>{offeredPlayer?.name || 'Choose offer'}</span>
+          <span>{requestedPlayer?.name || 'Choose request'}</span>
+        </div>
+        {notice && <div className="trade-notice">{notice}</div>}
+        <button type="button" className="trade-send" onClick={sendProposal} disabled={!canSend || busy}>
+          Send Proposal
+        </button>
+      </div>
+
+      <AppDialog
+        isOpen={!!dialog}
+        title={dialog?.title || ''}
+        message={dialog?.message || ''}
+        tone={dialog?.tone || 'info'}
+        onClose={() => setDialog(null)}
+        actions={dialog?.actions || []}
+      />
+    </div>
+  );
+}
+
 // ── Playing XI Selection ──────────────────────────────────────────────────────
 function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mode = 'mega', isHost = false, activeTeams = [], selections = {}, onFinalizeSelection, squadLimit = 15, chatLog = [], emit, roomCode, myName = '', myTeamId, gs, isSpectator = false }) {
   const [selected, setSelected] = useState([]);
@@ -2347,30 +2757,57 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
     return 'other';
   }, []);
 
+  const getRoleFlags = useCallback((role) => {
+    const value = String(role || '').toUpperCase();
+    const isWicketkeeper = value.includes('WK') || value.includes('KEEP');
+    return {
+      wk: isWicketkeeper,
+      bat: isWicketkeeper || value.includes('BAT'),
+      bowl: value.includes('BOWL'),
+      ar: value.includes('AR') || value.includes('ROUND'),
+    };
+  }, []);
+
   const selectedNames = useMemo(() => new Set(selected.map((p) => p.name)), [selected]);
 
   const roleSummary = useMemo(() => {
     return selected.reduce((acc, player) => {
-      const category = getRoleCategory(player.role);
-      acc[category] = (acc[category] || 0) + 1;
+      const flags = getRoleFlags(player.role);
+      if (flags.bat) acc.bat += 1;
+      if (flags.bowl) acc.bowl += 1;
+      if (flags.wk) acc.wk += 1;
+      if (flags.ar) acc.ar += 1;
+      if (!flags.bat && !flags.bowl && !flags.wk && !flags.ar) acc.other += 1;
       return acc;
     }, { bat: 0, bowl: 0, wk: 0, ar: 0, other: 0 });
-  }, [getRoleCategory, selected]);
+  }, [getRoleFlags, selected]);
 
-  const getValidationErrors = () => {
-    if ((mySquad?.length || 0) < minimumSquadNeeded) return `You need to buy ${minimumSquadNeeded} players before submitting your XI.`;
-    if (selected.length !== playersNeeded) return `Select ${playersNeeded} players.`;
-    if (roleSummary.bat < 2) return 'Must have at least 2 Batsmen';
-    if (roleSummary.bowl < 2) return 'Must have at least 2 Bowlers';
-    if (roleSummary.wk < 1) return 'Must have at least 1 Wicketkeeper';
+  const getDisqualificationWarning = () => {
+    if ((mySquad?.length || 0) < minimumSquadNeeded) return `Only ${mySquad?.length || 0}/${minimumSquadNeeded} players bought`;
+    if (selected.length < playersNeeded) return `Only ${selected.length}/${playersNeeded} players selected`;
+    if (roleSummary.bat < 2) return `Need ${2 - roleSummary.bat} more batter${2 - roleSummary.bat === 1 ? '' : 's'}`;
+    if (roleSummary.bowl < 2) return `Need ${2 - roleSummary.bowl} more bowler${2 - roleSummary.bowl === 1 ? '' : 's'}`;
+    if (roleSummary.wk < 1) return 'Need 1 wicketkeeper';
     return null;
   };
 
-  const validationError = getValidationErrors();
-  const canSubmit = validationError === null;
+  const disqualificationWarning = getDisqualificationWarning();
+  const canSubmit = selected.length > 0;
+  const isCleanXI = disqualificationWarning === null;
   const submittedCount = activeTeams.filter((player) => selections[player.teamId]).length;
   const totalTeams = activeTeams.length;
   const playersLeft = Math.max(playersNeeded - selected.length, 0);
+  const squadShortfall = Math.max(minimumSquadNeeded - (mySquad?.length || 0), 0);
+  const actionStatus = (() => {
+    if (isCleanXI) return 'XI ready';
+    if (selected.length === 0) return 'Pick at least 1 player';
+    if (squadShortfall > 0) return `Need ${squadShortfall} more player${squadShortfall === 1 ? '' : 's'}`;
+    if (selected.length !== playersNeeded) return `Pick ${playersLeft} more player${playersLeft === 1 ? '' : 's'}`;
+    if (roleSummary.bat < 2) return `Need ${2 - roleSummary.bat} batter${2 - roleSummary.bat === 1 ? '' : 's'}`;
+    if (roleSummary.bowl < 2) return `Need ${2 - roleSummary.bowl} bowler${2 - roleSummary.bowl === 1 ? '' : 's'}`;
+    if (roleSummary.wk < 1) return 'Need 1 wicketkeeper';
+    return disqualificationWarning || 'Will be disqualified';
+  })();
   const roleTargets = [
     { key: 'bat', label: 'Batters', count: roleSummary.bat, min: 2, color: '#60A5FA' },
     { key: 'bowl', label: 'Bowlers', count: roleSummary.bowl, min: 2, color: '#F97316' },
@@ -2379,12 +2816,13 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
   ];
   const selectionRules = [
     isRivalsMode
-      ? `Rivals mode lets you submit once you have ${playersNeeded} players and a valid XI.`
-      : `Your squad must contain ${squadLimit} players before the XI can be submitted.`,
-    `Select exactly ${playersNeeded} players from your squad.`,
-    'Minimum balance required: 2 batters, 2 bowlers, 1 wicketkeeper.',
+      ? `Rivals mode ranks a full ${playersNeeded}-player valid XI.`
+      : `A complete squad has ${squadLimit} players. Short squads can submit, but results mark them disqualified.`,
+    `Select up to ${playersNeeded} players from your squad.`,
+    'Minimum balance for qualification: 2 batters, 2 bowlers, 1 wicketkeeper.',
+    'Wicketkeeper-batters count as both wicketkeepers and batters.',
     'Tap any player card to add or remove them from the XI.',
-    'Your submitted XI is locked for results once you confirm.',
+    'Submitting an incomplete XI locks it for results as disqualified.',
   ];
   const enrichedSquad = useMemo(() => {
     return [...(mySquad || [])]
@@ -2485,29 +2923,42 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
         .xi-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; flex: 1 1 360px; width: 100%; }
         .xi-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.95fr); gap: 20px; align-items: start; }
         .xi-squad-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
-        .xi-side { min-width: 0; display: grid; gap: 16px; }
+        .xi-side { min-width: 0; display: grid; gap: 16px; position: sticky; top: 16px; align-self: start; }
         .xi-role-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
         .xi-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
         .xi-player-card { min-width: 0; touch-action: manipulation; }
-        .xi-action-panel { position: sticky; bottom: 10px; }
+        .xi-action-panel { position: relative; }
+        .xi-action-status { color: #F87171; font-size: 13px; margin-bottom: 14px; letter-spacing: 1.1px; font-weight: 800; text-transform: uppercase; }
+        .xi-action-status.ready { color: #34D399; }
+        .xi-action-warning { color: #f3c547; font-size: 12px; line-height: 1.45; margin: -4px 0 12px; letter-spacing: .8px; }
         .xi-card-shell { background: #0d1016; border: 1px solid ${BORDER}; border-radius: 20px; overflow: hidden; transition: border-color .18s ease, transform .18s ease, background .18s ease; }
-        .xi-card-shell.selected { background: #101722; }
+        .xi-card-shell.selected { background: #111a27; box-shadow: 0 0 0 1px rgba(232,184,75,0.18), 0 18px 40px rgba(0,0,0,0.3); }
         .xi-card-media { position: relative; padding: 14px 14px 10px; min-height: 126px; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .xi-card-content { padding: 12px 14px 14px; }
         @media (max-width: 900px) {
-          .xi-screen { padding: 14px 10px calc(22px + env(safe-area-inset-bottom)) !important; }
+          .xi-screen { padding: 14px 10px calc(188px + env(safe-area-inset-bottom)) !important; }
           .xi-hero { border-radius: 18px !important; padding: 16px 14px !important; margin-bottom: 14px !important; }
           .xi-hero-row { gap: 14px !important; }
           .xi-hero-copy { flex-basis: 100% !important; }
           .xi-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; flex-basis: 100% !important; gap: 8px !important; }
           .xi-layout { grid-template-columns: 1fr !important; gap: 14px !important; }
-          .xi-side { gap: 12px !important; }
+          .xi-side { gap: 12px !important; position: static !important; }
           .xi-squad-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
           .xi-card-media { min-height: 104px !important; padding: 10px 10px 8px !important; }
           .xi-card-avatar { width: 58px !important; height: 58px !important; border-radius: 16px !important; }
           .xi-card-name { font-size: 14px !important; }
           .xi-chip { font-size: 9px !important; letter-spacing: 1px !important; padding: 3px 6px !important; }
-          .xi-action-panel { position: sticky; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 5; }
+          .xi-action-panel {
+            position: fixed !important;
+            left: 10px;
+            right: 10px;
+            bottom: calc(10px + env(safe-area-inset-bottom));
+            z-index: 80;
+            padding: 12px !important;
+            border-radius: 18px !important;
+            box-shadow: 0 -12px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
+          }
+          .xi-action-status { margin-bottom: 10px !important; font-size: 12px !important; }
         }
         @media (max-width: 560px) {
           .xi-title { font-size: 34px !important; letter-spacing: 2.5px !important; }
@@ -2535,8 +2986,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
             <div className="xi-hero-copy" style={{ flex:'1 1 420px' }}>
               <div className="xi-title" style={{ fontFamily:"'Bebas Neue'", fontSize:'clamp(30px,6vw,56px)', color:GOLD, letterSpacing:4 }}>SELECT YOUR PLAYING XI</div>
               <div className="xi-copy" style={{ color:'#CBD5E1', fontSize:13, lineHeight:1.7, marginTop:8, maxWidth:760 }}>
-                Auction is over. Build your strongest final XI with the best balance across roles.
-                Once every active team submits, results will open automatically.
+                Pick your best balanced XI. Results open automatically once every active team submits.
                 {isHost ? ' If someone leaves, you can still finalize results and the game will auto-pick the best available XI for teams that did not submit.' : ''}
               </div>
             </div>
@@ -2586,7 +3036,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
                         </div>
                         <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8 }}>
                           <span className="xi-chip" style={{ fontSize:10, letterSpacing:2, color:sel ? '#081018' : rc, background:sel ? rc : `${rc}16`, border:`1px solid ${sel ? rc : `${rc}22`}`, borderRadius:999, padding:'4px 8px', fontWeight:800 }}>
-                            {sel ? 'SELECTED' : 'TAP TO PICK'}
+                            {sel ? 'IN XI' : 'TAP TO PICK'}
                           </span>
                           <span style={{ fontSize:11, color:GOLD, fontWeight:700, letterSpacing:1.2 }}>{fmt(p.soldFor || p.base)}</span>
                         </div>
@@ -2620,7 +3070,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:14 }}>
                 <div>
                   <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:28, letterSpacing:2 }}>Your Final XI</div>
-                  <div style={{ color:'#64748B', fontSize:11, letterSpacing:1.4, marginTop:2 }}>{selected.length === playersNeeded ? 'Ready to submit' : `${playersLeft} more needed to lock the XI`}</div>
+                  <div style={{ color:'#64748B', fontSize:11, letterSpacing:1.4, marginTop:2 }}>{isCleanXI ? 'Ready to submit' : selected.length > 0 ? 'Can submit, but will be disqualified' : `${playersLeft} more needed to lock the XI`}</div>
                 </div>
                 <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:34, letterSpacing:2 }}>{selected.length}/{playersNeeded}</div>
               </div>
@@ -2673,37 +3123,19 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
               </div>
             </div>
 
-            <div className="xi-panel" style={{ background:'linear-gradient(180deg, rgba(10,13,18,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18 }}>
-              <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:26, letterSpacing:2 }}>Selection Rules</div>
-              <div style={{ display:'grid', gap:10, marginTop:14 }}>
-                {selectionRules.map((rule, index) => (
-                  <div key={rule} style={{ display:'flex', alignItems:'flex-start', gap:10, border:`1px solid ${BORDER}`, borderRadius:14, padding:'10px 12px', background:'rgba(255,255,255,0.02)' }}>
-                    <div style={{ width:24, height:24, borderRadius:'50%', background:`${GOLD}16`, color:GOLD, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontFamily:"'Bebas Neue'", fontSize:14 }}>
-                      {index + 1}
-                    </div>
-                    <div style={{ color:'#CBD5E1', fontSize:13, lineHeight:1.55 }}>{rule}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             <div className="xi-panel xi-action-panel" style={{ textAlign:'center', background:'rgba(11,13,18,0.96)', border:`1px solid ${BORDER}`, borderRadius:22, padding:18, backdropFilter:'blur(12px)' }}>
-              {validationError && (
-                <div style={{ color:'#F87171', fontSize:13, marginBottom:14, letterSpacing:1.1, fontWeight:800 }}>
-                  {(mySquad?.length || 0) < minimumSquadNeeded
-                    ? `BUY ${minimumSquadNeeded - (mySquad?.length || 0)} MORE PLAYER${minimumSquadNeeded - (mySquad?.length || 0) === 1 ? '' : 'S'} TO REACH ${minimumSquadNeeded} PLAYERS`
-                    : selected.length === playersNeeded ? validationError.toUpperCase() : `PICK ${playersLeft} MORE PLAYER${playersLeft === 1 ? '' : 'S'} TO CONTINUE`}
-                </div>
-              )}
-              {!validationError && (
-                <div style={{ color:'#34D399', fontSize:13, marginBottom:14, letterSpacing:1.1, fontWeight:800 }}>
-                  XI BALANCE CHECK PASSED
+              <div className={`xi-action-status${isCleanXI ? ' ready' : ''}`}>
+                {actionStatus}
+              </div>
+              {!isCleanXI && selected.length > 0 && (
+                <div className="xi-action-warning">
+                  You can submit these players now, but this team will be marked disqualified in results.
                 </div>
               )}
               <div className="xi-actions">
                 <button onClick={() => canSubmit && onSubmit(selected)} disabled={!canSubmit}
                   style={{ background:canSubmit?`linear-gradient(135deg,${GOLD},#9a7610)`:'#111', border:`1px solid ${canSubmit?GOLD:'#333'}`, borderRadius:12, padding:'15px 30px', color:canSubmit?'#000':'#555', fontWeight:900, fontSize:16, letterSpacing:3, cursor:canSubmit?'pointer':'not-allowed', fontFamily:"'Barlow Condensed'", minWidth:220 }}>
-                  SUBMIT PLAYING XI
+                  {isCleanXI ? 'SUBMIT PLAYING XI' : 'SUBMIT ANYWAY'}
                 </button>
                 {isHost && (
                   <button
@@ -2716,9 +3148,23 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
               </div>
               {totalTeams > 0 && (
                 <div style={{ color:'#64748B', fontSize:12, marginTop:14, letterSpacing:1.3 }}>
-                  {submittedCount}/{totalTeams} active teams already submitted
+                  {submittedCount}/{totalTeams} active teams submitted
                 </div>
               )}
+            </div>
+
+            <div className="xi-panel" style={{ background:'linear-gradient(180deg, rgba(10,13,18,0.98), rgba(8,10,14,0.98))', border:`1px solid ${BORDER}`, borderRadius:22, padding:18 }}>
+              <div style={{ color:'#fff', fontFamily:"'Bebas Neue'", fontSize:26, letterSpacing:2 }}>Selection Rules</div>
+              <div style={{ display:'grid', gap:10, marginTop:14 }}>
+                {selectionRules.map((rule, index) => (
+                  <div key={rule} style={{ display:'flex', alignItems:'flex-start', gap:10, border:`1px solid ${BORDER}`, borderRadius:14, padding:'10px 12px', background:'rgba(255,255,255,0.02)' }}>
+                    <div style={{ width:24, height:24, borderRadius:'50%', background:`${GOLD}16`, color:GOLD, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontFamily:"'Bebas Neue'", fontSize:14 }}>
+                      {index + 1}
+                    </div>
+                    <div style={{ color:'#CBD5E1', fontSize:13, lineHeight:1.55 }}>{rule}</div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <XIChatPanel

@@ -112,27 +112,7 @@ a {
 
 @media (max-width: 860px) {
   .chai-support {
-    bottom: calc(86px + env(safe-area-inset-bottom));
-    height: 46px;
-    max-width: 46px;
-  }
-
-  .chai-support:hover,
-  .chai-support:focus-visible {
-    max-width: 164px;
-  }
-
-  .chai-support-icon {
-    width: 46px;
-    height: 46px;
-    flex-basis: 46px;
-    background-size: 31px 31px, cover;
-  }
-
-  .chai-support-note {
-    min-width: 106px;
-    padding-right: 14px;
-    font-size: 13px;
+    display: none;
   }
 }
 

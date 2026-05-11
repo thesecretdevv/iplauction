@@ -92,10 +92,21 @@ function buildLeaderboardResults(gs, mode, teams) {
 
 function normalizeRole(role) {
   const value = String(role || '').toUpperCase();
-  if (value.includes('WK')) return 'wicket_keeper';
+  if (value.includes('WK') || value.includes('KEEP')) return 'wicket_keeper';
   if (value.includes('BOWL')) return 'bowler';
   if (value.includes('AR')) return 'all_rounder';
   return 'batsman';
+}
+
+function getRoleFlags(role) {
+  const value = String(role || '').toUpperCase();
+  const isWicketkeeper = value.includes('WK') || value.includes('KEEP');
+  return {
+    wicketkeeper: isWicketkeeper,
+    batter: isWicketkeeper || value.includes('BAT'),
+    bowler: value.includes('BOWL'),
+    allRounder: value.includes('AR') || value.includes('ROUND'),
+  };
 }
 
 function getResolvedTeamIds(gs, mode) {
@@ -384,9 +395,9 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
 
   // ── Calculation ──
   const normalizedXI = playingXI.map((player) => ({ ...player, role: normalizeRole(player?.role) }));
-  const batCount = normalizedXI.filter(p => p.role === 'batsman').length;
-  const bowlCount = normalizedXI.filter(p => p.role === 'bowler').length;
-  const wkCount = normalizedXI.filter(p => p.role === 'wicket_keeper').length;
+  const batCount = normalizedXI.filter(p => getRoleFlags(p.role).batter).length;
+  const bowlCount = normalizedXI.filter(p => getRoleFlags(p.role).bowler).length;
+  const wkCount = normalizedXI.filter(p => getRoleFlags(p.role).wicketkeeper).length;
   const squadShortfall = fullSquad.length < minimumSquadSize;
   const isDisqualified = squadShortfall || playingXI.length < 11 || batCount < 2 || bowlCount < 2 || wkCount < 1;
   const disqualificationReason = squadShortfall
@@ -646,10 +657,10 @@ function SupportResultsModal({ canClose, countdown, isMobile, onClose }) {
 function SquadTab({ gs, mti, mode, teams, activeId, setActiveId, team, displayList, playingXI, fullSquad, spent, soldCount, unsoldCount, teamTotalRating, teamAvgRating, isDisqualified, disqualificationReason, shareText, shareWhatsApp, downloadSheet, getTeamLabel }) {
   const normalizedXI = playingXI.map((player) => ({ ...player, role: normalizeRole(player?.role) }));
   const roleBreakdown = {
-    batters: normalizedXI.filter((p) => p.role === 'batsman').length,
-    bowlers: normalizedXI.filter((p) => p.role === 'bowler').length,
-    wicketkeepers: normalizedXI.filter((p) => p.role === 'wicket_keeper').length,
-    allRounders: normalizedXI.filter((p) => p.role === 'all_rounder').length,
+    batters: normalizedXI.filter((p) => getRoleFlags(p.role).batter).length,
+    bowlers: normalizedXI.filter((p) => getRoleFlags(p.role).bowler).length,
+    wicketkeepers: normalizedXI.filter((p) => getRoleFlags(p.role).wicketkeeper).length,
+    allRounders: normalizedXI.filter((p) => getRoleFlags(p.role).allRounder).length,
   };
 
   return (

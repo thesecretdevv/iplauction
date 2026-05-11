@@ -41,7 +41,7 @@ function buildMiniPlayers() {
     }
   }
   for (const role in byRole) byRole[role].sort((a, b) => b.base - a.base);
-  const targets = { BAT: 52, BOWL: 68, AR: 55, WK: 25 };
+  const targets = { BAT: 70, BOWL: 90, AR: 75, WK: 35 };
   const pool = [];
   for (const role in targets) {
     const available = byRole[role];
@@ -84,6 +84,10 @@ function createGameState(queue) {
     squads: Object.fromEntries(TEAMS.map(t => [t.id, []])),
     playingXI: Object.fromEntries(TEAMS.map(t => [t.id, []])),
     selections: Object.fromEntries(TEAMS.map(t => [t.id, false])),
+    tradeProposals: [],
+    tradeCounts: Object.fromEntries(TEAMS.map(t => [t.id, 0])),
+    tradeReady: Object.fromEntries(TEAMS.map(t => [t.id, false])),
+    tradeLimit: 3,
     bidLog: [], auctionLog: [],
   };
 }
@@ -111,6 +115,10 @@ function mergeGameState(prev, next) {
     squads: next.squads ?? prev.squads,
     playingXI: next.playingXI ?? prev.playingXI,
     selections: next.selections ?? prev.selections,
+    tradeProposals: next.tradeProposals ?? prev.tradeProposals,
+    tradeCounts: next.tradeCounts ?? prev.tradeCounts,
+    tradeReady: next.tradeReady ?? prev.tradeReady,
+    tradeLimit: next.tradeLimit ?? prev.tradeLimit,
     bidLog: next.bidLog ?? prev.bidLog,
     auctionLog: next.auctionLog ?? prev.auctionLog,
     activeTeamIds: next.activeTeamIds ?? prev.activeTeamIds,

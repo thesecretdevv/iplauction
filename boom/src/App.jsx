@@ -55,9 +55,9 @@ function buildMiniPlayers() {
   // Sort each role pool: highest base first (priority players appear first)
   for (const role in byRole) byRole[role].sort((a, b) => b.base - a.base);
 
-  // Target counts per role to reach ~200 players
-  // BAT:52, BOWL:68, AR:55, WK:25  → total 200
-  const targets = { BAT: 52, BOWL: 68, AR: 55, WK: 25 };
+  // Target counts per role to reach ~270 players
+  // BAT:70, BOWL:90, AR:75, WK:35  → total 270
+  const targets = { BAT: 70, BOWL: 90, AR: 75, WK: 35 };
 
   const pool = [];
   for (const role in targets) {

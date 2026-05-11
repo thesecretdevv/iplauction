@@ -62,6 +62,7 @@ const shuffle = arr => { const a = [...arr]; for (let i = a.length - 1; i > 0; i
 const fmt = c => c >= 1 ? `₹${c.toFixed(2)} Cr` : `₹${Math.round(c * 100)} L`;
 const getIncrement = p => p < 2 ? 0.10 : p < 5 ? 0.20 : p < 10 ? 0.25 : 0.50;
 const nextBid = c => +(c + getIncrement(c)).toFixed(2);
+const TRADE_LIMIT = 3;
 function getOverseasLimitForSquad(squadLimit) {
     const limit = Number(squadLimit) || 15;
     if (limit >= 25) return 8;
@@ -710,6 +711,9 @@ function createGameState(playerQueue, options = {}) {
         squads: Object.fromEntries(TEAMS.map(t => [t.id, []])),
         playingXI: Object.fromEntries(TEAMS.map(t => [t.id, []])),
         selections: Object.fromEntries(TEAMS.map(t => [t.id, false])),
+        tradeProposals: [],
+        tradeCounts: Object.fromEntries(TEAMS.map(t => [t.id, 0])),
+        tradeReady: Object.fromEntries(TEAMS.map(t => [t.id, false])),
         bidLog: [],
         auctionLog: [],
         isPaused: false,
@@ -734,6 +738,10 @@ function getClientState(room, options = {}) {
         squadLimit: gs.squadLimit || room.squadLimit || getDefaultSquadLimit(room.auctionMode),
         purses: gs.purses,
         squads: gs.squads,
+        tradeProposals: gs.tradeProposals || [],
+        tradeCounts: gs.tradeCounts || {},
+        tradeReady: gs.tradeReady || {},
+        tradeLimit: TRADE_LIMIT,
         bidLog: gs.bidLog,
         auctionLog: gs.auctionLog.slice(0, 20),
         auctionMode: room.auctionMode || 'mega',
@@ -792,7 +800,7 @@ function advanceToNext(room) {
 
     const nextIdx = gs.currentIdx + 1;
     if (nextIdx >= gs.playerQueue.length) {
-        startSelectionPhase(room, { reason: 'completed' });
+        startTradePhase(room, { reason: 'completed' });
         io.to(room.code).emit('game-state', getClientState(room));
         schedulePersistRoom(room, 50);
         return;
@@ -818,17 +826,54 @@ function autoPickPlayingXI(squad = [], limit = 11) {
         .slice(0, limit);
 }
 
+function getHumanTeamIds(room) {
+    return Array.from(new Set(
+        Object.values(room.players || {})
+            .filter(player => !player.isSpectator && player.teamId)
+            .map(player => player.teamId)
+    ));
+}
+
+function ensureTradeState(gs) {
+    if (!gs.tradeProposals) gs.tradeProposals = [];
+    if (!gs.tradeCounts) gs.tradeCounts = Object.fromEntries(TEAMS.map(t => [t.id, 0]));
+    if (!gs.tradeReady) gs.tradeReady = Object.fromEntries(TEAMS.map(t => [t.id, false]));
+}
+
+function startTradePhase(room, { reason = 'completed' } = {}) {
+    const gs = room?.gameState;
+    if (!gs || gs.phase === 'trade' || gs.phase === 'selection' || gs.phase === 'finished') return false;
+
+    ensureTradeState(gs);
+    gs.tradeProposals = [];
+    gs.tradeCounts = Object.fromEntries(TEAMS.map(t => [t.id, 0]));
+    gs.tradeReady = Object.fromEntries(TEAMS.map(t => [t.id, false]));
+    gs.phase = 'trade';
+    gs.currentBidder = null;
+    gs.bidLog = [];
+    gs.timer = 0;
+    room.status = 'active';
+    room.endReason = room.endReason || reason;
+    pushSystemMessage(room, 'Auction complete. Player swap window is now open.');
+    markRoomDirty(room);
+    return true;
+}
+
 function startSelectionPhase(room, { reason = 'completed' } = {}) {
     const gs = room?.gameState;
     if (!gs || gs.phase === 'selection' || gs.phase === 'finished') return false;
 
     if (!gs.playingXI) gs.playingXI = Object.fromEntries(TEAMS.map(t => [t.id, []]));
     if (!gs.selections) gs.selections = Object.fromEntries(TEAMS.map(t => [t.id, false]));
+    ensureTradeState(gs);
+    gs.tradeProposals = (gs.tradeProposals || []).map((proposal) => (
+        proposal.status === 'pending'
+            ? { ...proposal, status: 'cancelled', reason: 'Selection started' }
+            : proposal
+    ));
 
     const humanTeamIds = new Set(
-        Object.values(room.players || {})
-            .filter(player => !player.isSpectator && player.teamId)
-            .map(player => player.teamId)
+        getHumanTeamIds(room)
     );
 
     TEAMS.forEach((team) => {
@@ -853,6 +898,12 @@ function startSelectionPhase(room, { reason = 'completed' } = {}) {
 function finalizeSelection(room, { reason = 'completed' } = {}) {
     const gs = room?.gameState;
     if (!gs) return false;
+    ensureTradeState(gs);
+    gs.tradeProposals = (gs.tradeProposals || []).map((proposal) => (
+        proposal.status === 'pending'
+            ? { ...proposal, status: 'cancelled', reason: 'Results finalized' }
+            : proposal
+    ));
 
     TEAMS.forEach((team) => {
         if (!Array.isArray(gs.playingXI?.[team.id]) || gs.playingXI[team.id].length === 0) {
@@ -862,6 +913,37 @@ function finalizeSelection(room, { reason = 'completed' } = {}) {
     });
 
     return finalizeRoom(room, { reason });
+}
+
+function findSquadPlayerIndex(squad = [], playerName) {
+    const normalized = String(playerName || '').trim().toLowerCase();
+    return (squad || []).findIndex((player) => String(player?.name || '').trim().toLowerCase() === normalized);
+}
+
+function getTeamShort(teamId) {
+    return TEAMS.find(team => team.id === teamId)?.short || teamId;
+}
+
+function cancelRelatedPendingProposals(gs, playerNames = [], exceptId = null) {
+    const names = new Set(playerNames.map(name => String(name || '').trim().toLowerCase()).filter(Boolean));
+    gs.tradeProposals = (gs.tradeProposals || []).map((proposal) => {
+        if (proposal.id === exceptId || proposal.status !== 'pending') return proposal;
+        const offeredName = String(proposal.offeredPlayer?.name || '').trim().toLowerCase();
+        const requestedName = String(proposal.requestedPlayer?.name || '').trim().toLowerCase();
+        if (!names.has(offeredName) && !names.has(requestedName)) return proposal;
+        return { ...proposal, status: 'cancelled', reason: 'This player is no longer available' };
+    });
+}
+
+function maybeStartSelectionIfTradesReady(room) {
+    const gs = room?.gameState;
+    if (!gs || gs.phase !== 'trade') return false;
+    const humanTeamIds = getHumanTeamIds(room);
+    if (humanTeamIds.length === 0) return false;
+    const allReady = humanTeamIds.every(teamId => gs.tradeReady?.[teamId]);
+    if (!allReady) return false;
+    startSelectionPhase(room, { reason: room.endReason || 'completed' });
+    return true;
 }
 
 function saveFinishedGame(room, gs) {
@@ -1710,7 +1792,7 @@ io.on('connection', (socket) => {
         const room = await getRoom(currentRoom);
         if (!room || currentPlayerId !== room.hostId || !room.gameState) return;
         pushSystemMessage(room, `Auction ended early by ${room.players[currentPlayerId]?.name || 'the host'}`);
-        startSelectionPhase(room, { reason: 'host-ended-early' });
+        startTradePhase(room, { reason: 'host-ended-early' });
         io.to(currentRoom).emit('game-state', getClientState(room));
         await persistRoom(room);
         if (!room.isPrivate) broadcastRoomList();
@@ -1806,6 +1888,173 @@ io.on('connection', (socket) => {
         schedulePersistRoom(room, 500);
     });
 
+    // ── Player Trades ──
+    socket.on('create-trade-proposal', async ({ toTeamId, offeredPlayerName, requestedPlayerName }, cb) => {
+        if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
+        const room = await getRoom(currentRoom);
+        if (!room || !room.gameState) return cb?.({ ok: false });
+        const gs = room.gameState;
+        if (gs.phase !== 'trade') return cb?.({ ok: false, error: 'Trade phase is not active' });
+
+        const player = room.players[currentPlayerId];
+        if (!player || !player.teamId || player.isSpectator) return cb?.({ ok: false });
+        const fromTeamId = player.teamId;
+        if (!toTeamId || toTeamId === fromTeamId) return cb?.({ ok: false, error: 'Choose another team' });
+        ensureTradeState(gs);
+        if ((gs.tradeCounts[fromTeamId] || 0) >= TRADE_LIMIT) return cb?.({ ok: false, error: 'Swap limit reached' });
+        if ((gs.tradeCounts[toTeamId] || 0) >= TRADE_LIMIT) return cb?.({ ok: false, error: 'Target team swap limit reached' });
+
+        const offeredIdx = findSquadPlayerIndex(gs.squads?.[fromTeamId] || [], offeredPlayerName);
+        const requestedIdx = findSquadPlayerIndex(gs.squads?.[toTeamId] || [], requestedPlayerName);
+        if (offeredIdx < 0 || requestedIdx < 0) return cb?.({ ok: false, error: 'This player is no longer available' });
+
+        const offeredPlayer = gs.squads[fromTeamId][offeredIdx];
+        const requestedPlayer = gs.squads[toTeamId][requestedIdx];
+        const alreadyPending = (gs.tradeProposals || []).some((proposal) => (
+            proposal.status === 'pending'
+            && proposal.fromTeamId === fromTeamId
+            && proposal.toTeamId === toTeamId
+            && proposal.offeredPlayer?.name === offeredPlayer.name
+            && proposal.requestedPlayer?.name === requestedPlayer.name
+        ));
+        if (alreadyPending) return cb?.({ ok: false, error: 'Proposal already sent' });
+
+        const proposal = {
+            id: `TR-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+            fromTeamId,
+            toTeamId,
+            offeredPlayer,
+            requestedPlayer,
+            status: 'pending',
+            createdAt: Date.now(),
+        };
+        gs.tradeProposals = [proposal, ...(gs.tradeProposals || [])].slice(0, 80);
+        gs.tradeReady[fromTeamId] = false;
+        pushSystemMessage(room, `${getTeamShort(fromTeamId)} proposed a swap with ${getTeamShort(toTeamId)}`);
+        markRoomDirty(room);
+        io.to(currentRoom).emit('game-state', getClientState(room));
+        await persistRoom(room);
+        cb?.({ ok: true, proposal });
+    });
+
+    socket.on('accept-trade-proposal', async ({ proposalId }, cb) => {
+        if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
+        const room = await getRoom(currentRoom);
+        if (!room || !room.gameState) return cb?.({ ok: false });
+        const gs = room.gameState;
+        if (gs.phase !== 'trade') return cb?.({ ok: false, error: 'Trade phase is not active' });
+
+        const player = room.players[currentPlayerId];
+        if (!player || !player.teamId || player.isSpectator) return cb?.({ ok: false });
+        ensureTradeState(gs);
+        const idx = (gs.tradeProposals || []).findIndex(proposal => proposal.id === proposalId);
+        const proposal = idx >= 0 ? gs.tradeProposals[idx] : null;
+        if (!proposal || proposal.status !== 'pending') return cb?.({ ok: false, error: 'Proposal is no longer available' });
+        if (proposal.toTeamId !== player.teamId) return cb?.({ ok: false, error: 'Only the receiving team can accept this proposal' });
+        if ((gs.tradeCounts[proposal.fromTeamId] || 0) >= TRADE_LIMIT || (gs.tradeCounts[proposal.toTeamId] || 0) >= TRADE_LIMIT) {
+            return cb?.({ ok: false, error: 'Swap limit reached' });
+        }
+
+        const fromSquad = gs.squads?.[proposal.fromTeamId] || [];
+        const toSquad = gs.squads?.[proposal.toTeamId] || [];
+        const offeredIdx = findSquadPlayerIndex(fromSquad, proposal.offeredPlayer?.name);
+        const requestedIdx = findSquadPlayerIndex(toSquad, proposal.requestedPlayer?.name);
+        if (offeredIdx < 0 || requestedIdx < 0) {
+            gs.tradeProposals[idx] = { ...proposal, status: 'cancelled', reason: 'This player is no longer available' };
+            markRoomDirty(room);
+            io.to(currentRoom).emit('game-state', getClientState(room));
+            await persistRoom(room);
+            return cb?.({ ok: false, error: 'This player is no longer available' });
+        }
+
+        const offeredPlayer = fromSquad[offeredIdx];
+        const requestedPlayer = toSquad[requestedIdx];
+        gs.squads[proposal.fromTeamId] = [...fromSquad];
+        gs.squads[proposal.toTeamId] = [...toSquad];
+        gs.squads[proposal.fromTeamId][offeredIdx] = requestedPlayer;
+        gs.squads[proposal.toTeamId][requestedIdx] = offeredPlayer;
+        gs.tradeCounts[proposal.fromTeamId] = (gs.tradeCounts[proposal.fromTeamId] || 0) + 1;
+        gs.tradeCounts[proposal.toTeamId] = (gs.tradeCounts[proposal.toTeamId] || 0) + 1;
+        gs.tradeReady[proposal.fromTeamId] = false;
+        gs.tradeReady[proposal.toTeamId] = false;
+        gs.tradeProposals[idx] = { ...proposal, status: 'accepted', acceptedAt: Date.now() };
+        cancelRelatedPendingProposals(gs, [offeredPlayer.name, requestedPlayer.name], proposal.id);
+        pushSystemMessage(room, `${getTeamShort(proposal.fromTeamId)} and ${getTeamShort(proposal.toTeamId)} completed a player swap`);
+        markRoomDirty(room);
+        io.to(currentRoom).emit('game-state', getClientState(room));
+        await persistRoom(room);
+        cb?.({ ok: true });
+    });
+
+    socket.on('decline-trade-proposal', async ({ proposalId }, cb) => {
+        if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
+        const room = await getRoom(currentRoom);
+        if (!room || !room.gameState) return cb?.({ ok: false });
+        const gs = room.gameState;
+        if (gs.phase !== 'trade') return cb?.({ ok: false, error: 'Trade phase is not active' });
+        const player = room.players[currentPlayerId];
+        if (!player || !player.teamId || player.isSpectator) return cb?.({ ok: false });
+        const idx = (gs.tradeProposals || []).findIndex(proposal => proposal.id === proposalId);
+        const proposal = idx >= 0 ? gs.tradeProposals[idx] : null;
+        if (!proposal || proposal.status !== 'pending') return cb?.({ ok: false, error: 'Proposal is no longer available' });
+        if (proposal.toTeamId !== player.teamId) return cb?.({ ok: false, error: 'Only the receiving team can decline this proposal' });
+        gs.tradeProposals[idx] = { ...proposal, status: 'declined', declinedAt: Date.now() };
+        markRoomDirty(room);
+        io.to(currentRoom).emit('game-state', getClientState(room));
+        await persistRoom(room);
+        cb?.({ ok: true });
+    });
+
+    socket.on('cancel-trade-proposal', async ({ proposalId }, cb) => {
+        if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
+        const room = await getRoom(currentRoom);
+        if (!room || !room.gameState) return cb?.({ ok: false });
+        const gs = room.gameState;
+        if (gs.phase !== 'trade') return cb?.({ ok: false, error: 'Trade phase is not active' });
+        const player = room.players[currentPlayerId];
+        if (!player || !player.teamId || player.isSpectator) return cb?.({ ok: false });
+        const idx = (gs.tradeProposals || []).findIndex(proposal => proposal.id === proposalId);
+        const proposal = idx >= 0 ? gs.tradeProposals[idx] : null;
+        if (!proposal || proposal.status !== 'pending') return cb?.({ ok: false, error: 'Proposal is no longer available' });
+        if (proposal.fromTeamId !== player.teamId) return cb?.({ ok: false, error: 'Only the sending team can cancel this proposal' });
+        gs.tradeProposals[idx] = { ...proposal, status: 'cancelled', cancelledAt: Date.now() };
+        markRoomDirty(room);
+        io.to(currentRoom).emit('game-state', getClientState(room));
+        await persistRoom(room);
+        cb?.({ ok: true });
+    });
+
+    socket.on('mark-trade-ready', async (_payload, cb) => {
+        const ack = typeof _payload === 'function' ? _payload : cb;
+        if (!currentRoom || !currentPlayerId) return ack?.({ ok: false });
+        const room = await getRoom(currentRoom);
+        if (!room || !room.gameState) return ack?.({ ok: false });
+        const gs = room.gameState;
+        if (gs.phase !== 'trade') return ack?.({ ok: false, error: 'Trade phase is not active' });
+        const player = room.players[currentPlayerId];
+        if (!player || !player.teamId || player.isSpectator) return ack?.({ ok: false });
+        ensureTradeState(gs);
+        gs.tradeReady[player.teamId] = true;
+        const movedToSelection = maybeStartSelectionIfTradesReady(room);
+        markRoomDirty(room);
+        io.to(currentRoom).emit('game-state', getClientState(room));
+        await persistRoom(room);
+        ack?.({ ok: true, movedToSelection });
+    });
+
+    socket.on('start-selection-phase', async (_payload, cb) => {
+        const ack = typeof _payload === 'function' ? _payload : cb;
+        if (!currentRoom || !currentPlayerId) return ack?.({ ok: false });
+        const room = await getRoom(currentRoom);
+        if (!room || currentPlayerId !== room.hostId || !room.gameState) return ack?.({ ok: false, error: 'Only the host can continue' });
+        if (room.gameState.phase !== 'trade') return ack?.({ ok: false, error: 'Trade phase is not active' });
+        pushSystemMessage(room, `Player swaps ended by ${room.players[currentPlayerId]?.name || 'the host'}`);
+        startSelectionPhase(room, { reason: room.endReason || 'completed' });
+        io.to(currentRoom).emit('game-state', getClientState(room));
+        await persistRoom(room);
+        ack?.({ ok: true });
+    });
+
     // ── Submit XI ──
     socket.on('submit-xi', async ({ players }, cb) => {
         if (!currentRoom || !currentPlayerId) return cb?.({ ok: false });
@@ -1819,12 +2068,10 @@ io.on('connection', (socket) => {
         if (!player || !player.teamId || player.isSpectator) return cb?.({ ok: false });
 
         const teamId = player.teamId;
-        const requiredSquadSize = gs.squadLimit || room.squadLimit || getDefaultSquadLimit(room.auctionMode);
-        const squadSize = gs.squads?.[teamId]?.length || 0;
-        if (squadSize < requiredSquadSize) {
-            return cb?.({ ok: false, error: `You need to buy ${requiredSquadSize} players before submitting your XI` });
+        if (!Array.isArray(players) || players.length < 1) {
+            return cb?.({ ok: false, error: "Select at least 1 player" });
         }
-        if (players.length !== 11) return cb?.({ ok: false, error: "Must select exactly 11 players" });
+        if (players.length > 11) return cb?.({ ok: false, error: "Cannot submit more than 11 players" });
 
         gs.playingXI[teamId] = players;
         gs.selections[teamId] = true;
