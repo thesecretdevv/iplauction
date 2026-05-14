@@ -24,6 +24,8 @@ const PLAYER_NAME_ALIASES = {
   'sai kishore': ['R Sai Kishore', 'R. Sai Kishore'],
   'r sai kishore': ['R Sai Kishore', 'R. Sai Kishore'],
   'r. sai kishore': ['R Sai Kishore', 'R. Sai Kishore'],
+  'sai sudharshan': ['Sai Sudharsan'],
+  'sai sudharsan': ['Sai Sudharsan'],
   'yash raj punia': ['Yash Raj Punja'],
   'prithvi raj yarra': ['Prithviraj Yarra'],
   'varun chakravarthy': ['Varun Chakaravarthy', 'Varun Chakravarthy'],
@@ -65,7 +67,7 @@ const PLAYER_RECORDS_BY_NAME = new Map(
 export const PLAYER_RATINGS = {
   "Virat Kohli": 94,
   "Rohit Sharma": 92,
-  "Suryakumar Yadav": 91,
+  "Suryakumar Yadav": 90,
   "Shubman Gill": 90,
   "Abhishek Sharma": 90,
   "Yashasvi Jaiswal": 89,
@@ -83,7 +85,7 @@ export const PLAYER_RATINGS = {
   "Ashutosh Sharma": 83,
   "Ajinkya Rahane": 83,
   "Shashank Singh": 82,
-  "Angkrish Raghuvanshi": 82,
+  "Angkrish Raghuvanshi": 83,
   "Aiden Markram": 81,
   "David Miller": 81,
   "Devdutt Padikkal": 83,
@@ -98,7 +100,7 @@ export const PLAYER_RATINGS = {
   "Sarfaraz Khan": 79,
   "Kamindu Mendis": 79,
   "Nehal Wadhera": 79,
-  "Priyansh Arya": 83,
+  "Priyansh Arya": 85,
   "Manish Pandey": 79,
   "Prithvi Shaw": 79,
   "Shahrukh Khan": 78,
@@ -115,7 +117,7 @@ export const PLAYER_RATINGS = {
   "Abhinav Manohar": 71,
   "Yash Dhull": 70,
   "Mohd. Arshad Khan": 70,
-  "Jasprit Bumrah": 96,
+  "Jasprit Bumrah": 95,
   "Mitchell Starc": 89,
   "Rashid Khan": 91,
   "Sunil Narine": 90,
@@ -127,7 +129,7 @@ export const PLAYER_RATINGS = {
   "Kuldeep Yadav": 89,
   "Mohammad Shami": 88,
   "Varun Chakravarthy": 88,
-  "Bhuvneshwar Kumar": 88,
+  "Bhuvneshwar Kumar": 89,
   "Jofra Archer": 86,
   "Mohammad Siraj": 87,
   "Kagiso Rabada": 86,
@@ -165,7 +167,7 @@ export const PLAYER_RATINGS = {
   "Akash Madhwal": 76,
   "Navdeep Saini": 75,
   "Nuwan Thushara": 75,
-  "Mohsin Khan": 74,
+  "Mohsin Khan": 83,
   "Yash Thakur": 74,
   "Adam Milne": 73,
   "Kartik Sharma": 73,
@@ -173,23 +175,24 @@ export const PLAYER_RATINGS = {
   "Taskin Ahmed": 72,
   "Kuldeep Sen": 72,
   "Ashwani Kumar": 71,
+  "Anshul Kamboj": 84,
   "Shamar Joseph": 71,
-  "Prince Yadav": 71,
+  "Prince Yadav": 84,
   "Kuldip Yadav": 71,
   "Sanju Samson": 89,
   "Nicholas Pooran": 89,
-  "Ishan Kishan": 89,
+  "Ishan Kishan": 88,
   "Rishabh Pant": 88,
   "Jos Buttler": 90,
   "KL Rahul": 89,
-  "Heinrich Klaasen": 86,
+  "Heinrich Klaasen": 89,
   "Quinton De Kock": 86,
   "Phil Salt": 87,
   "Travis Head": 89,
   "Jitesh Sharma": 83,
   "MS Dhoni": 85,
   "Jonny Bairstow": 80,
-  "Prabhsimran Singh": 82,
+  "Prabhsimran Singh": 84,
   "Rahmanullah Gurbaz": 79,
   "Dhruv Jurel": 83,
   "Josh Inglis": 79,
@@ -209,7 +212,7 @@ export const PLAYER_RATINGS = {
   "Krunal Pandya": 86,
   "Marcus Stoinis": 84,
   "Wanindu Hasaranga": 83,
-  "Mitchell Marsh": 83,
+  "Mitchell Marsh": 85,
   "Riyan Parag": 84,
   "Romario Shepherd": 83,
   "Liam Livingstone": 80,
@@ -217,12 +220,12 @@ export const PLAYER_RATINGS = {
   "Marco Jansen": 82,
   "Jason Holder": 80,
   "Washington Sundar": 82,
-  "Venkatesh Iyer": 84,
+  "Venkatesh Iyer": 85,
   "Glenn Phillips": 79,
   "Azmatullah Omarzai": 77,
   "Kyle Mayers": 76,
   "Michael Bracewell": 74,
-  "Cooper Connolly": 80,
+  "Cooper Connolly": 83,
   "Gulbadin Naib": 73,
   "Dasun Shanaka": 72,
   "Matthew Short": 72,
@@ -230,7 +233,7 @@ export const PLAYER_RATINGS = {
   "Daniel Sams": 71,
   "Roston Chase": 71,
   "Jack Edwards": 71,
-  "Jamie Overton": 71,
+  "Jamie Overton": 83,
   "Tom Curran": 70,
 };
 
@@ -351,24 +354,30 @@ export function calculateLeaderboard(teams, mode = 'mini') {
       const rating = getPlayerRating(playerName, mode);
       // We need roles to check disqualification
       const pRecord = getPlayerRecord(playerName);
+      const resolvedPlayer = typeof playerEntry === 'string' ? pRecord : { ...(pRecord || {}), ...(playerEntry || {}) };
       return {
         name: playerName,
         rating,
-        role: normalizeRole(playerEntry?.role || pRecord?.role)
+        role: normalizeRole(playerEntry?.role || pRecord?.role),
+        overseas: isOverseasPlayer(resolvedPlayer)
       };
     });
 
     const batCount = playerScores.filter(p => getRoleFlags(p.role).batter).length;
     const bowlCount = playerScores.filter(p => getRoleFlags(p.role).bowler).length;
     const wkCount = playerScores.filter(p => getRoleFlags(p.role).wicketkeeper).length;
+    const overseasCount = playerScores.filter(p => p.overseas).length;
 
     const squadShortfall = requiredSquadSize > 0 && squad.length < requiredSquadSize;
-    // Disqualified if the bought squad is incomplete, < 11 players, OR fails role counts
-    const isDisqualified = squadShortfall || playingXI.length < 11 || batCount < 2 || bowlCount < 2 || wkCount < 1;
+    // Disqualified if the bought squad is incomplete, the XI is not exactly 11,
+    // has too many overseas players, or fails role counts.
+    const isDisqualified = squadShortfall || playingXI.length !== 11 || overseasCount > 4 || batCount < 2 || bowlCount < 2 || wkCount < 1;
     const disqualificationReason = squadShortfall
       ? `Only ${squad.length}/${requiredSquadSize} players bought`
-      : playingXI.length < 11
-        ? 'Fewer than 11 players in XI'
+      : playingXI.length !== 11
+        ? 'Playing XI must have exactly 11 players'
+        : overseasCount > 4
+          ? 'More than 4 overseas players in XI'
         : batCount < 2
           ? 'Needs at least 2 batters'
           : bowlCount < 2
@@ -382,6 +391,7 @@ export function calculateLeaderboard(teams, mode = 'mini') {
       teamId: team.teamId,
       teamName: team.teamName || team.teamId,
       totalScore,
+      remainingPurse: Number(team.remainingPurse) || 0,
       playerScores,
       averageScore: playingXI.length ? Math.round(totalScore / playingXI.length) : 0,
       playingXI,
@@ -394,7 +404,8 @@ export function calculateLeaderboard(teams, mode = 'mini') {
 
   return results.sort((a, b) => {
     if (a.isDisqualified !== b.isDisqualified) return a.isDisqualified ? 1 : -1;
-    return b.totalScore - a.totalScore;
+    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+    return b.remainingPurse - a.remainingPurse;
   });
 }
 
@@ -408,14 +419,15 @@ export const MEGA_AUCTION_RATING_SETS = [
   {
     setName: "Marquee Set 1",
     players: [
+      { name: "Abhishek Sharma", rating: 90 },
       { name: "Aiden Markram", rating: 83 },
       { name: "Arshdeep Singh", rating: 87 },
       { name: "Axar Patel", rating: 87 },
-      { name: "Bhuvneshwar Kumar", rating: 88 },
+      { name: "Bhuvneshwar Kumar", rating: 89 },
       { name: "Hardik Pandya", rating: 92 },
-      { name: "Heinrich Klaasen", rating: 87 },
-      { name: "Ishan Kishan", rating: 86 },
-      { name: "Jasprit Bumrah", rating: 96 },
+      { name: "Heinrich Klaasen", rating: 89 },
+      { name: "Ishan Kishan", rating: 88 },
+      { name: "Jasprit Bumrah", rating: 95 },
       { name: "Jofra Archer", rating: 87 },
       { name: "Jos Buttler", rating: 90 },
       { name: "Josh Hazlewood", rating: 89 },
@@ -425,7 +437,7 @@ export const MEGA_AUCTION_RATING_SETS = [
       { name: "Lockie Ferguson", rating: 83 },
       { name: "Marco Jansen", rating: 83 },
       { name: "Marcus Stoinis", rating: 85 },
-      { name: "Mitchell Marsh", rating: 84 },
+      { name: "Mitchell Marsh", rating: 85 },
       { name: "Quinton De Kock", rating: 86 },
       { name: "Mitchell Starc", rating: 89 },
       { name: "Mohammad Shami", rating: 88 },
@@ -447,12 +459,14 @@ export const MEGA_AUCTION_RATING_SETS = [
       { name: "Shivam Dube", rating: 87 },
       { name: "Shreyas Iyer", rating: 91 },
       { name: "Shubman Gill", rating: 90 },
+      { name: "Sai Sudharsan", rating: 89 },
       { name: "Sunil Narine", rating: 91 },
-      { name: "Suryakumar Yadav", rating: 91 },
+      { name: "Suryakumar Yadav", rating: 90 },
+      { name: "Tilak Varma", rating: 88 },
       { name: "Tim David", rating: 86 },
       { name: "Travis Head", rating: 88 },
       { name: "Trent Boult", rating: 89 },
-      { name: "Varun Chakravarthy", rating: 87 },
+      { name: "Varun Chakravarthy", rating: 88 },
       { name: "Virat Kohli", rating: 94 },
       { name: "Will Jacks", rating: 83 },
       { name: "Yashasvi Jaiswal", rating: 89 },
@@ -462,8 +476,11 @@ export const MEGA_AUCTION_RATING_SETS = [
   {
     setName: "Set 1",
     players: [
-      { name: "Abhishek Sharma", rating: 90 },
       { name: "Vaibhav Suryavanshi", rating: 87 },
+      { name: "Venkatesh Iyer", rating: 85 },
+      { name: "Lungisani Ngidi", rating: 84 },
+      { name: "Wanindu Hasaranga", rating: 84 },
+      { name: "Jamie Overton", rating: 83 },
       { name: "Deepak Chahar", rating: 82 },
       { name: "Dhruv Jurel", rating: 83 },
       { name: "Glenn Phillips", rating: 82 },
@@ -476,12 +493,10 @@ export const MEGA_AUCTION_RATING_SETS = [
       { name: "Rajat Patidar", rating: 87 },
       { name: "Riyan Parag", rating: 83 },
       { name: "Romario Shepherd", rating: 84 },
-      { name: "Sai Sudharsan", rating: 87 },
       { name: "Jitesh Sharma", rating: 83 },
       { name: "Shardul Thakur", rating: 81 },
       { name: "Sherfane Rutherford", rating: 82 },
       { name: "T. Natarajan", rating: 85 },
-      { name: "Tilak Varma", rating: 88 },
       { name: "Dewald Brevis", rating: 82 },
       { name: "Anrich Nortje", rating: 84 },
       { name: "Harshit Rana", rating: 82 },
@@ -492,18 +507,18 @@ export const MEGA_AUCTION_RATING_SETS = [
       { name: "Matheesha Pathirana", rating: 86 },
       { name: "Matt Henry", rating: 83 },
       { name: "Sandeep Sharma", rating: 85 },
-      { name: "Prabhsimran Singh", rating: 83 },
+      { name: "Prabhsimran Singh", rating: 84 },
       { name: "Ravi Bishnoi", rating: 86 },
       { name: "Nitish Kumar Reddy", rating: 85 },
       { name: "R. Sai Kishore", rating: 83 },
       { name: "Devdutt Padikkal", rating: 85 },
       { name: "Cameron Green", rating: 85 },
       { name: "Nitish Rana", rating: 82 },
-      { name: "Priyansh Arya", rating: 84 },
+      { name: "Priyansh Arya", rating: 85 },
       { name: "David Miller", rating: 84 },
       { name: "Ryan Rickelton", rating: 83 },
       { name: "Washington Sundar", rating: 83 },
-      { name: "Angkrish Raghuvanshi", rating: 82 },
+      { name: "Angkrish Raghuvanshi", rating: 83 },
     ],
   },
   {
@@ -513,10 +528,9 @@ export const MEGA_AUCTION_RATING_SETS = [
       { name: "Allah Ghazanfar", rating: 81 },
       { name: "Brydon Carse", rating: 79 },
       { name: "Corbin Bosch", rating: 79 },
-      { name: "Cooper Connolly", rating: 81 },
+      { name: "Cooper Connolly", rating: 83 },
       { name: "Dushmantha Chameera", rating: 78 },
       { name: "Jacob Bethell", rating: 80 },
-      { name: "Jamie Overton", rating: 80 },
       { name: "Jaydev Unadkat", rating: 77 },
       { name: "Mayank Yadav", rating: 80 },
       { name: "Rovman Powell", rating: 81 },
@@ -556,7 +570,7 @@ export const MEGA_AUCTION_RATING_SETS = [
       { name: "Ajay Mandal", rating: 75 },
       { name: "Akash Singh", rating: 64 },
       { name: "Aniket Verma", rating: 81 },
-      { name: "Anshul Kamboj", rating: 83 },
+      { name: "Anshul Kamboj", rating: 84 },
       { name: "Anuj Rawat", rating: 78 },
       { name: "Anukul Roy", rating: 80 },
       { name: "Arjun Tendulkar", rating: 76 },
@@ -580,13 +594,13 @@ export const MEGA_AUCTION_RATING_SETS = [
       { name: "Manav Suthar", rating: 79 },
       { name: "Mayank Markande", rating: 80 },
       { name: "Mohd. Arshad Khan", rating: 79 },
-      { name: "Mohsin Khan", rating: 84 },
+      { name: "Mohsin Khan", rating: 83 },
       { name: "Mukesh Choudhary", rating: 80 },
       { name: "Musheer Khan", rating: 75 },
       { name: "Naman Dhir", rating: 82 },
       { name: "Nehal Wadhera", rating: 80 },
       { name: "Nishant Sindhu", rating: 74 },
-      { name: "Prince Yadav", rating: 83 },
+      { name: "Prince Yadav", rating: 84 },
       { name: "Pyla Avinash", rating: 72 },
       { name: "Raghu Sharma", rating: 72 },
       { name: "Raj Angad Bawa", rating: 72 },
@@ -628,8 +642,6 @@ export const MEGA_AUCTION_RATING_SETS = [
       { name: "Gus Atkinson", rating: 76 },
       { name: "Liam Livingstone", rating: 83 },
       { name: "Rachin Ravindra", rating: 81 },
-      { name: "Venkatesh Iyer", rating: 84 },
-      { name: "Wanindu Hasaranga", rating: 84 },
       { name: "Wiaan Mulder", rating: 76 },
     ],
   },
@@ -771,7 +783,6 @@ export const MEGA_AUCTION_RATING_SETS = [
       { name: "Chetan Sakariya", rating: 78 },
       { name: "Kuldeep Sen", rating: 77 },
       { name: "Kyle Jamieson", rating: 80 },
-      { name: "Lungisani Ngidi", rating: 84 },
       { name: "Mustafizur Rahman", rating: 81 },
       { name: "Saqib Mahmood", rating: 75 },
       { name: "Umesh Yadav", rating: 80 },

@@ -83,6 +83,7 @@ function buildLeaderboardResults(gs, mode, teams) {
       squad,
       squadLimit,
       minimumSquadSize,
+      remainingPurse: Number(gs.purses?.[team.id]) || 0,
       playingXI: xi,
     };
   });

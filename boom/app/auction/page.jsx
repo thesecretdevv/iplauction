@@ -15,6 +15,7 @@ const kohliImg = '/assets/Kohli.avif';
 const CYAN = '#22D3EE';
 const RIVALS_MAX_SQUAD_SIZE = 13;
 const RIVALS_MAX_OVERSEAS = 5;
+const MAX_PLAYING_XI_OVERSEAS = 4;
 const DEFAULT_PURSE = 120;
 const GIPHY_API_KEY = 'uBg7NTfB0PiHDgwH9F6t0t0uDoFLFXqC';
 const WHATSAPP_COMMUNITY_URL = 'https://whatsapp.com/channel/0029VbCeqwJ90x2z9PRli10E';
@@ -60,14 +61,6 @@ function WhatsAppIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M20.52 3.48A11.8 11.8 0 0 0 12.08 0C5.5 0 .16 5.34.16 11.92c0 2.1.55 4.14 1.58 5.93L0 24l6.31-1.65a11.92 11.92 0 0 0 5.77 1.48h.01c6.57 0 11.91-5.34 11.92-11.92a11.82 11.82 0 0 0-3.49-8.43Zm-8.44 18.34h-.01a9.9 9.9 0 0 1-5.04-1.38l-.36-.22-3.75.98 1-3.65-.24-.38a9.9 9.9 0 0 1-1.52-5.27c0-5.47 4.45-9.92 9.93-9.92 2.65 0 5.14 1.03 7.01 2.91A9.88 9.88 0 0 1 22 11.91c0 5.48-4.45 9.92-9.92 9.92Zm5.44-7.39c-.3-.15-1.77-.87-2.05-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.95 1.17-.17.2-.35.22-.65.08-.3-.15-1.26-.47-2.4-1.49-.88-.78-1.48-1.76-1.66-2.05-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.18.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.21-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.49 0 1.46 1.06 2.88 1.21 3.08.15.2 2.1 3.21 5.08 4.5.71.31 1.26.5 1.7.64.71.22 1.37.19 1.89.12.57-.09 1.77-.72 2.02-1.42.25-.7.25-1.29.18-1.42-.08-.12-.28-.2-.57-.35Z" />
-    </svg>
-  );
-}
-
-function TelegramIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M9.04 15.52 8.66 20.9c.54 0 .78-.23 1.06-.5l2.54-2.43 5.27 3.86c.97.53 1.65.25 1.91-.9L22.9 4.7c.34-1.4-.5-1.95-1.43-1.6L1.98 10.6c-1.33.52-1.31 1.26-.23 1.59l4.98 1.55L18.3 6.47c.55-.36 1.05-.16.63.2" />
     </svg>
   );
 }
@@ -333,7 +326,7 @@ function AuctionContent() {
   const handleHostPauseToggle = useCallback(() => {
     emit(gs?.isPaused ? 'resume-game' : 'pause-game');
   }, [emit, gs?.isPaused]);
-  const timerOptions = [5, 10, 15, 20, 25];
+  const timerOptions = [5, 7, 10, 15, 20, 25];
   const squadLimitOptions = [15, 20, 25];
 
   const upcomingPlayers = useMemo(
@@ -919,36 +912,8 @@ function AuctionContent() {
           overscroll-behavior:contain;
           padding-bottom:8px;
         }
-        .ac-mobile-footer {
-          width:100%;
-          max-width:480px;
-          min-height:34px;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          gap:10px;
-          padding:8px 12px calc(8px + env(safe-area-inset-bottom));
-          color:#6b7280;
-          font-size:10px;
-          letter-spacing:1.2px;
-          border-top:1px solid #171a22;
-          background:linear-gradient(180deg, rgba(8,8,8,0.96), rgba(8,8,8,1));
-          flex-shrink:0;
-        }
-        .ac-mobile-social {
-          width:22px;
-          height:22px;
-          border-radius:999px;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          border:1px solid #242a36;
-          color:#cbd5e1;
-          background:#10131a;
-          flex-shrink:0;
-        }
         @media(min-width:861px){ .ac-tab-content { display:none !important; } }
-        @media(min-width:861px){ .ac-mobile-dock, .ac-mobile-footer { display:none !important; } }
+        @media(min-width:861px){ .ac-mobile-dock { display:none !important; } }
 
         /* Team row in tab */
         .ac-team-tab-row {
@@ -1458,7 +1423,7 @@ function AuctionContent() {
                   </div>
                   <div style={{ color:GOLD, fontFamily:"'Bebas Neue'", fontSize:24, letterSpacing:1 }}>{configuredTimer}s</div>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(5, minmax(0, 1fr))', gap:8 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(6, minmax(0, 1fr))', gap:8 }}>
                   {timerOptions.map(t => (
                     <button
                       key={t}
@@ -2073,11 +2038,6 @@ function AuctionContent() {
                   <MobileChatBox chatLog={chatLog} emit={emit} currentRoom={roomCode} isSpectator={isSpectatorMode} myName={myName} myTeamId={effectiveMyTeamId} gs={gs} />
                 )}
                   </div>
-                </div>
-                <div className="ac-mobile-footer">
-                  <span>Join the community</span>
-                  <a className="ac-mobile-social" href={WHATSAPP_COMMUNITY_URL} target="_blank" rel="noreferrer" aria-label="Join WhatsApp community" style={{ color: 'inherit', textDecoration: 'none' }}><WhatsAppIcon /></a>
-                  <span className="ac-mobile-social"><TelegramIcon /></span>
                 </div>
               </div>
             </>
@@ -2732,22 +2692,22 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
 
       const selectedNames = new Set(autoXI.map((player) => player.name));
       const filledXI = [...autoXI];
+      let overseasCount = filledXI.filter((player) => (
+        !!player?.overseas || String(player?.country || '').toLowerCase() !== 'india'
+      )).length;
       for (const player of topRatedSquad) {
         if (filledXI.length >= playersNeeded) break;
         if (selectedNames.has(player.name)) continue;
+        const isOverseas = !!player?.overseas || String(player?.country || '').toLowerCase() !== 'india';
+        if (isOverseas && overseasCount >= MAX_PLAYING_XI_OVERSEAS) continue;
         filledXI.push(player);
+        if (isOverseas) overseasCount++;
         selectedNames.add(player.name);
       }
 
       return filledXI.slice(0, Math.min(playersNeeded, mySquad.length));
     });
   }, [mySquad, playersNeeded, ratingMode]);
-
-  const toggle = (p) => setSelected((prev) =>
-    prev.find((x) => x.name === p.name)
-      ? prev.filter((x) => x.name !== p.name)
-      : prev.length < playersNeeded ? [...prev, p] : prev
-  );
 
   const getRoleCategory = useCallback((role) => {
     const value = String(role || '').toUpperCase();
@@ -2768,8 +2728,24 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
       ar: value.includes('AR') || value.includes('ROUND'),
     };
   }, []);
+  const isOverseasPlayer = useCallback((player) => (
+    !!player?.overseas || String(player?.country || '').toLowerCase() !== 'india'
+  ), []);
+  const toggle = useCallback((p) => {
+    setSelected((prev) => {
+      if (prev.find((x) => x.name === p.name)) {
+        return prev.filter((x) => x.name !== p.name);
+      }
+      if (prev.length >= playersNeeded) return prev;
+      return [...prev, p];
+    });
+  }, [playersNeeded]);
 
   const selectedNames = useMemo(() => new Set(selected.map((p) => p.name)), [selected]);
+  const selectedOverseasCount = useMemo(
+    () => selected.filter((player) => isOverseasPlayer(player)).length,
+    [isOverseasPlayer, selected]
+  );
 
   const roleSummary = useMemo(() => {
     return selected.reduce((acc, player) => {
@@ -2785,7 +2761,8 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
 
   const getDisqualificationWarning = () => {
     if ((mySquad?.length || 0) < minimumSquadNeeded) return `Only ${mySquad?.length || 0}/${minimumSquadNeeded} players bought`;
-    if (selected.length < playersNeeded) return `Only ${selected.length}/${playersNeeded} players selected`;
+    if (selected.length !== playersNeeded) return `Select exactly ${playersNeeded} players`;
+    if (selectedOverseasCount > MAX_PLAYING_XI_OVERSEAS) return `More than ${MAX_PLAYING_XI_OVERSEAS} overseas players selected`;
     if (roleSummary.bat < 2) return `Need ${2 - roleSummary.bat} more batter${2 - roleSummary.bat === 1 ? '' : 's'}`;
     if (roleSummary.bowl < 2) return `Need ${2 - roleSummary.bowl} more bowler${2 - roleSummary.bowl === 1 ? '' : 's'}`;
     if (roleSummary.wk < 1) return 'Need 1 wicketkeeper';
@@ -2793,7 +2770,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
   };
 
   const disqualificationWarning = getDisqualificationWarning();
-  const canSubmit = selected.length > 0;
+  const canSubmit = selected.length === playersNeeded;
   const isCleanXI = disqualificationWarning === null;
   const submittedCount = activeTeams.filter((player) => selections[player.teamId]).length;
   const totalTeams = activeTeams.length;
@@ -2804,6 +2781,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
     if (selected.length === 0) return 'Pick at least 1 player';
     if (squadShortfall > 0) return `Need ${squadShortfall} more player${squadShortfall === 1 ? '' : 's'}`;
     if (selected.length !== playersNeeded) return `Pick ${playersLeft} more player${playersLeft === 1 ? '' : 's'}`;
+    if (selectedOverseasCount > MAX_PLAYING_XI_OVERSEAS) return `Will be disqualified: ${selectedOverseasCount} overseas players`;
     if (roleSummary.bat < 2) return `Need ${2 - roleSummary.bat} batter${2 - roleSummary.bat === 1 ? '' : 's'}`;
     if (roleSummary.bowl < 2) return `Need ${2 - roleSummary.bowl} bowler${2 - roleSummary.bowl === 1 ? '' : 's'}`;
     if (roleSummary.wk < 1) return 'Need 1 wicketkeeper';
@@ -2819,11 +2797,12 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
     isRivalsMode
       ? `Rivals mode ranks a full ${playersNeeded}-player valid XI.`
       : `A complete squad has ${squadLimit} players. Short squads can submit, but results mark them disqualified.`,
-    `Select up to ${playersNeeded} players from your squad.`,
+    `Select exactly ${playersNeeded} players from your squad.`,
+    `More than ${MAX_PLAYING_XI_OVERSEAS} overseas players in the Playing XI are allowed to submit, but disqualified in results.`,
     'Minimum balance for qualification: 2 batters, 2 bowlers, 1 wicketkeeper.',
     'Wicketkeeper-batters count as both wicketkeepers and batters.',
     'Tap any player card to add or remove them from the XI.',
-    'Submitting an incomplete XI locks it for results as disqualified.',
+    'Submitting a role-imbalanced XI locks it for results as disqualified.',
   ];
   const enrichedSquad = useMemo(() => {
     return [...(mySquad || [])]
@@ -3128,7 +3107,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
               <div className={`xi-action-status${isCleanXI ? ' ready' : ''}`}>
                 {actionStatus}
               </div>
-              {!isCleanXI && selected.length > 0 && (
+              {!isCleanXI && canSubmit && (
                 <div className="xi-action-warning">
                   You can submit these players now, but this team will be marked disqualified in results.
                 </div>
@@ -3136,7 +3115,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
               <div className="xi-actions">
                 <button onClick={() => canSubmit && onSubmit(selected)} disabled={!canSubmit}
                   style={{ background:canSubmit?`linear-gradient(135deg,${GOLD},#9a7610)`:'#111', border:`1px solid ${canSubmit?GOLD:'#333'}`, borderRadius:12, padding:'15px 30px', color:canSubmit?'#000':'#555', fontWeight:900, fontSize:16, letterSpacing:3, cursor:canSubmit?'pointer':'not-allowed', fontFamily:"'Barlow Condensed'", minWidth:220 }}>
-                  {isCleanXI ? 'SUBMIT PLAYING XI' : 'SUBMIT ANYWAY'}
+                  {selected.length !== playersNeeded ? `SELECT ${playersNeeded} PLAYERS` : isCleanXI ? 'SUBMIT PLAYING XI' : 'SUBMIT ANYWAY'}
                 </button>
                 {isHost && (
                   <button

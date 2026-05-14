@@ -594,6 +594,10 @@ export function GameProvider({ children }) {
   }
 
   function submitXI(players) {
+    if (!Array.isArray(players) || players.length !== 11) {
+      alert("Select exactly 11 players");
+      return;
+    }
     if (playMode === "multi") {
       emit("submit-xi", { players }, (res) => {
         if (!res?.ok) alert(res?.error || "Submission failed");

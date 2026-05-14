@@ -65,6 +65,7 @@ const nextBid = c => +(c + getIncrement(c)).toFixed(2);
 const TRADE_LIMIT = 3;
 const DEFAULT_PURSE = 120;
 const EXTENDED_PURSE = 150;
+const MAX_PLAYING_XI_OVERSEAS = 4;
 function normalizePurse(purse, squadLimit) {
     const numericPurse = Number(purse);
     return Number(squadLimit) === 25 && numericPurse === EXTENDED_PURSE ? EXTENDED_PURSE : DEFAULT_PURSE;
@@ -74,6 +75,9 @@ function getOverseasLimitForSquad(squadLimit) {
     if (limit >= 25) return 8;
     if (limit >= 20) return 7;
     return 6;
+}
+function isOverseasPlayer(player) {
+    return !!player?.overseas || String(player?.country || '').toLowerCase() !== 'india';
 }
 
 const TEAMS = [
@@ -833,9 +837,24 @@ function advanceToNext(room) {
 }
 
 function autoPickPlayingXI(squad = [], limit = 11) {
-    return [...(squad || [])]
-        .sort((a, b) => (b.soldFor || 0) - (a.soldFor || 0))
-        .slice(0, limit);
+    const picked = [];
+    let overseasCount = 0;
+    const sorted = [...(squad || [])].sort((a, b) => (b.soldFor || 0) - (a.soldFor || 0));
+
+    for (const player of sorted) {
+        if (picked.length >= limit) break;
+        const isOverseas = isOverseasPlayer(player);
+        if (isOverseas && overseasCount >= MAX_PLAYING_XI_OVERSEAS) continue;
+        picked.push(player);
+        if (isOverseas) overseasCount++;
+    }
+
+    return picked;
+}
+
+function isValidPlayingXI(players = []) {
+    return Array.isArray(players)
+        && players.length === 11;
 }
 
 function getHumanTeamIds(room) {
@@ -918,7 +937,7 @@ function finalizeSelection(room, { reason = 'completed' } = {}) {
     ));
 
     TEAMS.forEach((team) => {
-        if (!Array.isArray(gs.playingXI?.[team.id]) || gs.playingXI[team.id].length === 0) {
+        if (!isValidPlayingXI(gs.playingXI?.[team.id])) {
             gs.playingXI[team.id] = autoPickPlayingXI(gs.squads?.[team.id] || []);
         }
         gs.selections[team.id] = true;
@@ -1021,7 +1040,9 @@ function finalizeRoom(room, { reason = 'completed' } = {}) {
     }
 
     TEAMS.forEach(t => {
-        if (!Array.isArray(gs.playingXI[t.id])) gs.playingXI[t.id] = [];
+        if (!isValidPlayingXI(gs.playingXI[t.id])) {
+            gs.playingXI[t.id] = autoPickPlayingXI(gs.squads?.[t.id] || []);
+        }
         gs.selections[t.id] = true;
     });
 
@@ -2115,10 +2136,17 @@ io.on('connection', (socket) => {
         if (!player || !player.teamId || player.isSpectator) return cb?.({ ok: false });
 
         const teamId = player.teamId;
-        if (!Array.isArray(players) || players.length < 1) {
-            return cb?.({ ok: false, error: "Select at least 1 player" });
+        if (!Array.isArray(players) || players.length !== 11) {
+            return cb?.({ ok: false, error: "Select exactly 11 players" });
         }
-        if (players.length > 11) return cb?.({ ok: false, error: "Cannot submit more than 11 players" });
+        const squadNameSet = new Set((gs.squads?.[teamId] || []).map((squadPlayer) => String(squadPlayer?.name || '').trim().toLowerCase()));
+        const submittedNames = players.map((submittedPlayer) => String(submittedPlayer?.name || '').trim().toLowerCase());
+        if (new Set(submittedNames).size !== submittedNames.length) {
+            return cb?.({ ok: false, error: "Duplicate players are not allowed in the Playing XI" });
+        }
+        if (submittedNames.some((playerName) => !squadNameSet.has(playerName))) {
+            return cb?.({ ok: false, error: "Playing XI can only include players from your squad" });
+        }
 
         gs.playingXI[teamId] = players;
         gs.selections[teamId] = true;
