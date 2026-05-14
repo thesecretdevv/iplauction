@@ -572,6 +572,7 @@ function AuctionContent() {
     && hasEnoughFunds
     && !squadFull
     && !maxOverseasReached;
+  const isSalePhase = gs.phase === 'sold' || gs.phase === 'unsold';
   const iLeading    = gs.currentBidder === effectiveMyTeamId;
   const nextPrice   = gs.currentBidder === null ? gs.currentBid : nextBid(gs.currentBid);
   const isTimerLow  = !gs.isPaused && gs.timer <= 5;
@@ -832,6 +833,12 @@ function AuctionContent() {
           animation:sold .4s ease-out; width:100%;
         }
         .ac-sold-text { font-family:'Bebas Neue',sans-serif; font-size:clamp(56px,14vw,96px); letter-spacing:8px; line-height:.9; }
+        .ac-bidding-shell {
+          display: contents;
+        }
+        .ac-bidding-shell.sale-phase {
+          display: none;
+        }
 
         /* ── INLINE BID ROW (replaces fixed strip) ── */
         .ac-bid-row {
@@ -1159,6 +1166,29 @@ function AuctionContent() {
           }
           .ac-scroll {
             padding: 10px 12px 8px;
+          }
+          .ac-phase-overlay {
+            position:absolute;
+            top:10px;
+            left:12px;
+            right:12px;
+            z-index:8;
+            width:auto;
+            min-height:104px;
+            flex:0 0 auto;
+            padding:14px 12px 12px;
+            border:1px solid ${BORDER};
+            border-radius:14px;
+            background:rgba(7,7,10,0.86);
+            box-shadow:0 16px 44px rgba(0,0,0,0.42);
+            pointer-events:none;
+          }
+          .ac-sold-text {
+            font-size:clamp(42px,13vw,60px);
+            letter-spacing:5px;
+          }
+          .ac-bidding-shell.sale-phase {
+            display: contents;
           }
           .ac-bid-area {
             min-height: 154px;
@@ -1627,7 +1657,7 @@ function AuctionContent() {
         {/* CENTER */}
         <div className="ac-center">
           {/* Phase: sold / unsold */}
-          {(gs.phase === 'sold' || gs.phase === 'unsold') && (
+          {isSalePhase && (
             <div className="ac-phase-overlay">
               {gs.phase === 'sold' ? (
                 <>
@@ -1645,8 +1675,8 @@ function AuctionContent() {
           )}
 
           {/* Phase: bidding */}
-          {gs.phase === 'bidding' && (
-            <>
+          {(gs.phase === 'bidding' || isSalePhase) && (
+            <div className={`ac-bidding-shell${isSalePhase ? ' sale-phase' : ''}`}>
               <div className="ac-scroll">
                 {/* Player pill — visible only on mobile */}
                 <div className="ac-player-pill" style={{ borderColor:`${ROLE_C[player.role]}30` }}>
@@ -1841,7 +1871,23 @@ function AuctionContent() {
                   <div className="ac-purse-label">
                     Purse: <span className="ac-purse-val">₹{(gs.purses[effectiveMyTeamId]||0).toFixed(1)} Cr</span>
                   </div>
-                  {isSpectatorMode ? (
+                  {isSalePhase ? (
+                    <div
+                      className="ac-bid-btn"
+                      style={{
+                        background: gs.phase === 'sold' ? `${GOLD}18` : 'rgba(239,68,68,0.10)',
+                        border: `2px solid ${gs.phase === 'sold' ? `${GOLD}66` : '#ef444466'}`,
+                        color: gs.phase === 'sold' ? GOLD : '#f87171',
+                      }}
+                    >
+                      <span style={{ fontSize:'1.1rem', fontFamily:"'Bebas Neue'", letterSpacing:2 }}>
+                        {gs.phase === 'sold' ? 'SOLD' : 'UNSOLD'}
+                      </span>
+                      <span className="ac-bid-btn-sub">
+                        {gs.phase === 'sold' ? fmt(gs.currentBid) : 'NEXT PLAYER SOON'}
+                      </span>
+                    </div>
+                  ) : isSpectatorMode ? (
                     <div className="ac-bid-btn" style={{ background:'rgba(129,196,248,0.08)', border:'1px solid rgba(129,196,248,0.2)', color:'#81C4F8' }}>
                       <span style={{ fontSize:'0.9rem' }}>👁 SPECTATOR</span>
                     </div>
@@ -2040,7 +2086,7 @@ function AuctionContent() {
                   </div>
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
 
