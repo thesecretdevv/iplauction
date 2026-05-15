@@ -69,12 +69,10 @@ function buildLeaderboardResults(gs, mode, teams) {
     const rawXI = gs.playingXI?.[team.id] || [];
 
     let xi;
-    if (rawXI.length > 0 && rawXI.length <= 11) {
+    if (rawXI.length === 11 || squad.length === 0) {
       xi = rawXI;
-    } else if (squad.length > 0) {
-      xi = selectPlayingXI(squad, mode);
     } else {
-      xi = [];
+      xi = selectPlayingXI(squad, mode);
     }
 
     return {
@@ -267,7 +265,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
   const rankings = buildLeaderboardResults(gs, mode, displayTeams);
   const isMobileDevice = useIsMobileDevice();
   const [showSupportModal, setShowSupportModal] = useState(false);
-  const [supportCloseCountdown, setSupportCloseCountdown] = useState(15);
+  const [supportCloseCountdown, setSupportCloseCountdown] = useState(5);
   const teamOwnerMap = useMemo(() => {
     const source = Array.isArray(gs?.participants) && gs.participants.length > 0 ? gs.participants : lobbyPlayers;
     return new Map(
@@ -300,7 +298,7 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
     if (sessionStorage.getItem(SUPPORT_MODAL_SESSION_KEY) === 'true') return;
 
     setShowSupportModal(true);
-    setSupportCloseCountdown(15);
+    setSupportCloseCountdown(5);
   }, []);
 
   useEffect(() => {
@@ -332,13 +330,10 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
   const squadLimit = Number(gs?.squadLimit) || 15;
   const minimumSquadSize = isRivals ? 11 : squadLimit;
 
-  // Edge-case: player may have submitted <11 or exactly 10 players.
-  // If rawXI has ≥ 1 and ≤ 11 players, respect it; otherwise fall back to selectPlayingXI.
-  const playingXI = rawXI.length > 0 && rawXI.length <= 11
+  // Repair partial auto-picked XIs from host-finalized rooms by rebuilding from the full squad.
+  const playingXI = rawXI.length === 11 || fullSquad.length === 0
     ? rawXI
-    : fullSquad.length > 0
-      ? selectPlayingXI(fullSquad, mode)
-      : [];
+    : selectPlayingXI(fullSquad, mode);
 
   const displayList     = playingXI;
   const initialPurse    = gs.initialPurse || 120;

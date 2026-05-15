@@ -76,8 +76,18 @@ function getOverseasLimitForSquad(squadLimit) {
     if (limit >= 20) return 7;
     return 6;
 }
+const PLAYER_RECORDS_BY_NAME = new Map(
+    ALL_PLAYERS.map(player => [String(player.name || '').trim().toLowerCase(), player])
+);
+function getPlayerRecord(playerName) {
+    return PLAYER_RECORDS_BY_NAME.get(String(playerName || '').trim().toLowerCase()) || null;
+}
 function isOverseasPlayer(player) {
-    return !!player?.overseas || String(player?.country || '').toLowerCase() !== 'india';
+    const record = getPlayerRecord(player?.name);
+    const overseas = player?.overseas ?? record?.overseas;
+    if (typeof overseas === 'boolean') return overseas;
+    const country = String(player?.country ?? record?.country ?? '').trim().toLowerCase();
+    return country ? country !== 'india' : false;
 }
 
 const TEAMS = [

@@ -27,9 +27,9 @@ function getPlayerPhoto(name) {
 
 function isResolvedOverseasPlayer(player) {
   const record = getPlayerRecord(player?.name);
-  const resolvedPlayer = { ...(record || {}), ...(player || {}) };
-  if (typeof resolvedPlayer.overseas === 'boolean') return resolvedPlayer.overseas;
-  const country = String(resolvedPlayer.country || '').trim().toLowerCase();
+  const overseas = player?.overseas ?? record?.overseas;
+  if (typeof overseas === 'boolean') return overseas;
+  const country = String(player?.country ?? record?.country ?? '').trim().toLowerCase();
   return country ? country !== 'india' : false;
 }
 
@@ -204,6 +204,9 @@ function AuctionContent() {
   const [showDesktopSettings, setShowDesktopSettings] = useState(false);
   const [dialog, setDialog] = useState(null);
   const [audioMuted, setAudioMutedState] = useState(false);
+  const [hostToastVisible, setHostToastVisible] = useState(false);
+  const wasHostRef = useRef(false);
+  const hostToastTimerRef = useRef(null);
   const playerQueue = gs?.playerQueue ?? [];
   const currentIdx = gs?.currentIdx ?? -1;
   const currentMode = (isMulti ? lobbyMode : auctionMode) || gs?.auctionMode || 'mega';
@@ -213,6 +216,19 @@ function AuctionContent() {
   useEffect(() => {
     setAudioMutedState(isAudioMuted());
   }, []);
+
+  useEffect(() => {
+    if (isHost && !wasHostRef.current) {
+      setHostToastVisible(true);
+      if (hostToastTimerRef.current) clearTimeout(hostToastTimerRef.current);
+      hostToastTimerRef.current = setTimeout(() => setHostToastVisible(false), 4000);
+    }
+    wasHostRef.current = !!isHost;
+
+    return () => {
+      if (hostToastTimerRef.current) clearTimeout(hostToastTimerRef.current);
+    };
+  }, [isHost]);
 
   const handleBid = useCallback(() => {
     humanBid();
@@ -609,10 +625,41 @@ function AuctionContent() {
         @keyframes rowIn   { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:none} }
         @keyframes sheetUp { from{transform:translateY(100%)} to{transform:none} }
         @keyframes timerGlow { 0%,100%{box-shadow:0 0 8px #ef4444} 50%{box-shadow:0 0 18px #ef4444,0 0 30px #ef444440} }
+        @keyframes hostToastIn { from{opacity:0;transform:translate(-50%,-10px)} to{opacity:1;transform:translate(-50%,0)} }
         ::-webkit-scrollbar { width:2px } ::-webkit-scrollbar-thumb { background:#222 }
         .squad-scroller::-webkit-scrollbar { width: 6px; }
         .squad-scroller::-webkit-scrollbar-track { background: ${BG}; border-radius: 4px; }
         .squad-scroller::-webkit-scrollbar-thumb { background: ${GOLD}55; border-radius: 4px; }
+        .ac-host-toast {
+          position: fixed;
+          top: calc(14px + env(safe-area-inset-top));
+          left: 50%;
+          z-index: 4500;
+          transform: translateX(-50%);
+          width: min(420px, calc(100vw - 28px));
+          border: 1px solid rgba(232,184,75,0.38);
+          background: rgba(10,12,16,0.96);
+          color: #F8FAFC;
+          border-radius: 14px;
+          padding: 12px 14px;
+          box-shadow: 0 18px 44px rgba(0,0,0,0.48), 0 0 24px rgba(232,184,75,0.1);
+          animation: hostToastIn .18s ease-out both;
+          pointer-events: none;
+        }
+        .ac-host-toast-title {
+          color: ${GOLD};
+          font-family: 'Bebas Neue', sans-serif;
+          font-size: 19px;
+          letter-spacing: 2px;
+          line-height: 1;
+        }
+        .ac-host-toast-copy {
+          color: #CBD5E1;
+          font-size: 12px;
+          line-height: 1.35;
+          letter-spacing: .6px;
+          margin-top: 5px;
+        }
 
         /* ── TOP BAR ── */
         .ac-top {
@@ -1259,6 +1306,12 @@ function AuctionContent() {
         actions={dialog?.actions || []}
         onClose={closeDialog}
       />
+      {hostToastVisible && (
+        <div className="ac-host-toast" role="status" aria-live="polite">
+          <div className="ac-host-toast-title">You Are Host</div>
+          <div className="ac-host-toast-copy">You can pause, end phases, and move everyone forward.</div>
+        </div>
+      )}
 
       {/* ── TIMER PROGRESS BAR (top, full width) ── */}
       <TimerBar timer={gs.timer} maxTimer={configuredTimer} isPaused={gs.isPaused} />
@@ -2352,6 +2405,20 @@ function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTea
   const isReady = !!tradeReady?.[myTeamId];
   const canTrade = !isSpectator && myTradeCount < tradeLimit;
   const canSend = canTrade && offeredPlayer && requestedPlayer && targetTeam;
+  const activeTradeTeamIds = Array.from(new Set((activeTeams || []).map((player) => player.teamId).filter(Boolean)));
+  const fallbackTradeTeamIds = teams
+    .filter((team) => (gs?.squads?.[team.id] || []).length > 0)
+    .map((team) => team.id);
+  const tradeTeamIds = activeTradeTeamIds.length > 0 ? activeTradeTeamIds : fallbackTradeTeamIds;
+  const totalTradeTeams = tradeTeamIds.length;
+  const readyTradeCount = tradeTeamIds.filter((teamId) => !!tradeReady?.[teamId]).length;
+  const waitingTradeTeams = Math.max(totalTradeTeams - readyTradeCount, 0);
+  const pendingProposalCount = proposals.filter((proposal) => proposal.status === 'pending').length;
+  const tradeReadyStatus = totalTradeTeams === 0
+    ? 'No active teams waiting'
+    : waitingTradeTeams === 0
+      ? 'All teams ready'
+      : `Waiting for ${waitingTradeTeams} team${waitingTradeTeams === 1 ? '' : 's'}`;
 
   useEffect(() => {
     if (!targetTeamId && tradeTeams[0]?.id) {
@@ -2430,12 +2497,18 @@ function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTea
   const openStartSelectionDialog = useCallback(() => {
     setDialog({
       title: 'Continue To Playing XI?',
-      message: 'Pending swap proposals will be cancelled and all teams will move to Playing XI selection.',
+      message: [
+        `${pendingProposalCount} pending trade proposal${pendingProposalCount === 1 ? '' : 's'} will be cancelled.`,
+        waitingTradeTeams > 0
+          ? `${waitingTradeTeams} team${waitingTradeTeams === 1 ? ' is' : 's are'} not marked ready yet.`
+          : 'All active teams are marked ready.',
+        'Everyone will move to Playing XI selection immediately.',
+      ].join('\n\n'),
       tone: 'info',
       actions: [
         { label: 'Stay Here', variant: 'secondary', onClick: () => setDialog(null) },
         {
-          label: 'Continue',
+          label: 'Start XI Now',
           variant: 'primary',
           onClick: () => {
             setDialog(null);
@@ -2445,7 +2518,7 @@ function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTea
         },
       ],
     });
-  }, [ackNotice, emit]);
+  }, [ackNotice, emit, pendingProposalCount, waitingTradeTeams]);
 
   const PlayerPick = ({ player, selected, onClick, accent }) => {
     const photoUrl = getPlayerPhoto(player.name);
@@ -2501,6 +2574,30 @@ function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTea
       </div>
     );
   };
+
+  const TradeActions = ({ compact = false }) => (
+    <div className={`trade-action-panel${compact ? ' compact' : ''}`}>
+      <div className="trade-action-copy">
+        <span>Trade Actions</span>
+        <strong>{tradeReadyStatus}</strong>
+        {isHost ? (
+          <p>This cancels pending trade proposals and moves everyone to Playing XI.</p>
+        ) : (
+          <p>{isReady ? 'Your team is ready for Playing XI.' : 'Skip trading when your team is ready to pick the XI.'}</p>
+        )}
+      </div>
+      <div className="trade-action-buttons">
+        {isHost && (
+          <button type="button" className="trade-phase-btn host" onClick={openStartSelectionDialog} disabled={busy}>
+            Start Playing XI Now
+          </button>
+        )}
+        <button type="button" className={`trade-phase-btn${isReady ? ' ready' : ''}`} onClick={markReady} disabled={busy || isSpectator || isReady}>
+          {isReady ? 'Ready For XI' : isHost ? 'Mark My Team Ready' : 'Skip Trade / Ready For XI'}
+        </button>
+      </div>
+    </div>
+  );
 
   const OfferPanel = (
     <section className="trade-panel">
@@ -2573,16 +2670,6 @@ function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTea
       <button type="button" className="trade-send desktop-send" onClick={sendProposal} disabled={!canSend || busy}>
         Send Proposal
       </button>
-      <div className="trade-ready-row">
-        <button type="button" className={isReady ? 'ready' : ''} onClick={markReady} disabled={busy || isSpectator}>
-          {isReady ? 'Ready For XI' : 'Mark Ready'}
-        </button>
-        {isHost && (
-          <button type="button" className="host" onClick={openStartSelectionDialog} disabled={busy}>
-            Continue To XI
-          </button>
-        )}
-      </div>
       <div className="trade-proposal-list">
         {pendingReceived.length > 0 && <div className="trade-list-label">Received</div>}
         {pendingReceived.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} />)}
@@ -2604,9 +2691,20 @@ function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTea
         .trade-kicker{margin:0 0 6px;color:${GOLD};font-size:12px;letter-spacing:2.4px;text-transform:uppercase;font-weight:800}
         .trade-hero h1{margin:0;font-family:'Bebas Neue';font-size:clamp(38px,7vw,64px);letter-spacing:3px;color:#fff;line-height:.92}
         .trade-hero-copy{margin:10px 0 0;color:#9aa8bc;font-size:13px;line-height:1.55;max-width:720px}
-        .trade-count-card{min-width:150px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.03);padding:14px 16px;text-align:right}
+        .trade-hero-actions{display:grid;gap:10px;min-width:min(360px,36vw)}
+        .trade-count-card{border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.03);padding:12px 14px;text-align:right}
         .trade-count-card span{display:block;color:#64748b;font-size:10px;letter-spacing:1.8px;text-transform:uppercase}
-        .trade-count-card strong{font-family:'Bebas Neue';font-size:36px;color:${GOLD};letter-spacing:2px}
+        .trade-count-card strong{font-family:'Bebas Neue';font-size:32px;color:${GOLD};letter-spacing:2px}
+        .trade-action-panel{border:1px solid rgba(34,211,238,.22);border-radius:16px;background:linear-gradient(180deg,rgba(34,211,238,.08),rgba(255,255,255,.03));padding:12px;display:grid;gap:10px}
+        .trade-action-panel.compact{padding:0;border:0;background:transparent}
+        .trade-action-copy span{display:block;color:${CYAN};font-size:10px;letter-spacing:1.8px;text-transform:uppercase;font-weight:900}
+        .trade-action-copy strong{display:block;margin-top:4px;color:#f8fafc;font-size:16px;letter-spacing:1px;font-weight:900}
+        .trade-action-copy p{margin:5px 0 0;color:#8b95a7;font-size:12px;line-height:1.35;letter-spacing:.6px}
+        .trade-action-buttons{display:grid;grid-template-columns:1fr;gap:8px}
+        .trade-phase-btn{border:1px solid #263244;border-radius:12px;background:#111827;color:#cbd5e1;font-family:'Barlow Condensed';font-weight:900;letter-spacing:1.6px;text-transform:uppercase;min-height:44px;padding:0 14px;cursor:pointer;white-space:normal;line-height:1.05}
+        .trade-phase-btn.host{border-color:${CYAN}66;color:#061014;background:linear-gradient(135deg,${CYAN},#0ea5b7)}
+        .trade-phase-btn.ready{border-color:#34d399;color:#34d399;background:rgba(52,211,153,.1)}
+        .trade-phase-btn:disabled{opacity:.52;cursor:not-allowed}
         .trade-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 380px;gap:14px;align-items:start}
         .trade-panel{border:1px solid ${BORDER};border-radius:20px;background:linear-gradient(180deg,rgba(13,16,22,.98),rgba(8,10,14,.98));padding:16px;min-width:0}
         .trade-side-panel{position:sticky;top:14px}
@@ -2629,12 +2727,8 @@ function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTea
         .trade-summary div{border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.03);padding:10px;min-width:0}
         .trade-summary span,.trade-swap-line span{display:block;color:#64748b;font-size:10px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800}
         .trade-summary strong,.trade-swap-line strong{display:block;margin-top:4px;color:#f8fafc;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .trade-send,.trade-ready-row button,.trade-proposal-actions button{border:none;border-radius:12px;background:linear-gradient(135deg,${GOLD},#9a7610);color:#050608;font-family:'Barlow Condensed';font-weight:900;letter-spacing:1.8px;text-transform:uppercase;min-height:44px;padding:0 14px;cursor:pointer}
-        .trade-send:disabled,.trade-ready-row button:disabled,.trade-proposal-actions button:disabled{opacity:.45;cursor:not-allowed}
-        .trade-ready-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 14px}
-        .trade-ready-row button{background:#111827;color:#cbd5e1;border:1px solid #263244}
-        .trade-ready-row button.ready{border-color:#34d399;color:#34d399;background:rgba(52,211,153,.1)}
-        .trade-ready-row button.host{border-color:${CYAN}66;color:${CYAN};background:rgba(34,211,238,.08)}
+        .trade-send,.trade-proposal-actions button{border:none;border-radius:12px;background:linear-gradient(135deg,${GOLD},#9a7610);color:#050608;font-family:'Barlow Condensed';font-weight:900;letter-spacing:1.8px;text-transform:uppercase;min-height:44px;padding:0 14px;cursor:pointer}
+        .trade-send:disabled,.trade-proposal-actions button:disabled{opacity:.45;cursor:not-allowed}
         .trade-proposal-list{display:grid;gap:9px}
         .trade-list-label{color:#64748b;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;font-weight:900;margin-top:4px}
         .trade-proposal{border:1px solid rgba(255,255,255,.09);border-radius:15px;background:rgba(255,255,255,.03);padding:11px}
@@ -2649,8 +2743,10 @@ function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTea
         .trade-empty{border:1px dashed rgba(255,255,255,.12);border-radius:14px;padding:18px 14px;text-align:center;color:#64748b;font-size:13px;line-height:1.6}
         .trade-mobile-tabs,.trade-mobile-action{display:none}
         @media(max-width:900px){
-          .trade-screen{padding:12px 10px calc(112px + env(safe-area-inset-bottom))}
+          .trade-screen{padding:12px 10px calc(156px + env(safe-area-inset-bottom))}
           .trade-hero{align-items:flex-start;flex-direction:column;border-radius:18px;padding:16px 14px}
+          .trade-hero-actions{width:100%;min-width:0}
+          .trade-hero-actions .trade-action-panel{display:none}
           .trade-count-card{width:100%;text-align:left}
           .trade-layout{display:block}
           .trade-layout>.trade-panel{display:none}
@@ -2662,7 +2758,10 @@ function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTea
           .trade-mobile-tabs button.active{border-color:${GOLD};color:${GOLD};background:rgba(232,184,75,.08)}
           .desktop-send{display:none}
           .trade-mobile-action{display:block;position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:80;border:1px solid rgba(255,255,255,.1);background:rgba(8,10,14,.97);backdrop-filter:blur(12px);box-shadow:0 -14px 34px rgba(0,0,0,.55);border-radius:18px;padding:10px}
-          .trade-mobile-action .trade-send{width:100%}
+          .trade-mobile-action .trade-send,.trade-mobile-action .trade-phase-btn{width:100%}
+          .trade-mobile-action-grid{display:grid;grid-template-columns:1fr;gap:8px}
+          .trade-mobile-action-grid.host{grid-template-columns:1fr 1fr}
+          .trade-mobile-action .trade-phase-btn{font-size:13px;letter-spacing:1.2px;padding:0 8px}
           .trade-mobile-meta{display:flex;justify-content:space-between;gap:10px;color:#7c8799;font-size:11px;font-weight:800;letter-spacing:1px;margin-bottom:8px;text-transform:uppercase}
         }
       `}</style>
@@ -2673,9 +2772,12 @@ function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTea
             <h1>Trade Before Your XI</h1>
             <p className="trade-hero-copy">Swap up to 3 players before selecting your XI. Send a 1-for-1 proposal, then the other team can accept or decline it.</p>
           </div>
-          <div className="trade-count-card">
-            <span>{myTeam?.short || myTeamId} swaps used</span>
-            <strong>{myTradeCount}/{tradeLimit}</strong>
+          <div className="trade-hero-actions">
+            <div className="trade-count-card">
+              <span>{myTeam?.short || myTeamId} swaps used</span>
+              <strong>{myTradeCount}/{tradeLimit}</strong>
+            </div>
+            <TradeActions />
           </div>
         </header>
 
@@ -2697,14 +2799,35 @@ function TradeScreen({ gs, teams, myTeamId, isHost, isSpectator, emit, activeTea
       </div>
 
       <div className="trade-mobile-action">
-        <div className="trade-mobile-meta">
-          <span>{offeredPlayer?.name || 'Choose offer'}</span>
-          <span>{requestedPlayer?.name || 'Choose request'}</span>
-        </div>
         {notice && <div className="trade-notice">{notice}</div>}
-        <button type="button" className="trade-send" onClick={sendProposal} disabled={!canSend || busy}>
-          Send Proposal
-        </button>
+        {mobileTab === 'inbox' ? (
+          <>
+            <div className="trade-mobile-meta">
+              <span>{tradeReadyStatus}</span>
+              <span>{pendingProposalCount} pending</span>
+            </div>
+            <div className={`trade-mobile-action-grid${isHost ? ' host' : ''}`}>
+              {isHost && (
+                <button type="button" className="trade-phase-btn host" onClick={openStartSelectionDialog} disabled={busy}>
+                  Start XI Now
+                </button>
+              )}
+              <button type="button" className={`trade-phase-btn${isReady ? ' ready' : ''}`} onClick={markReady} disabled={busy || isSpectator || isReady}>
+                {isReady ? 'Ready For XI' : 'Ready For XI'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="trade-mobile-meta">
+              <span>{offeredPlayer?.name || 'Choose offer'}</span>
+              <span>{requestedPlayer?.name || 'Choose request'}</span>
+            </div>
+            <button type="button" className="trade-send" onClick={sendProposal} disabled={!canSend || busy}>
+              Send Proposal
+            </button>
+          </>
+        )}
       </div>
 
       <AppDialog

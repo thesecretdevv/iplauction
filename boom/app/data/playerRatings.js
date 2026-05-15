@@ -268,7 +268,11 @@ export function getPlayerRecord(playerName) {
 }
 
 function isOverseasPlayer(player) {
-  return !!player?.overseas || String(player?.country || '').toLowerCase() !== 'india';
+  const record = getPlayerRecord(player?.name);
+  const overseas = player?.overseas ?? record?.overseas;
+  if (typeof overseas === 'boolean') return overseas;
+  const country = String(player?.country ?? record?.country ?? '').trim().toLowerCase();
+  return country ? country !== 'india' : false;
 }
 
 // ──────────────────────────────────────────────────────────────
