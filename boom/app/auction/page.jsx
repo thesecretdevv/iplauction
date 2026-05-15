@@ -624,6 +624,8 @@ function AuctionContent() {
         @keyframes fadeUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
         @keyframes rowIn   { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:none} }
         @keyframes sheetUp { from{transform:translateY(100%)} to{transform:none} }
+        @keyframes sheetBackdropIn { from{opacity:0} to{opacity:1} }
+        @keyframes sheetDialogIn { from{opacity:0;transform:translate(-50%,14px) scale(.985)} to{opacity:1;transform:translate(-50%,0) scale(1)} }
         @keyframes timerGlow { 0%,100%{box-shadow:0 0 8px #ef4444} 50%{box-shadow:0 0 18px #ef4444,0 0 30px #ef444440} }
         @keyframes hostToastIn { from{opacity:0;transform:translate(-50%,-10px)} to{opacity:1;transform:translate(-50%,0)} }
         ::-webkit-scrollbar { width:2px } ::-webkit-scrollbar-thumb { background:#222 }
@@ -1012,7 +1014,7 @@ function AuctionContent() {
         .ac-team-row:active { background:rgba(255,255,255,.04); }
 
         /* ── HAMBURGER SHEET ── */
-        .ac-sheet-bg { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:40; }
+        .ac-sheet-bg { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:40; animation:sheetBackdropIn .18s ease both; }
         .ac-sheet {
           position:fixed; bottom:0; left:0; right:0; max-height:80vh;
           background:#0c0c10; border-top:1px solid ${BORDER}; z-index:41;
@@ -1022,23 +1024,32 @@ function AuctionContent() {
         }
         .ac-sheet-header { flex-shrink:0; padding:10px 14px;
           display:flex; justify-content:space-between; align-items:center;
-          border-bottom:1px solid ${BORDER}; }
+          gap:12px;
+          border-bottom:1px solid ${BORDER};
+          background:#0c0c10;
+          position:sticky;
+          top:0;
+          z-index:2;
+        }
         .ac-sheet-close {
-          width:34px;
-          height:34px;
+          width:40px;
+          height:40px;
           border-radius:10px;
           border:1px solid #3a3a3a;
           background:#171717;
           color:#f1f5f9;
-          font-size:16px;
+          font-size:18px;
           font-weight:900;
           cursor:pointer;
           display:flex;
           align-items:center;
           justify-content:center;
+          line-height:1;
           flex-shrink:0;
           box-shadow:0 0 0 1px rgba(255,255,255,0.03);
         }
+        .ac-sheet-close:hover { border-color:#666; background:#202026; color:#fff; }
+        .ac-sheet-close:active { transform:scale(.96); }
         .ac-sheet-tabs { display:flex; align-items:stretch; border-bottom:1px solid #1a1a1a; flex-shrink:0; }
         .ac-sheet-tab {
           flex:1; padding:9px 4px; text-align:center; font-size:11px; font-weight:700;
@@ -1049,21 +1060,6 @@ function AuctionContent() {
         }
         .ac-sheet-tab.active { color:#fff; border-bottom-color:${GOLD}; background:rgba(255,255,255,0.02); }
         .ac-sheet-tab:active { background:rgba(255,255,255,0.03); }
-        .ac-sheet-tab-close {
-          width:44px;
-          border:0;
-          border-left:1px solid #222;
-          border-bottom:2px solid transparent;
-          background:#111;
-          color:#f1f5f9;
-          font-size:15px;
-          font-weight:900;
-          cursor:pointer;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          flex-shrink:0;
-        }
         .ac-sheet-body { flex:1; overflow-y:auto; padding:12px 14px 16px; overscroll-behavior: contain; }
         .ac-os-badge {
           display:inline-flex;
@@ -1189,10 +1185,12 @@ function AuctionContent() {
              max-height:min(78vh, 760px);
              border:1px solid ${BORDER};
              border-radius:20px;
-             transform:translateX(-50%);
+             transform:translate(-50%,0);
              box-shadow:0 28px 80px rgba(0,0,0,0.55);
+             animation:sheetDialogIn .2s ease-out both;
            }
-           .ac-sheet-header { padding:14px 18px; }
+           .ac-sheet-header { padding:14px 18px; border-radius:20px 20px 0 0; }
+           .ac-sheet-tabs { border-top:0; }
            .ac-sheet-body { padding:16px 18px 20px; }
 
            /* Desktop Navbar Enhancements */
@@ -1278,6 +1276,24 @@ function AuctionContent() {
             max-width:none;
             padding-top: 2px;
             margin-bottom:0;
+          }
+          .ac-sheet {
+            max-height:min(82vh, calc(100dvh - 88px));
+          }
+          .ac-sheet-tabs {
+            overflow-x:auto;
+            scrollbar-width:none;
+          }
+          .ac-sheet-tabs::-webkit-scrollbar {
+            display:none;
+          }
+          .ac-sheet-tab {
+            min-width:74px;
+            min-height:42px;
+          }
+          .ac-sheet-close {
+            width:42px;
+            height:42px;
           }
         }
       `}</style>
@@ -2264,7 +2280,7 @@ function AuctionContent() {
             {/* Header */}
             <div className="ac-sheet-header">
               <span style={{ fontFamily:"'Bebas Neue'", fontSize:17, color:'#ccc', letterSpacing:2 }}>MORE</span>
-              <button className="ac-sheet-close" onClick={() => setShowHamburger(false)} aria-label="Close more panel">X</button>
+              <button type="button" className="ac-sheet-close" onClick={() => setShowHamburger(false)} aria-label="Close more panel">X</button>
             </div>
             {/* Sub-tabs */}
             <div className="ac-sheet-tabs">
@@ -2272,7 +2288,6 @@ function AuctionContent() {
                 <div key={id} className={`ac-sheet-tab${hamburgerTab===id?' active':''}`}
                   onClick={() => setHamburgerTab(id)}>{label}</div>
               ))}
-              <button className="ac-sheet-tab-close" onClick={() => setShowHamburger(false)} aria-label="Close more panel">X</button>
             </div>
             {/* Tab body */}
             <div className="ac-sheet-body">
