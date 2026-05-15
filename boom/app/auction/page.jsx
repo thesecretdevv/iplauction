@@ -25,6 +25,14 @@ function getPlayerPhoto(name) {
   return record?.photo_url || record?.image_url || null;
 }
 
+function isResolvedOverseasPlayer(player) {
+  const record = getPlayerRecord(player?.name);
+  const resolvedPlayer = { ...(record || {}), ...(player || {}) };
+  if (typeof resolvedPlayer.overseas === 'boolean') return resolvedPlayer.overseas;
+  const country = String(resolvedPlayer.country || '').trim().toLowerCase();
+  return country ? country !== 'india' : false;
+}
+
 const StatRow = ({ label, val }) => (
   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
     <span style={{ color: '#888', fontSize: 10, letterSpacing: 1 }}>{label}</span>
@@ -2738,13 +2746,11 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
 
       const selectedNames = new Set(autoXI.map((player) => player.name));
       const filledXI = [...autoXI];
-      let overseasCount = filledXI.filter((player) => (
-        !!player?.overseas || String(player?.country || '').toLowerCase() !== 'india'
-      )).length;
+      let overseasCount = filledXI.filter((player) => isResolvedOverseasPlayer(player)).length;
       for (const player of topRatedSquad) {
         if (filledXI.length >= playersNeeded) break;
         if (selectedNames.has(player.name)) continue;
-        const isOverseas = !!player?.overseas || String(player?.country || '').toLowerCase() !== 'india';
+        const isOverseas = isResolvedOverseasPlayer(player);
         if (isOverseas && overseasCount >= MAX_PLAYING_XI_OVERSEAS) continue;
         filledXI.push(player);
         if (isOverseas) overseasCount++;
@@ -2774,9 +2780,7 @@ function SelectionScreen({ mySquad, onSubmit, submitted, playersNeeded = 11, mod
       ar: value.includes('AR') || value.includes('ROUND'),
     };
   }, []);
-  const isOverseasPlayer = useCallback((player) => (
-    !!player?.overseas || String(player?.country || '').toLowerCase() !== 'india'
-  ), []);
+  const isOverseasPlayer = useCallback((player) => isResolvedOverseasPlayer(player), []);
   const toggle = useCallback((p) => {
     setSelected((prev) => {
       if (prev.find((x) => x.name === p.name)) {
