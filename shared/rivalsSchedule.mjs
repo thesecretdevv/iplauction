@@ -50,6 +50,8 @@ const HIGH_PROFILE_RIVALRIES = new Set([
   'CSK:KKR',
   'SRH:RCB',
   'GT:CSK',
+  'GT:RCB',
+  'RR:SRH',
 ]);
 
 const RAW_IPL_2026_SCHEDULE = [
@@ -123,6 +125,50 @@ const RAW_IPL_2026_SCHEDULE = [
   ['2026-05-23', '19:30', 'LSG', 'PBKS', 'Lucknow'],
   ['2026-05-24', '15:30', 'MI', 'RR', 'Mumbai'],
   ['2026-05-24', '19:30', 'KKR', 'DC', 'Kolkata'],
+  [
+    '2026-05-26',
+    '19:30',
+    'RCB',
+    'GT',
+    'HPCA Stadium, Dharamshala',
+    { matchLabel: 'Qualifier 1', isPlayoff: true },
+  ],
+  [
+    '2026-05-27',
+    '19:30',
+    'SRH',
+    'RR',
+    'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh',
+    { matchLabel: 'Eliminator', isPlayoff: true },
+  ],
+  [
+    '2026-05-29',
+    '19:30',
+    'Q1_LOSER',
+    'ELIMINATOR_WINNER',
+    'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh',
+    {
+      matchLabel: 'Qualifier 2',
+      homeTeamDisplay: 'Loser of Qualifier 1',
+      awayTeamDisplay: 'Winner of Eliminator',
+      isPlayoff: true,
+      isRivalsPlayable: false,
+    },
+  ],
+  [
+    '2026-05-31',
+    '19:30',
+    'Q1_WINNER',
+    'Q2_WINNER',
+    'Narendra Modi Stadium, Ahmedabad',
+    {
+      matchLabel: 'Final',
+      homeTeamDisplay: 'Winner of Qualifier 1',
+      awayTeamDisplay: 'Winner of Qualifier 2',
+      isPlayoff: true,
+      isRivalsPlayable: false,
+    },
+  ],
 ];
 
 function parseMatchDate(date, time) {
@@ -237,12 +283,15 @@ function getLocalDateKey(input) {
   return formatter.format(date);
 }
 
-export const IPL_2026_MATCHES = RAW_IPL_2026_SCHEDULE.map(([date, time, homeTeam, awayTeam, venue], index) => {
+export const IPL_2026_MATCHES = RAW_IPL_2026_SCHEDULE.map(([date, time, homeTeam, awayTeam, venue, meta = {}], index) => {
   const startAt = parseMatchDate(date, time);
   const endAt = new Date(startAt.getTime() + MATCH_DURATION_MINUTES * 60 * 1000);
   const auctionOpensAt = parseMatchDate(date, `${String(MORNING_OPEN_HOUR).padStart(2, '0')}:00`);
+  const hasResolvedTeams = Boolean(TEAM_DETAILS[homeTeam] && TEAM_DETAILS[awayTeam]);
+  const isRivalsPlayable = meta.isRivalsPlayable ?? hasResolvedTeams;
   const match = {
     matchNumber: index + 1,
+    matchLabel: meta.matchLabel || `Match ${index + 1}`,
     season: IPL_SEASON_YEAR,
     date,
     time,
@@ -251,7 +300,11 @@ export const IPL_2026_MATCHES = RAW_IPL_2026_SCHEDULE.map(([date, time, homeTeam
     auctionOpensAt: auctionOpensAt.toISOString(),
     homeTeam,
     awayTeam,
+    homeTeamDisplay: meta.homeTeamDisplay || TEAM_DETAILS[homeTeam]?.short || homeTeam,
+    awayTeamDisplay: meta.awayTeamDisplay || TEAM_DETAILS[awayTeam]?.short || awayTeam,
     venue,
+    isPlayoff: !!meta.isPlayoff,
+    isRivalsPlayable,
   };
   return {
     ...match,
@@ -282,7 +335,8 @@ export function getMatchStatus(match, now = new Date()) {
     state,
     isToday,
     isUpcoming: nowTime < startsAt,
-    isJoinable: state === 'open',
+    isJoinable: state === 'open' && match.isRivalsPlayable !== false,
+    hasResolvedTeams: match.isRivalsPlayable !== false,
     hasStarted: nowTime >= startsAt,
     hasEnded: nowTime >= endsAt,
     millisToOpen: opensAt - nowTime,
@@ -312,7 +366,7 @@ export function getRivalsDashboard(now = new Date()) {
 
 export function buildRivalsPlayerPool(allPlayers, matchLike) {
   const match = typeof matchLike === 'string' ? getMatchByKey(matchLike) : matchLike;
-  if (!match) return [];
+  if (!match || match.isRivalsPlayable === false) return [];
 
   const fixtureTeams = [match.homeTeam, match.awayTeam];
   const fixturePlayers = (allPlayers || []).filter((player) => fixtureTeams.includes(player.ipl_team_code));
@@ -355,13 +409,13 @@ export function buildRivalsMatchSnapshot(matchLike, now = new Date()) {
   if (!match) return null;
   return {
     ...match,
-    homeTeamInfo: TEAM_DETAILS[match.homeTeam],
-    awayTeamInfo: TEAM_DETAILS[match.awayTeam],
+    homeTeamInfo: TEAM_DETAILS[match.homeTeam] || null,
+    awayTeamInfo: TEAM_DETAILS[match.awayTeam] || null,
     status: getMatchStatus(match, now),
   };
 }
 
 export function getTeamLineupOrder(matchLike) {
   const match = typeof matchLike === 'string' ? getMatchByKey(matchLike) : matchLike;
-  return match ? [match.homeTeam, match.awayTeam] : [];
+  return match && match.isRivalsPlayable !== false ? [match.homeTeam, match.awayTeam] : [];
 }

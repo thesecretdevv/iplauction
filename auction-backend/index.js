@@ -1139,7 +1139,9 @@ io.on('connection', (socket) => {
             if (!match) return cb?.({ ok: false, error: 'Match not found' });
             if (!match.status.isJoinable) {
                 const state = match.status.state;
-                const error = state === 'scheduled'
+                const error = match.status.hasResolvedTeams === false
+                    ? 'This playoff fixture will unlock once both teams are confirmed.'
+                    : state === 'scheduled'
                     ? 'This auction opens automatically on match day.'
                     : state === 'locked'
                         ? 'This auction is locked because the IPL match has already started.'
@@ -1215,7 +1217,9 @@ io.on('connection', (socket) => {
         if (!match) return cb?.({ ok: false, error: 'Match not found' });
         if (!match.status.isJoinable) {
             const state = match.status.state;
-            const error = state === 'scheduled'
+            const error = match.status.hasResolvedTeams === false
+                ? 'This playoff fixture will unlock once both teams are confirmed.'
+                : state === 'scheduled'
                 ? 'This auction opens automatically on match day.'
                 : state === 'locked'
                     ? 'This auction is locked because the IPL match has already started.'

@@ -80,6 +80,7 @@ function getRivalsMatchState(match, nowMs) {
 }
 
 function isPlayableRivalsMatch(match, nowMs) {
+  if (match.isRivalsPlayable === false) return false;
   const state = getRivalsMatchState(match, nowMs);
   return state === 'scheduled' || state === 'open';
 }

@@ -41,9 +41,29 @@ function getMatchState(match, nowMs) {
   const startMs = new Date(match.startAt).getTime();
   const endMs = new Date(match.endAt).getTime();
   if (nowMs >= endMs) return 'completed';
+  if (match.isRivalsPlayable === false) return 'teams pending';
   if (nowMs >= startMs) return 'live';
   if (nowMs >= openMs) return 'auction open';
   return 'upcoming';
+}
+
+function getStatusColor(state) {
+  if (state === 'live') return '#ef4444';
+  if (state === 'auction open') return '#4ade80';
+  if (state === 'teams pending') return '#f59e0b';
+  return '#7f8794';
+}
+
+function TeamLogo({ teamId, label }) {
+  if (!teamId || teamId.includes('_')) {
+    return (
+      <div style={{ width: 36, height: 36, borderRadius: 999, display: 'grid', placeItems: 'center', border: '1px solid rgba(255,255,255,0.12)', color: GOLD, fontFamily: "'Bebas Neue', sans-serif", fontSize: 14, letterSpacing: 1 }}>
+        TBD
+      </div>
+    );
+  }
+
+  return <img src={`/assets/${teamId}.png`} alt={label || teamId} style={{ width: 36, height: 36, objectFit: 'contain' }} />;
 }
 
 export default function SchedulePage() {
@@ -80,6 +100,14 @@ export default function SchedulePage() {
     return Array.from(groups.entries());
   }, [matches]);
 
+  const qualifiedTeams = useMemo(() => (
+    Array.from(new Set(
+      matches
+        .filter((match) => match.isPlayoff && match.isRivalsPlayable !== false)
+        .flatMap((match) => [match.homeTeam, match.awayTeam])
+    ))
+  ), [matches]);
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#000', color: '#fff' }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 10, backdropFilter: 'blur(12px)', background: 'rgba(0,0,0,0.9)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
@@ -104,15 +132,19 @@ export default function SchedulePage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 28 }}>
           <div style={{ padding: '18px 18px', borderRadius: 18, border: '1px solid rgba(255,255,255,0.08)', background: 'linear-gradient(160deg, rgba(232,184,75,0.14), rgba(0,0,0,0.96))' }}>
             <div style={{ color: '#8b8b8b', fontSize: 11, letterSpacing: 2 }}>SEASON WINDOW</div>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: GOLD }}>28 MAR - 24 MAY</div>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: GOLD }}>28 MAR - 31 MAY</div>
           </div>
           <div style={{ padding: '18px 18px', borderRadius: 18, border: '1px solid rgba(255,255,255,0.08)', background: 'linear-gradient(160deg, rgba(34,211,238,0.14), rgba(0,0,0,0.96))' }}>
             <div style={{ color: '#8b8b8b', fontSize: 11, letterSpacing: 2 }}>TOTAL MATCHES</div>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: CYAN }}>{matches.length || 70}</div>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: CYAN }}>{matches.length || 74}</div>
           </div>
           <div style={{ padding: '18px 18px', borderRadius: 18, border: '1px solid rgba(255,255,255,0.08)', background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(0,0,0,0.96))' }}>
             <div style={{ color: '#8b8b8b', fontSize: 11, letterSpacing: 2 }}>MATCH WINDOWS</div>
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32 }}>3:30 PM / 7:30 PM</div>
+          </div>
+          <div style={{ padding: '18px 18px', borderRadius: 18, border: '1px solid rgba(255,255,255,0.08)', background: 'linear-gradient(160deg, rgba(34,197,94,0.12), rgba(0,0,0,0.96))' }}>
+            <div style={{ color: '#8b8b8b', fontSize: 11, letterSpacing: 2 }}>QUALIFIED TEAMS</div>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: '#4ade80' }}>{qualifiedTeams.length ? qualifiedTeams.join(' · ') : 'RCB · GT · SRH · RR'}</div>
           </div>
         </div>
 
@@ -130,17 +162,18 @@ export default function SchedulePage() {
                   <div key={match.key} style={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr) auto', gap: 18, alignItems: 'center', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.92)', borderRadius: 20, padding: '18px 18px', backdropFilter: 'blur(12px)' }}>
                     <div>
                       <div style={{ color: GOLD, fontFamily: "'Bebas Neue', sans-serif", fontSize: 30, letterSpacing: 1 }}>#{match.matchNumber}</div>
-                      <div style={{ color: '#7f8794', fontSize: 11, letterSpacing: 1.4 }}>MATCH</div>
+                      <div style={{ color: '#7f8794', fontSize: 11, letterSpacing: 1.4 }}>{match.isPlayoff ? match.matchLabel : 'MATCH'}</div>
                     </div>
 
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-                        <img src={`/assets/${match.homeTeam}.png`} alt={match.homeTeam} style={{ width: 36, height: 36, objectFit: 'contain' }} />
-                        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 30, letterSpacing: 1.3 }}>{match.homeTeam}</div>
+                        <TeamLogo teamId={match.homeTeam} label={match.homeTeamDisplay} />
+                        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 30, letterSpacing: 1.3 }}>{match.homeTeamDisplay || match.homeTeam}</div>
                         <div style={{ color: '#7f8794', fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: 3 }}>VS</div>
-                        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 30, letterSpacing: 1.3 }}>{match.awayTeam}</div>
-                        <img src={`/assets/${match.awayTeam}.png`} alt={match.awayTeam} style={{ width: 36, height: 36, objectFit: 'contain' }} />
+                        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 30, letterSpacing: 1.3 }}>{match.awayTeamDisplay || match.awayTeam}</div>
+                        <TeamLogo teamId={match.awayTeam} label={match.awayTeamDisplay} />
                         {match.isHighProfile && <div style={{ fontSize: 10, letterSpacing: 2, color: GOLD, border: `1px solid ${GOLD}50`, background: `${GOLD}12`, borderRadius: 999, padding: '5px 9px' }}>HIGHLIGHT</div>}
+                        {match.isPlayoff && <div style={{ fontSize: 10, letterSpacing: 2, color: CYAN, border: `1px solid ${CYAN}50`, background: `${CYAN}12`, borderRadius: 999, padding: '5px 9px' }}>PLAYOFFS</div>}
                       </div>
                       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', color: '#a0a7b4', fontSize: 13, letterSpacing: 0.3 }}>
                         <span>{formatDateLine(match)}</span>
@@ -150,7 +183,7 @@ export default function SchedulePage() {
                     </div>
 
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 10, letterSpacing: 2, color: state === 'live' ? '#ef4444' : state === 'auction open' ? '#4ade80' : '#7f8794', fontWeight: 800, textTransform: 'uppercase' }}>
+                      <div style={{ fontSize: 10, letterSpacing: 2, color: getStatusColor(state), fontWeight: 800, textTransform: 'uppercase' }}>
                         {state}
                       </div>
                     </div>
