@@ -6,7 +6,7 @@ export function getBackendUrl() {
     }
   }
 
-  return process.env.NEXT_PUBLIC_BACKEND_URL || 'https://bidwicket.onrender.com';
+  return process.env.NEXT_PUBLIC_BACKEND_URL || 'https://bidwicket-production.up.railway.app';
 }
 
 export function getSocketUrl() {
@@ -17,5 +17,5 @@ export function getSocketUrl() {
     }
   }
 
-  return process.env.NEXT_PUBLIC_BACKEND_URL || 'https://bidwicket.onrender.com';
+  return process.env.NEXT_PUBLIC_BACKEND_URL || 'https://bidwicket-production.up.railway.app';
 }

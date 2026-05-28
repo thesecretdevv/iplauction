@@ -38,9 +38,13 @@ const redis = new Redis({
 });
 
 const httpServer = createServer(app);
+const allowedSocketOrigins = (process.env.SOCKET_CORS_ORIGINS || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
 const io = new Server(httpServer, {
     cors: {
-        origin: ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001", "https://bidwicket.onrender.com"],
+        origin: allowedSocketOrigins.length ? allowedSocketOrigins : true,
         methods: ["GET", "POST"]
     },
     // Faster disconnect detection:
