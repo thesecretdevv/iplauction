@@ -10,9 +10,22 @@ import {
 } from '../../../shared/adminAuth.mjs';
 
 export const ADMIN_COOKIE_NAME = 'ipl_admin_session';
+const RAILWAY_BACKEND_URL = 'https://bidwicket-production.up.railway.app';
+const STALE_RENDER_BACKEND_URL = 'https://bidwicket.onrender.com';
+
+function normalizeBackendUrl(url) {
+  const trimmedUrl = url?.trim();
+  if (!trimmedUrl || trimmedUrl === STALE_RENDER_BACKEND_URL) {
+    return '';
+  }
+
+  return trimmedUrl.replace(/\/$/, '');
+}
 
 export function getAdminBackendUrl() {
-  return process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:3001';
+  return normalizeBackendUrl(process.env.BACKEND_URL)
+    || normalizeBackendUrl(process.env.NEXT_PUBLIC_BACKEND_URL)
+    || (process.env.NODE_ENV === 'production' ? RAILWAY_BACKEND_URL : 'http://127.0.0.1:3001');
 }
 
 export async function isAdminAuthenticated() {

@@ -1,3 +1,15 @@
+const RAILWAY_BACKEND_URL = 'https://bidwicket-production.up.railway.app';
+const STALE_RENDER_BACKEND_URL = 'https://bidwicket.onrender.com';
+
+function getConfiguredBackendUrl() {
+  const configuredUrl = process.env.NEXT_PUBLIC_BACKEND_URL?.trim();
+  if (!configuredUrl || configuredUrl === STALE_RENDER_BACKEND_URL) {
+    return RAILWAY_BACKEND_URL;
+  }
+
+  return configuredUrl.replace(/\/$/, '');
+}
+
 export function getBackendUrl() {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
@@ -6,7 +18,7 @@ export function getBackendUrl() {
     }
   }
 
-  return process.env.NEXT_PUBLIC_BACKEND_URL || 'https://bidwicket-production.up.railway.app';
+  return getConfiguredBackendUrl();
 }
 
 export function getSocketUrl() {
@@ -17,5 +29,5 @@ export function getSocketUrl() {
     }
   }
 
-  return process.env.NEXT_PUBLIC_BACKEND_URL || 'https://bidwicket-production.up.railway.app';
+  return getConfiguredBackendUrl();
 }
