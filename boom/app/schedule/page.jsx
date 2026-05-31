@@ -110,7 +110,7 @@ export default function SchedulePage() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#000', color: '#fff' }}>
-      <div style={{ position: 'sticky', top: 0, zIndex: 10, backdropFilter: 'blur(12px)', background: 'rgba(0,0,0,0.9)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+      <div style={{ position: 'sticky', top: 'var(--final-banner-height)', zIndex: 10, backdropFilter: 'blur(12px)', background: 'rgba(0,0,0,0.9)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <div style={{ maxWidth: 1240, margin: '0 auto', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <BrandLink compact={true} />

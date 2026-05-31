@@ -156,13 +156,11 @@ const RAW_IPL_2026_SCHEDULE = [
     '2026-05-31',
     '19:30',
     'RCB',
-    'Q2_WINNER',
+    'RR',
     'Narendra Modi Stadium, Ahmedabad',
     {
       matchLabel: 'Final',
-      awayTeamDisplay: 'Winner of Qualifier 2',
       isPlayoff: true,
-      isRivalsPlayable: false,
     },
   ],
 ];

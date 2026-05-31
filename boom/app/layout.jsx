@@ -6,6 +6,7 @@ import './globals.css';
 import { GameProvider } from './GameContext';
 import ClickSpark from './components/ClickSpark';
 import ChaiSupport from './components/ChaiSupport';
+import FinalShowdownBanner from './components/FinalShowdownBanner';
 import { createMetadata, SITE_URL } from './lib/seo';
 
 export const metadata = {
@@ -41,7 +42,7 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="google-adsense-account" content="ca-pub-2556312199314107" />
         <link rel="dns-prefetch" href="https://images.icc-cricket.com" />
@@ -81,6 +82,7 @@ export default function RootLayout({ children }) {
         </Script>
       </head>
       <body>
+        <FinalShowdownBanner />
         <ClickSpark
           sparkColor="#E8B84B"
           sparkSize={12}
