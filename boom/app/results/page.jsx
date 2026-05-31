@@ -30,6 +30,9 @@ const TEAM_LOGOS = {
 };
 
 const SUPPORT_MODAL_SESSION_KEY = 'ipl_results_support_modal_dismissed';
+/*
+Direct UPI wallet options are paused for now. Keep these here so they can be
+re-enabled later in the results support modal without rebuilding the links.
 const SUPPORT_UPI_ID = 'naga.tum@ptyes';
 const SUPPORT_PAYEE_NAME = 'IPL Auction Simulator';
 const SUPPORT_UPI_PARAMS = `pa=${encodeURIComponent(SUPPORT_UPI_ID)}&pn=${encodeURIComponent(SUPPORT_PAYEE_NAME)}&cu=INR`;
@@ -40,6 +43,7 @@ const FAMPAY_SUPPORT_URL = `intent://pay?${SUPPORT_UPI_PARAMS}#Intent;scheme=upi
 const GPAY_LOGO_URL = 'https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/google-pay-icon.png';
 const PHONEPE_LOGO_URL = 'https://i.pinimg.com/236x/88/0e/f6/880ef68e7e5551e4241b306fe0543ffa.jpg';
 const FAMPAY_LOGO_URL = 'https://www.famapp.in/assets/localImages/fampayLogo.png';
+*/
 
 function useIsMobileDevice() {
   const [isMobile, setIsMobile] = useState(false);
@@ -576,31 +580,26 @@ function Results({ gs, myTeamId: mti, onRestart, mode, isArchived = false, archi
   );
 }
 
-function SupportResultsModal({ canClose, countdown, isMobile, onClose }) {
-  const [copiedUpi, setCopiedUpi] = useState(false);
-
-  const handleCopyUpi = useCallback(() => {
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return;
-    navigator.clipboard.writeText(SUPPORT_UPI_ID)
-      .then(() => {
-        setCopiedUpi(true);
-        window.setTimeout(() => setCopiedUpi(false), 1600);
-      })
-      .catch(() => {});
-  }, []);
-
+function SupportResultsModal({ canClose, countdown, onClose }) {
   return (
     <div className="support-modal-backdrop" role="presentation">
       <section className="support-modal" role="dialog" aria-modal="true" aria-labelledby="support-modal-title">
-        <div className="support-modal-kicker">One tiny timeout</div>
-        <div id="support-modal-title" className="support-modal-title">Support The Servers</div>
+        <div className="support-modal-kicker">One tiny chai break</div>
+        <div id="support-modal-title" className="support-modal-title">Buy Me A Chai</div>
         <p className="support-modal-copy">
-          Maintaining servers is hard, this platform is completely ad-free and requires no login.
-          If you enjoyed it, please consider supporting us, even a small amount helps a lot! Thank you!!
+          If the auction was fun, you can send a small chai my way. It opens the chai support page directly.
+          Thank you for playing and keeping the vibe alive.
         </p>
 
         <div className="support-modal-actions">
-          {isMobile ? (
+          <a className="support-modal-support-btn" href={SUPPORT_URL} target="_blank" rel="noreferrer">
+            Buy Me A Chai
+          </a>
+
+          {/*
+            Direct mobile UPI wallet options are intentionally disabled for now.
+            Re-enable this block when GPay/PhonePe/Paytm/FamPay support is needed again.
+
             <div className="support-modal-mobile-payments" aria-label="UPI payment options">
               <a className="support-modal-pay-btn" href={GPAY_SUPPORT_URL}>
                 <img className="support-modal-pay-logo" src={GPAY_LOGO_URL} alt="GPay logo" />
@@ -619,19 +618,13 @@ function SupportResultsModal({ canClose, countdown, isMobile, onClose }) {
                 FamPay
               </a>
             </div>
-          ) : (
-            <a className="support-modal-support-btn" href={SUPPORT_URL} target="_blank" rel="noreferrer">
-              Support
-            </a>
-          )}
 
-          {isMobile ? (
             <button type="button" className="support-modal-upi-copy" onClick={handleCopyUpi}>
               <span className="support-modal-upi-label">UPI ID</span>
               <span className="support-modal-upi-value">{SUPPORT_UPI_ID}</span>
               <span className="support-modal-upi-hint">{copiedUpi ? 'Copied' : 'Tap to copy'}</span>
             </button>
-          ) : null}
+          */}
         </div>
 
         {canClose ? (
