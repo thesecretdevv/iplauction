@@ -100,17 +100,14 @@ export default function SchedulePage() {
     return Array.from(groups.entries());
   }, [matches]);
 
-  const qualifiedTeams = useMemo(() => (
-    Array.from(new Set(
-      matches
-        .filter((match) => match.isPlayoff && match.isRivalsPlayable !== false)
-        .flatMap((match) => [match.homeTeam, match.awayTeam])
-    ))
-  ), [matches]);
+  const finalTeams = useMemo(() => {
+    const finalMatch = matches.find((match) => match.matchLabel === 'Final');
+    return finalMatch ? [finalMatch.homeTeamDisplay || finalMatch.homeTeam, finalMatch.awayTeamDisplay || finalMatch.awayTeam] : [];
+  }, [matches]);
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#000', color: '#fff' }}>
-      <div style={{ position: 'sticky', top: 'var(--final-banner-height)', zIndex: 10, backdropFilter: 'blur(12px)', background: 'rgba(0,0,0,0.9)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 10, backdropFilter: 'blur(12px)', background: 'rgba(0,0,0,0.9)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <div style={{ maxWidth: 1240, margin: '0 auto', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <BrandLink compact={true} />
@@ -143,8 +140,8 @@ export default function SchedulePage() {
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32 }}>3:30 PM / 7:30 PM</div>
           </div>
           <div style={{ padding: '18px 18px', borderRadius: 18, border: '1px solid rgba(255,255,255,0.08)', background: 'linear-gradient(160deg, rgba(34,197,94,0.12), rgba(0,0,0,0.96))' }}>
-            <div style={{ color: '#8b8b8b', fontSize: 11, letterSpacing: 2 }}>QUALIFIED TEAMS</div>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: '#4ade80' }}>{qualifiedTeams.length ? qualifiedTeams.join(' · ') : 'RCB · GT · SRH · RR'}</div>
+            <div style={{ color: '#8b8b8b', fontSize: 11, letterSpacing: 2 }}>FINALISTS</div>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: '#4ade80' }}>{finalTeams.length ? finalTeams.join(' · ') : 'RCB · GT'}</div>
           </div>
         </div>
 
@@ -179,6 +176,7 @@ export default function SchedulePage() {
                         <span>{formatDateLine(match)}</span>
                         <span>{formatTimeLine(match)} IST</span>
                         <span>{match.venue}</span>
+                        {match.resultLabel ? <span style={{ color: '#4ade80', fontWeight: 900 }}>{match.resultLabel}</span> : null}
                       </div>
                     </div>
 

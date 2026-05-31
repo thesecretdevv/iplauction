@@ -149,6 +149,8 @@ const RAW_IPL_2026_SCHEDULE = [
     'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh',
     {
       matchLabel: 'Qualifier 2',
+      winnerTeam: 'GT',
+      resultLabel: 'GT qualified for Final',
       isPlayoff: true,
     },
   ],
@@ -156,10 +158,12 @@ const RAW_IPL_2026_SCHEDULE = [
     '2026-05-31',
     '19:30',
     'RCB',
-    'RR',
+    'GT',
     'Narendra Modi Stadium, Ahmedabad',
     {
       matchLabel: 'Final',
+      winnerTeam: 'RCB',
+      resultLabel: 'RCB won IPL 2026',
       isPlayoff: true,
     },
   ],
@@ -297,6 +301,8 @@ export const IPL_2026_MATCHES = RAW_IPL_2026_SCHEDULE.map(([date, time, homeTeam
     homeTeamDisplay: meta.homeTeamDisplay || TEAM_DETAILS[homeTeam]?.short || homeTeam,
     awayTeamDisplay: meta.awayTeamDisplay || TEAM_DETAILS[awayTeam]?.short || awayTeam,
     venue,
+    winnerTeam: meta.winnerTeam || null,
+    resultLabel: meta.resultLabel || '',
     isPlayoff: !!meta.isPlayoff,
     isRivalsPlayable,
   };

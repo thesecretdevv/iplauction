@@ -6,7 +6,6 @@ import './globals.css';
 import { GameProvider } from './GameContext';
 import ClickSpark from './components/ClickSpark';
 import ChaiSupport from './components/ChaiSupport';
-import FinalShowdownBanner from './components/FinalShowdownBanner';
 import { createMetadata, SITE_URL } from './lib/seo';
 
 export const metadata = {
@@ -82,7 +81,6 @@ export default function RootLayout({ children }) {
         </Script>
       </head>
       <body>
-        <FinalShowdownBanner />
         <ClickSpark
           sparkColor="#E8B84B"
           sparkSize={12}
