@@ -1029,15 +1029,16 @@ function AuctionContent() {
           background:#0c0c10;
           position:sticky;
           top:0;
-          z-index:2;
+          z-index:5;
+          box-shadow:0 8px 18px rgba(0,0,0,0.26);
         }
         .ac-sheet-close {
           width:40px;
           height:40px;
           border-radius:10px;
-          border:1px solid #3a3a3a;
-          background:#171717;
-          color:#f1f5f9;
+          border:1px solid rgba(255,255,255,0.22);
+          background:#18181d;
+          color:#fff;
           font-size:18px;
           font-weight:900;
           cursor:pointer;
@@ -1046,7 +1047,9 @@ function AuctionContent() {
           justify-content:center;
           line-height:1;
           flex-shrink:0;
-          box-shadow:0 0 0 1px rgba(255,255,255,0.03);
+          box-shadow:0 0 0 1px rgba(255,255,255,0.04), 0 8px 20px rgba(0,0,0,0.35);
+          -webkit-tap-highlight-color:transparent;
+          touch-action:manipulation;
         }
         .ac-sheet-close:hover { border-color:#666; background:#202026; color:#fff; }
         .ac-sheet-close:active { transform:scale(.96); }
@@ -2280,7 +2283,7 @@ function AuctionContent() {
             {/* Header */}
             <div className="ac-sheet-header">
               <span style={{ fontFamily:"'Bebas Neue'", fontSize:17, color:'#ccc', letterSpacing:2 }}>MORE</span>
-              <button type="button" className="ac-sheet-close" onClick={() => setShowHamburger(false)} aria-label="Close more panel">X</button>
+              <button type="button" className="ac-sheet-close" onClick={() => setShowHamburger(false)} aria-label="Close more panel">✕</button>
             </div>
             {/* Sub-tabs */}
             <div className="ac-sheet-tabs">
