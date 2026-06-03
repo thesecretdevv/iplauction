@@ -1281,7 +1281,12 @@ function AuctionContent() {
             margin-bottom:0;
           }
           .ac-sheet {
+            z-index:91;
             max-height:min(82vh, calc(100dvh - 88px));
+          }
+          .ac-sheet-bg {
+            z-index:90;
+            backdrop-filter:blur(8px);
           }
           .ac-sheet-tabs {
             overflow-x:auto;
