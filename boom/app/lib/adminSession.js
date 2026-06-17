@@ -10,12 +10,11 @@ import {
 } from '../../../shared/adminAuth.mjs';
 
 export const ADMIN_COOKIE_NAME = 'ipl_admin_session';
-const RAILWAY_BACKEND_URL = 'https://bidwicket-production.up.railway.app';
-const STALE_RENDER_BACKEND_URL = 'https://bidwicket.onrender.com';
+const RENDER_BACKEND_URL = 'https://bidwicket.onrender.com';
 
 function normalizeBackendUrl(url) {
   const trimmedUrl = url?.trim();
-  if (!trimmedUrl || trimmedUrl === STALE_RENDER_BACKEND_URL) {
+  if (!trimmedUrl) {
     return '';
   }
 
@@ -25,7 +24,7 @@ function normalizeBackendUrl(url) {
 export function getAdminBackendUrl() {
   return normalizeBackendUrl(process.env.BACKEND_URL)
     || normalizeBackendUrl(process.env.NEXT_PUBLIC_BACKEND_URL)
-    || (process.env.NODE_ENV === 'production' ? RAILWAY_BACKEND_URL : 'http://127.0.0.1:3001');
+    || (process.env.NODE_ENV === 'production' ? RENDER_BACKEND_URL : 'http://127.0.0.1:3001');
 }
 
 export async function isAdminAuthenticated() {
@@ -61,7 +60,7 @@ export function validateAdminLogin(username, password) {
 }
 
 export async function adminFetch(path, options = {}) {
-  const baseUrl = getAdminBackendUrl() || getBackendUrl();
+  const baseUrl = getAdminBackendUrl();
   const response = await fetch(`${baseUrl}${path}`, {
     ...options,
     headers: {

@@ -1,10 +1,9 @@
-const RAILWAY_BACKEND_URL = 'https://bidwicket-production.up.railway.app';
-const STALE_RENDER_BACKEND_URL = 'https://bidwicket.onrender.com';
+const RENDER_BACKEND_URL = 'https://bidwicket.onrender.com';
 
 function getConfiguredBackendUrl() {
   const configuredUrl = process.env.NEXT_PUBLIC_BACKEND_URL?.trim();
-  if (!configuredUrl || configuredUrl === STALE_RENDER_BACKEND_URL) {
-    return RAILWAY_BACKEND_URL;
+  if (!configuredUrl) {
+    return RENDER_BACKEND_URL;
   }
 
   return configuredUrl.replace(/\/$/, '');
