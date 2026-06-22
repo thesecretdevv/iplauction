@@ -1955,7 +1955,7 @@ function RoomContent() {
             <span className="rp-eyebrow">Daily Rivals Auction</span>
             <h1 className="rp-h1">PLAY TODAY&apos;S<br /><span>RIVALS MATCH</span></h1>
             <p style={{ fontFamily:"'Courier Prime',monospace", fontSize:11, color:'#94A3B8', margin:'10px 0 22px', lineHeight:1.8 }}>
-              Jump straight into the scheduled 1v1 duel. We&apos;ll assign one of the two IPL teams automatically and start the auction as soon as both rivals are in.
+              Jump straight into today&apos;s 1v1 duel. We&apos;ll assign one of the two teams automatically and start the auction as soon as both rivals are in.
             </p>
 
             {selectedRivalsMatch ? (() => {
@@ -2027,7 +2027,7 @@ function RoomContent() {
               );
             })() : (
               <div style={{ border:'1px solid #1f2937', borderRadius:18, padding:'24px 22px', background:'#0a0a0a', color:'#94A3B8', lineHeight:1.8 }}>
-                No joinable Rivals match is available right now. The card on the homepage will automatically switch to the next scheduled IPL fixture.
+                No joinable Rivals match is available right now. The card on the homepage will automatically switch to the next daily team matchup.
               </div>
             )}
           </div>

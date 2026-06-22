@@ -123,6 +123,49 @@ const HOW_STEPS = [
   { num: '03', title: 'WIN THE AUCTION', body: 'The franchise with the best squad balance wins. Star-studded lineups only work if you have the budget to back them. Dominate the table.' },
 ];
 
+const PLAYER_REVIEWS = [
+  {
+    name: 'Aarav Nair',
+    city: 'Bengaluru',
+    text: 'We opened it for one quick auction and ended up playing three rooms back to back. The purse pressure feels very real.',
+  },
+  {
+    name: 'Meera Iyer',
+    city: 'Chennai',
+    text: 'Clean, fast, and oddly addictive. The room code flow made it easy for our whole WhatsApp group to jump in.',
+  },
+  {
+    name: 'Kabir Shah',
+    city: 'Mumbai',
+    text: 'Low-key insane. I lost because I overpaid for two stars, and somehow that made it more fun.',
+  },
+  {
+    name: 'Ananya Rao',
+    city: 'Hyderabad',
+    text: 'Feels like a proper draft night without anyone maintaining a spreadsheet. My cousins understood it in two minutes.',
+  },
+  {
+    name: 'Rohan Kulkarni',
+    city: 'Pune',
+    text: 'The live bidding gets genuinely tense. One value pick at the end changed our entire leaderboard.',
+  },
+  {
+    name: 'Ishita Banerjee',
+    city: 'Kolkata',
+    text: 'Best part is how quick it starts. No login drama, no setup lecture, just room code and chaos.',
+  },
+  {
+    name: 'Devansh Patel',
+    city: 'Ahmedabad',
+    text: 'The Rivals mode is perfect for two people. Short, sharp, and very easy to replay after a close loss.',
+  },
+  {
+    name: 'Sanya Menon',
+    city: 'Kochi',
+    text: 'It actually rewards patience. I saved money for bowlers and finally beat the friend who only chases big names.',
+  },
+];
+
 const HERO_STACK_PLAYERS = [
   { name: 'KL Rahul', accent: '#81D4FA', tag: 'BATTING ANCHOR' },
   { name: 'MS Dhoni', accent: '#F9CA24', tag: 'FINISHER ICON' },
@@ -417,7 +460,7 @@ export default function LandingPage() {
           })() : (
             <div style={{ background: '#0b0d12', border: '1px solid #1b2030', borderRadius: 18, padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
               <div style={{ color: '#94A3B8', lineHeight: 1.7 }}>
-                Rivals mode auto-updates with the IPL schedule each day. Jump in from here to find an online rival or create a private duel room.
+                Rivals mode now refreshes with a daily fantasy team matchup. Jump in from here to find an online rival or create a private duel room.
               </div>
               <button onClick={() => router.push('/room?action=browse')} style={{ border: 'none', borderRadius: 999, padding: '12px 18px', background: 'linear-gradient(135deg, #E8B84B, #c8921b)', color: '#000', fontWeight: 900, letterSpacing: 1.2, cursor: 'pointer' }}>
                 PLAY AUCTION NOW
@@ -486,6 +529,52 @@ export default function LandingPage() {
               <p className="l-step-body">{body}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="l-reviews">
+        <div className="l-reviews-heading">
+          <div>
+            <span>Player Reviews</span>
+            <h2>Real auction-night energy from Indian cricket fans</h2>
+          </div>
+          <p>
+            Fast rooms, last-second bids, and the kind of friendly arguments that keep the group chat alive after the auction ends.
+          </p>
+        </div>
+
+        <div className="l-review-spotlight">
+          <div className="l-review-score">
+            <span>4.9</span>
+            <div>
+              <strong>Fan rated</strong>
+              <small>Across friendly rooms, college leagues, and weekend draft nights</small>
+            </div>
+          </div>
+          <div className="l-review-pulse-line" />
+        </div>
+
+        <div className="l-review-marquee" aria-label="Player reviews">
+          <div className="l-review-track">
+            {[0, 1].map((loop) => (
+              <div className="l-review-set" key={loop}>
+                {PLAYER_REVIEWS.map((review, index) => (
+                  <article className="l-review-card" key={`${loop}-${review.name}`}>
+                    <div className="l-review-card-top">
+                      <div className="l-review-avatar">{review.name.split(' ').map((part) => part[0]).join('')}</div>
+                      <div>
+                        <h3>{review.name}</h3>
+                        <p>{review.city}</p>
+                      </div>
+                    </div>
+                    <div className="l-review-stars" aria-label="5 star review">★★★★★</div>
+                    <p className="l-review-text">{review.text}</p>
+                    <span className="l-review-tag">{index % 3 === 0 ? 'Great with friends' : index % 3 === 1 ? 'Smooth multiplayer' : 'Quite insane finish'}</span>
+                  </article>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

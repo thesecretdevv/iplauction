@@ -7,7 +7,7 @@ import { Redis } from '@upstash/redis';
 import {
     buildRivalsMatchSnapshot,
     buildRivalsPlayerPool,
-    IPL_2026_MATCHES,
+    getRivalsMatches,
     RIVALS_MAX_OVERSEAS,
     RIVALS_MAX_SQUAD_SIZE,
     RIVALS_PURSE,
@@ -345,7 +345,7 @@ app.get('/api/rivals/matches', async (req, res) => {
         const now = new Date();
         res.json({
             now: now.toISOString(),
-            matches: IPL_2026_MATCHES.map(match => buildRivalsMatchSnapshot(match, now)),
+            matches: getRivalsMatches(now).map(match => buildRivalsMatchSnapshot(match, now)),
         });
     } catch (e) {
         console.error('[REST] Rivals matches fetch error:', e);
@@ -1146,9 +1146,9 @@ io.on('connection', (socket) => {
                 const error = match.status.hasResolvedTeams === false
                     ? 'This playoff fixture will unlock once both teams are confirmed.'
                     : state === 'scheduled'
-                    ? 'This auction opens automatically on match day.'
+                    ? 'This auction opens automatically on its daily matchup day.'
                     : state === 'locked'
-                        ? 'This auction is locked because the IPL match has already started.'
+                        ? 'This auction is locked because the matchup has already started.'
                         : 'This auction has already closed.';
                 return cb?.({ ok: false, error });
             }
@@ -1224,9 +1224,9 @@ io.on('connection', (socket) => {
             const error = match.status.hasResolvedTeams === false
                 ? 'This playoff fixture will unlock once both teams are confirmed.'
                 : state === 'scheduled'
-                ? 'This auction opens automatically on match day.'
+                ? 'This auction opens automatically on its daily matchup day.'
                 : state === 'locked'
-                    ? 'This auction is locked because the IPL match has already started.'
+                    ? 'This auction is locked because the matchup has already started.'
                     : 'This auction has already closed.';
             return cb?.({ ok: false, error });
         }

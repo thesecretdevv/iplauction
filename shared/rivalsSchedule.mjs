@@ -9,6 +9,17 @@ export const RIVALS_WILDCARD_COUNT = 3;
 
 const MORNING_OPEN_HOUR = 0;
 const MATCH_DURATION_MINUTES = 240;
+const DAILY_RIVALS_START_DATE = '2026-06-01';
+const DAILY_RIVALS_LOOKAHEAD_DAYS = 21;
+const DAILY_RIVALS_MATCH_NUMBER_BASE = 9000;
+const DAILY_RIVALS_TIME = '23:55';
+const DAILY_RIVALS_VENUES = [
+  'Daily Rivals Arena',
+  'Fantasy Auction Studio',
+  'Night Auction Desk',
+  'Friends League Table',
+  'Draft Room Central',
+];
 
 export const TEAM_DETAILS = {
   CSK: { id: 'CSK', name: 'Chennai Super Kings', short: 'CSK', color: '#F9CA24', logo: '/assets/CSK.png' },
@@ -177,6 +188,71 @@ function getMatchKey(matchLike) {
   return `${matchLike.date}-${String(matchLike.matchNumber).padStart(2, '0')}-${matchLike.homeTeam}-${matchLike.awayTeam}`;
 }
 
+function getDayIndex(date) {
+  return Math.floor((parseMatchDate(date, '00:00').getTime() - parseMatchDate(DAILY_RIVALS_START_DATE, '00:00').getTime()) / 86400000);
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const date = parseMatchDate(dateKey, '00:00');
+  date.setUTCDate(date.getUTCDate() + days);
+  return getLocalDateKey(date);
+}
+
+function hashString(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function pickDailyTeams(date) {
+  const teamIds = Object.keys(TEAM_DETAILS);
+  const seed = hashString(`daily-rivals:${date}`);
+  const homeIndex = seed % teamIds.length;
+  const awayOffset = 1 + (Math.floor(seed / teamIds.length) % (teamIds.length - 1));
+  const awayIndex = (homeIndex + awayOffset) % teamIds.length;
+  return [teamIds[homeIndex], teamIds[awayIndex]];
+}
+
+function buildDailyRivalsMatch(date) {
+  const dayIndex = getDayIndex(date);
+  if (dayIndex < 0) return null;
+
+  const [homeTeam, awayTeam] = pickDailyTeams(date);
+  const startAt = parseMatchDate(date, DAILY_RIVALS_TIME);
+  const endAt = new Date(startAt.getTime() + MATCH_DURATION_MINUTES * 60 * 1000);
+  const auctionOpensAt = parseMatchDate(date, `${String(MORNING_OPEN_HOUR).padStart(2, '0')}:00`);
+  const match = {
+    matchNumber: DAILY_RIVALS_MATCH_NUMBER_BASE + dayIndex,
+    matchLabel: 'Daily Rivals',
+    season: IPL_SEASON_YEAR,
+    date,
+    time: DAILY_RIVALS_TIME,
+    startAt: startAt.toISOString(),
+    endAt: endAt.toISOString(),
+    auctionOpensAt: auctionOpensAt.toISOString(),
+    homeTeam,
+    awayTeam,
+    homeTeamDisplay: TEAM_DETAILS[homeTeam]?.short || homeTeam,
+    awayTeamDisplay: TEAM_DETAILS[awayTeam]?.short || awayTeam,
+    venue: DAILY_RIVALS_VENUES[dayIndex % DAILY_RIVALS_VENUES.length],
+    winnerTeam: null,
+    resultLabel: '',
+    isPlayoff: false,
+    isRivalsPlayable: true,
+    isDailyRivals: true,
+  };
+
+  return {
+    ...match,
+    key: getMatchKey(match),
+    rivalryKey: getRivalryKey(homeTeam, awayTeam),
+    isHighProfile: HIGH_PROFILE_RIVALRIES.has(getRivalryKey(homeTeam, awayTeam)),
+  };
+}
+
 function getRivalryKey(teamA, teamB) {
   return [teamA, teamB].sort().join(':');
 }
@@ -314,8 +390,23 @@ export const IPL_2026_MATCHES = RAW_IPL_2026_SCHEDULE.map(([date, time, homeTeam
   };
 });
 
+export function getRivalsMatches(now = new Date()) {
+  const today = getLocalDateKey(now);
+  const startDate = getDayIndex(today) >= 0 ? today : DAILY_RIVALS_START_DATE;
+  const dailyMatches = Array.from({ length: DAILY_RIVALS_LOOKAHEAD_DAYS }, (_, index) => (
+    buildDailyRivalsMatch(addDaysToDateKey(startDate, index))
+  )).filter(Boolean);
+
+  return [...IPL_2026_MATCHES, ...dailyMatches];
+}
+
 export function getMatchByKey(matchKey) {
-  return IPL_2026_MATCHES.find((match) => match.key === matchKey) || null;
+  const staticMatch = IPL_2026_MATCHES.find((match) => match.key === matchKey);
+  if (staticMatch) return staticMatch;
+
+  const date = String(matchKey || '').slice(0, 10);
+  const dailyMatch = /^\d{4}-\d{2}-\d{2}$/.test(date) ? buildDailyRivalsMatch(date) : null;
+  return dailyMatch?.key === matchKey ? dailyMatch : null;
 }
 
 export function getMatchStatus(match, now = new Date()) {
@@ -350,7 +441,7 @@ export function getMatchStatus(match, now = new Date()) {
 }
 
 export function getRivalsDashboard(now = new Date()) {
-  const matches = IPL_2026_MATCHES.map((match) => ({ ...match, status: getMatchStatus(match, now) }));
+  const matches = getRivalsMatches(now).map((match) => ({ ...match, status: getMatchStatus(match, now) }));
   const todayMatches = matches.filter((match) => match.status.isToday);
   const currentMatch = matches.find((match) => match.status.state === 'open') || null;
   const nextMatch = matches.find((match) => match.status.isUpcoming) || null;
