@@ -33,8 +33,8 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 const redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL || "https://adjusted-robin-126727.upstash.io",
-    token: process.env.UPSTASH_REDIS_REST_TOKEN || "gQAAAAAAAe8HAAIgcDEyNGEyZjcyYTJlZGM0NWEyYTI2MTQ0ZmQ0ZWM1MThiYg"
+    url: process.env.UPSTASH_REDIS_REST_URL || "https://thankful-frog-80474.upstash.io",
+    token: process.env.UPSTASH_REDIS_REST_TOKEN || "gQAAAAAAATpaAAIgcDE1ZWY3ZWY1Y2Q0M2Y0MTU3ODAwYmQ1OWI1NGI3YmViZQ"
 });
 
 const httpServer = createServer(app);
@@ -475,19 +475,19 @@ app.delete('/api/admin/rooms/:code', async (req, res) => {
 // Helper to keep track of public rooms in a central index
 async function addToPublicIndex(code) {
     publicRoomsCache = null;
-    try { await redis.sadd('public_rooms', code); } catch(e) {}
+    try { await redis.sadd('public_rooms', code); } catch (e) { }
 }
 async function removeFromPublicIndex(code) {
     publicRoomsCache = null;
-    try { await redis.srem('public_rooms', code); } catch(e) {}
+    try { await redis.srem('public_rooms', code); } catch (e) { }
 }
 async function addToFinishedIndex(code) {
     publicRoomsCache = null;
-    try { await redis.sadd(FINISHED_ROOM_SET_KEY, code); } catch(e) {}
+    try { await redis.sadd(FINISHED_ROOM_SET_KEY, code); } catch (e) { }
 }
 async function removeFromFinishedIndex(code) {
     publicRoomsCache = null;
-    try { await redis.srem(FINISHED_ROOM_SET_KEY, code); } catch(e) {}
+    try { await redis.srem(FINISHED_ROOM_SET_KEY, code); } catch (e) { }
 }
 
 async function removeRoom(code) {
@@ -653,7 +653,7 @@ async function persistRoom(room) {
             code: room.code,
             name: room.name,
             hostId: room.hostId,
-            status: room.status, 
+            status: room.status,
             isPrivate: room.isPrivate || false,
             auctionMode: room.auctionMode || 'mega',
             squadLimit: room.squadLimit || getDefaultSquadLimit(room.auctionMode),
@@ -672,14 +672,14 @@ async function persistRoom(room) {
         };
         // Save room with 24-hour expiry
         await redis.set(roomKey, JSON.stringify(data), { ex: 3600 * 24 });
-        
+
         // Keep rooms discoverable only while someone is online.
         if (!data.isPrivate && !isRoomOver(data) && getVisiblePlayers(data).length > 0) {
             await addToPublicIndex(room.code);
         } else {
             await removeFromPublicIndex(room.code);
         }
-    } catch(e) { console.error("[REDIS] Save Error:", e); }
+    } catch (e) { console.error("[REDIS] Save Error:", e); }
 }
 
 async function getRoom(code) {
@@ -693,7 +693,7 @@ async function getRoom(code) {
                 const rData = typeof data === 'string' ? JSON.parse(data) : data;
                 room = {
                     ...rData,
-                    timerInterval: null 
+                    timerInterval: null
                 };
                 room.revision = room.revision || 0;
                 room.updatedAt = room.updatedAt || Date.now();
@@ -709,10 +709,10 @@ async function getRoom(code) {
                 rooms.set(ucCode, room);
                 console.log(`[REDIS] Restored Room: ${ucCode}`);
                 if (room.status === 'active' && room.gameState && !room.timerInterval && !isRoomOver(room)) {
-                   startGameTick(room); 
+                    startGameTick(room);
                 }
             }
-        } catch(e) { console.error("[REDIS] Load Error:", e); }
+        } catch (e) { console.error("[REDIS] Load Error:", e); }
     }
     if (room) {
         room = await reconcileRoomPresence(room);
@@ -812,7 +812,7 @@ function finishCurrent(room) {
         gs.purses[bidder] = +(gs.purses[bidder] - price).toFixed(2);
         gs.squads[bidder] = [...gs.squads[bidder], { ...player, soldFor: price }];
         gs.auctionLog = [{ player, bidder, price, sold: true }, ...gs.auctionLog];
-        pushSystemMessage(room, `${player.name} SOLD to ${TEAMS.find(t=>t.id===bidder)?.short || bidder} for ${fmt(price)}`);
+        pushSystemMessage(room, `${player.name} SOLD to ${TEAMS.find(t => t.id === bidder)?.short || bidder} for ${fmt(price)}`);
     } else {
         gs.auctionLog = [{ player, bidder: null, price: 0, sold: false }, ...gs.auctionLog];
         pushSystemMessage(room, `${player.name} was UNSOLD`);
@@ -1146,10 +1146,10 @@ io.on('connection', (socket) => {
                 const error = match.status.hasResolvedTeams === false
                     ? 'This playoff fixture will unlock once both teams are confirmed.'
                     : state === 'scheduled'
-                    ? 'This auction opens automatically on its daily matchup day.'
-                    : state === 'locked'
-                        ? 'This auction is locked because the matchup has already started.'
-                        : 'This auction has already closed.';
+                        ? 'This auction opens automatically on its daily matchup day.'
+                        : state === 'locked'
+                            ? 'This auction is locked because the matchup has already started.'
+                            : 'This auction has already closed.';
                 return cb?.({ ok: false, error });
             }
         }
@@ -1224,10 +1224,10 @@ io.on('connection', (socket) => {
             const error = match.status.hasResolvedTeams === false
                 ? 'This playoff fixture will unlock once both teams are confirmed.'
                 : state === 'scheduled'
-                ? 'This auction opens automatically on its daily matchup day.'
-                : state === 'locked'
-                    ? 'This auction is locked because the matchup has already started.'
-                    : 'This auction has already closed.';
+                    ? 'This auction opens automatically on its daily matchup day.'
+                    : state === 'locked'
+                        ? 'This auction is locked because the matchup has already started.'
+                        : 'This auction has already closed.';
             return cb?.({ ok: false, error });
         }
 
@@ -1396,7 +1396,7 @@ io.on('connection', (socket) => {
             const state = getLobbyState(room);
             io.to(code).emit('lobby-update', state);
             pushSystemMessage(room, `${playerName} rejoined`);
-            
+
             await persistRoom(room);
             return cb?.({
                 ok: true,
@@ -1502,7 +1502,7 @@ io.on('connection', (socket) => {
                 socket.join(code);
                 currentRoom = code;
                 currentPlayerId = playerId;
-                
+
                 const state = getLobbyState(room);
                 io.to(code).emit('lobby-update', state);
                 pushSystemMessage(room, `${playerName || 'Player'} joined (Game in progress)`);
@@ -1927,7 +1927,7 @@ io.on('connection', (socket) => {
     socket.on('get-rooms', async (cb) => {
         try {
             cb?.(await getPublicRoomsPayload());
-        } catch(e) { console.error("[SOCKET] Room Fetch Error:", e); cb?.({ active: [], completed: [] }); }
+        } catch (e) { console.error("[SOCKET] Room Fetch Error:", e); cb?.({ active: [], completed: [] }); }
     });
 
     // ── Place Bid ── (optimized for minimum latency)
@@ -1968,7 +1968,7 @@ io.on('connection', (socket) => {
         // Broadcast immediately — no setTimeout, no debounce
         io.to(currentRoom).emit('game-state', getClientState(room, { includePlayerQueue: false, includeSelectionState: false }));
         cb?.({ ok: true, newBid: nb });
-        
+
         // Increased debounce from 200ms → 500ms to reduce Redis write storms
         // during fast bidding rounds, which caused intermittent 10-15s hangs.
         schedulePersistRoom(room, 500);
