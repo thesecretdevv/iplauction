@@ -33,8 +33,8 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 const redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL || "https://legal-griffon-72941.upstash.io",
-    token: process.env.UPSTASH_REDIS_REST_TOKEN || "gQAAAAAAARztAAIgcDI5ZDdiOWZjMzU0YWY0Y2M3YTE2YzBhMGZhOTgyYzgwNw"
+    url: process.env.UPSTASH_REDIS_REST_URL || "https://promoted-rattler-104650.upstash.io",
+    token: process.env.UPSTASH_REDIS_REST_TOKEN || "gQAAAAAAAZjKAAIgcDI0NThjYjFlODEwNDI0ZmVhYjAyNzhkMTZmMjBjYTMzMw"
 });
 
 const httpServer = createServer(app);
