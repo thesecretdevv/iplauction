@@ -75,7 +75,7 @@ export default function HomePage() {
             marginBottom: "2rem",
             fontWeight: 400
           }}>
-            Please check back in an hour. We are actively working behind the scenes to bring you a better experience.
+            Please check back in three hours. We are actively working behind the scenes to bring you a better experience.
           </p>
           
           <div style={{
@@ -101,7 +101,7 @@ export default function HomePage() {
               Mention your name while donating, and you'll be featured on our Supporters page with a special badge.
             </p>
             
-            <a href="#" className="support-btn" style={{
+            <a href="https://www.buymeacoffee.com/" target="_blank" rel="noopener noreferrer" className="support-btn" style={{
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
