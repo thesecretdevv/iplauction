@@ -1,4 +1,4 @@
-const RENDER_BACKEND_URL = 'https://bidwicket.onrender.com';
+const RENDER_BACKEND_URL = 'https://iplauction-production-bacb.up.railway.app';
 
 function getConfiguredBackendUrl() {
   const configuredUrl = process.env.NEXT_PUBLIC_BACKEND_URL?.trim();

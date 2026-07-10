@@ -10,7 +10,7 @@ import {
 } from '../../../shared/adminAuth.mjs';
 
 export const ADMIN_COOKIE_NAME = 'ipl_admin_session';
-const RENDER_BACKEND_URL = 'https://bidwicket.onrender.com';
+const RENDER_BACKEND_URL = 'https://iplauction-production-bacb.up.railway.app';
 
 function normalizeBackendUrl(url) {
   const trimmedUrl = url?.trim();
