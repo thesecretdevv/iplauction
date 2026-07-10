@@ -16,6 +16,8 @@ export const metadata = createMetadata({
   path: '/',
 });
 
+import MiniGame from './MiniGame';
+
 export default function HomePage() {
   return (
     <>
@@ -70,7 +72,7 @@ export default function HomePage() {
             fontSize: "1.0625rem",
             color: "#a1a1aa",
             lineHeight: 1.6,
-            marginBottom: "3rem",
+            marginBottom: "2rem",
             fontWeight: 400
           }}>
             Please check back in an hour. We are actively working behind the scenes to bring you a better experience.
@@ -78,8 +80,7 @@ export default function HomePage() {
           
           <div style={{
             borderTop: "1px solid #222",
-            borderBottom: "1px solid #222",
-            padding: "2rem 0",
+            padding: "2rem 0 1rem 0",
           }}>
             <h3 style={{
               fontSize: "1rem",
@@ -120,6 +121,8 @@ export default function HomePage() {
               Support Chai
             </a>
           </div>
+
+          <MiniGame />
         </div>
       </div>
       
