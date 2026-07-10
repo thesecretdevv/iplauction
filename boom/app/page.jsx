@@ -101,7 +101,7 @@ export default function HomePage() {
               Mention your name while donating, and you'll be featured on our Supporters page with a special badge.
             </p>
             
-            <a href="https://www.buymeacoffee.com/" target="_blank" rel="noopener noreferrer" className="support-btn" style={{
+            <a href="https://onlychai.neocities.org/support?name=iplauction.fun&upi=naga.tum%40ptyes" target="_blank" rel="noopener noreferrer" className="support-btn" style={{
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
