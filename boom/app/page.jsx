@@ -1,4 +1,4 @@
-import LandingPageClient from './LandingPageClient';
+import MaintenanceClient from './MaintenanceClient';
 import JsonLd from './components/JsonLd';
 import {
   breadcrumbSchema,
@@ -24,7 +24,7 @@ export default function HomePage() {
       <JsonLd data={organizationSchema()} />
       <JsonLd data={faqSchema(coreFaqs)} />
       <JsonLd data={breadcrumbSchema([{ name: 'Home', path: '/' }])} />
-      <LandingPageClient />
+      <MaintenanceClient />
     </>
   );
 }
