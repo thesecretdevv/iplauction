@@ -1,4 +1,4 @@
-const RENDER_BACKEND_URL = 'https://iplauction-production-bacb.up.railway.app';
+const RENDER_BACKEND_URL = 'https://iplauction-3x6b.onrender.com';
 
 function getConfiguredBackendUrl() {
   const configuredUrl = process.env.NEXT_PUBLIC_BACKEND_URL?.trim();
